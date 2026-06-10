@@ -1,0 +1,139 @@
+@'
+# RunePortal — Master Game Design Document
+
+## Core Vision
+Mobile-first browser ARPG. OSRS grind loop meets Diablo auto-combat.
+Single HTML file. No install. Open in Safari/Chrome and play.
+
+## Core Gameplay Loop
+1. Spawn in open world (isometric 2D)
+2. Walk around — enemies auto-aggro when in range
+3. Auto-combat fires — no button mashing
+4. Kill enemy — loot drops (gold + gear)
+5. Walk over loot to collect
+6. XP gains level up stats — gates stronger content
+7. Better gear = survive tougher zones
+8. Explore new portal zones with harder enemies + better loot
+9. Repeat — always something to grind
+
+## Movement
+- Mobile: Virtual joystick (bottom-left)
+- Desktop: WASD / Arrow keys
+- Perspective: Isometric 2D (Diablo-style)
+- World: Open, free roam — no waves, no corridors
+
+## Combat
+- Proximity-triggered auto-attack (no tap/click to attack)
+- Player attacks nearest enemy in range automatically
+- Enemies fight back
+- Combat stops when player walks away or enemy dies
+- Attack speed governed by Dexterity stat
+- Damage governed by Strength stat
+
+## Stats (4 core stats)
+| Stat | Controls |
+|---|---|
+| Dexterity | Attack speed |
+| Strength | Melee damage |
+| Vigor | Max HP (50 + vigor * 5) |
+| Intelligence | Magic damage (future) |
+
+All stats gain XP on kills and level up independently (OSRS-style).
+Level threshold: 100 * current level XP per level.
+
+## Progression Systems
+- XP earned per kill split across Dexterity, Strength, Vigor
+- Gear drops modify base stats via equippedBonuses
+- Gear rarities: Common (white), Rare (blue), Epic (purple)
+- Gear slots: Weapon, Helmet, Chest, Legs, Boots
+- Always something to level — OSRS dopamine loop
+
+## Loot System
+- Gold drops every kill (1-10g)
+- Gear drops 30% chance per kill
+- Player auto-collects by walking over drops
+- Gold tracked in backpack
+- Floating text shows +Xg on collection
+
+## Backpack / Gear UI
+- BAG button top-right opens full screen overlay
+- Dark slate Diablo theme (gold accents #e8c97a)
+- Two tabs: BACKPACK (item grid) and EQUIPMENT (5 slots)
+- Gold display at top
+- Item rarity shown via border color
+- Equip/unequip from tooltip
+- Close button top-right
+
+## World Design
+- Open world, zone-based exploration
+- Each zone has themed enemies + a boss gate
+- Portal zones: named areas inspired by OSRS zones
+  (Lumbridge, Wilderness, etc.)
+- Tougher enemies in deeper zones
+- Boss must be cleared to unlock next portal
+
+## Enemy Design
+- Three rarities: Common, Rare, Epic
+- Scale HP/damage/speed by rarity
+- Wander randomly, change direction every 2-3 seconds
+- Respawn after death (rarity-based timing)
+- Boundary clamped to tile grid
+
+## Save State
+- Auto-save every 10 seconds to localStorage
+- Saves: skills, hp, gold, items, baseStats, equippedBonuses
+- Load on startup wrapped in try/catch (critical — bad save = black screen)
+- Clear with localStorage.clear() in console if game breaks
+
+## Idle / Offline Features (planned)
+- Offline gold + XP accumulation
+- Return to reward screen
+
+## Platform
+- Single HTML file — no framework, vanilla JS
+- Mobile-first (portrait, touch controls)
+- Desktop via WASD + mouse click for BAG
+- Served via local Python HTTP server during dev
+- Future: host on GitHub Pages or Vercel
+
+## Art Style
+- Isometric tile grid (green/red checkerboard placeholder)
+- Diamond shapes for player (blue) and enemies (red)
+- Colored dots for loot
+- Dark slate UI with gold accents
+- Future: sprite-based tiles and characters
+
+## Features Built
+- Isometric world, camera follow
+- Virtual joystick + WASD
+- Auto-combat + proximity detection
+- XP system + level up
+- Loot drops (gold + gear)
+- Backpack + Equipment UI
+- Close button
+- Boundary clamping
+- Enemy respawning (rarity-based)
+- Tab switching
+
+## Features In Progress
+- Stat rename (ATK->DEX, DEF->VIG, + INT)
+- Save state (localStorage with try/catch)
+
+## Features Planned
+- Player death + respawn at center
+- Multiple zones with tougher enemies
+- Minimap
+- Boss enemies per zone
+- Portal system (zone transitions)
+- Idle/offline rewards
+- Sprite art (tiles, characters)
+- Sound effects
+
+## Dev Stack
+- Game: Single HTML file (runeportal_phase3.html)
+- Dev studio: runeportal_studio.py (Groq-powered, v3.0)
+- Models: llama-3.3-70b-versatile (patches), llama-3.1-8b-instant (classify/review)
+- Groq free tier — no credit card
+- Backups: runeportal_backups\ folder, auto-backup before every patch
+'@ | Set-Content "$HOME\OneDrive\Desktop\runeportal_GDD.md" -Encoding UTF8
+Write-Host "GDD saved to Desktop"
