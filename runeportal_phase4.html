@@ -1,1 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RunePortal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; position: relative; z-index: 1; }
+
+    /* ── BACKPACK PANEL ── */
+    .backpack-panel {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(10,10,10,0.97);
+      color: #ccc; font-family: 'Courier New', monospace;
+      z-index: 100; flex-direction: column; padding: 12px;
+    }
+    .backpack-panel.open { display: flex; }
+
+    .panel-close-btn {
+      position: absolute; top: 10px; right: 16px; z-index: 999999;
+      background: #333; color: #e8c97a; border: 1px solid #e8c97a;
+      padding: 6px 14px; font-size: 18px; cursor: pointer;
+      font-family: monospace; border-radius: 4px;
+    }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px;
+      border-bottom: 1px solid #333; padding-bottom: 8px; flex-wrap: wrap; }
+    .tab { padding: 6px 14px; cursor: pointer; font-size: 12px;
+      letter-spacing: 1px; color: #666; border: 1px solid #333;
+      border-radius: 3px; background: #111; }
+    .tab.active { color: #e8c97a; border-color: #e8c97a; background: #1a1a1a; }
+
+    .gold-display { font-size: 13px; color: #e8c97a; margin-bottom: 10px; letter-spacing: 1px; }
+
+    .backpack-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 6px; overflow-y: auto; max-height: 65vh;
+    }
+    .backpack-grid .item {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
+      padding: 8px 6px; font-size: 11px; cursor: pointer;
+      text-align: center; transition: border-color 0.15s; position: relative;
+    }
+    .backpack-grid .item:hover { border-color: #e8c97a; }
+    .backpack-grid .item.common  { border-color: #555; color: #ccc; }
+    .backpack-grid .item.rare    { border-color: #4a90d9; color: #4a90d9; }
+    .backpack-grid .item.epic    { border-color: #9b59b6; color: #9b59b6; }
+    .backpack-grid .item.material { border-color: #5a3; color: #7d5; }
+    .backpack-grid .item.food   { border-color: #c85; color: #fa8; }
+    .backpack-grid .item.equipped-badge {
+      position: absolute; top: 2px; right: 3px;
+      font-size: 8px; color: #e8c97a; letter-spacing: 0;
+    }
+    .item-type { font-size: 9px; color: #555; text-transform: uppercase;
+      letter-spacing: 1px; margin-top: 3px; }
+
+    .equipment-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 0; }
+    .slot { background: #111; border: 1px solid #2a2a2a; border-radius: 6px;
+      padding: 12px 8px; text-align: center; min-height: 80px;
+      cursor: pointer; transition: border-color 0.15s; }
+    .slot:hover { border-color: #555; }
+    .slot.filled { border-color: #e8c97a44; }
+    .slot-label { font-size: 9px; color: #555; text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 6px; }
+    .slot .slot-item { font-size: 11px; color: #e8c97a; }
+    .slot .slot-item.empty { color: #333; }
+
+    /* ── HOMESTEAD PANEL ── */
+    .homestead-panel {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(8,12,8,0.97);
+      color: #ccc; font-family: 'Courier New', monospace;
+      z-index: 100; flex-direction: column; padding: 12px; overflow-y: auto;
+    }
+    .homestead-panel.open { display: flex; }
+    .homestead-title { color: #7d5; font-size: 18px; letter-spacing: 2px; margin: 30px 0 12px; }
+    .structures-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .structure-card {
+      background: #0f1a0f; border: 1px solid #2a3a2a; border-radius: 6px;
+      padding: 12px; cursor: pointer; transition: border-color 0.15s;
+    }
+    .structure-card:hover { border-color: #5a3; }
+    .structure-card.maxed { border-color: #e8c97a55; }
+    .structure-name { color: #7d5; font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+    .structure-level { color: #e8c97a; font-size: 11px; margin-bottom: 6px; }
+    .structure-desc { color: #888; font-size: 10px; line-height: 1.5; margin-bottom: 8px; }
+    .structure-cost { color: #f90; font-size: 10px; margin-bottom: 6px; }
+    .structure-bonus { color: #4a90d9; font-size: 10px; }
+    .upgrade-btn {
+      margin-top: 8px; padding: 5px 14px; background: #2a3a2a;
+      color: #7d5; border: 1px solid #5a3; border-radius: 3px;
+      cursor: pointer; font-family: inherit; font-size: 11px;
+    }
+    .upgrade-btn:hover { background: #3a4a3a; }
+    .upgrade-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
