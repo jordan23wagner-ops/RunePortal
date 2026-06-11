@@ -48,6 +48,7 @@
     .backpack-grid .item.common  { border-color: #555; color: #ccc; }
     .backpack-grid .item.rare    { border-color: #4a90d9; color: #4a90d9; }
     .backpack-grid .item.epic    { border-color: #9b59b6; color: #9b59b6; }
+    .backpack-grid .item.legendary { border-color: #ff8f00; color: #ff8f00; }
     .backpack-grid .item.material { border-color: #5a3; color: #7d5; }
     .backpack-grid .item.food   { border-color: #c85; color: #fa8; }
     .backpack-grid .item.equipped-badge {
@@ -141,6 +142,13 @@
       background: rgba(80,0,0,0.7); color: #f88;
       font-family: 'Courier New', monospace; font-size: 12px;
       text-align: center; padding: 4px; z-index: 50; letter-spacing: 1px;
+    }
+
+    /* ── ZONE TRANSITION FADE ── */
+    #zone-fade {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #000; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s linear; z-index: 400;
     }
 
     /* ── DEV PANEL ── */
@@ -377,6 +385,9 @@
   <!-- DEATH SICKNESS HUD -->
   <div id="sickness-bar">☠ DEATH SICKNESS — <span id="sickness-timer"></span> remaining — Max HP halved</div>
 
+  <!-- ZONE TRANSITION FADE -->
+  <div id="zone-fade"></div>
+
   <!-- ZONE BANNER -->
   <div id="zone-banner" id="zoneBanner"></div>
 
@@ -402,10 +413,10 @@
     <button class="dev-btn" id="invincBtn" onclick="devToggleInvincible()">Invincible: OFF</button>
     <button class="dev-btn" onclick="devKillAll()">Kill all enemies (drop loot)</button>
     <div class="dev-section">Zones</div>
-    <button class="dev-btn" onclick="closePanel('dev');travelToZone('vale')">Go to The Vale</button>
-    <button class="dev-btn" onclick="closePanel('dev');travelToZone('bog')">Go to The Bog</button>
-    <button class="dev-btn" onclick="closePanel('dev');travelToZone('abyss')">Go to The Abyss</button>
-    <button class="dev-btn" onclick="closePanel('dev');travelToZone('homestead')">Go to Homestead</button>
+    <button class="dev-btn" onclick="closePanel('dev');transitionToZone('ashfields')">Go to The Ashfields</button>
+    <button class="dev-btn" onclick="closePanel('dev');transitionToZone('bleakwood')">Go to Bleakwood Hollow</button>
+    <button class="dev-btn" onclick="closePanel('dev');transitionToZone('ironbone')">Go to Ironbone Flats</button>
+    <button class="dev-btn" onclick="closePanel('dev');transitionToZone('homestead')">Go to Homestead</button>
     <div class="dev-section">Save</div>
     <button class="dev-btn" onclick="devClearSave()" style="color:#f88;border-color:#844;">Clear save data &amp; reload</button>
   </div>
@@ -413,6 +424,27 @@
 <script>
 /*
 === CHANGELOG ===
+[2026-06-11] — ZONE SYSTEM (GDD §9+§10): zones rebuilt as The Ashfields (Lv 1-5),
+  Bleakwood Hollow (Lv 5-10, HP 2x / dmg 1.5x), Ironbone Flats (Lv 10-20, HP 4x / dmg 2.5x)
+  + Homestead hub (unchanged). All enemy stats now live in ZONES[id].enemyTypes config —
+  Ashwalker Scavenger / Raider Brute / Bone Collector (ranged visual), Hollow Hunter /
+  Wraith Stalker (opacity phasing), Iron Construct / Revenant (self-heal 5% per 5s).
+  Named bosses per zone: The Warden, The Nightmother, General Mourne.
+[2026-06-11] — ZONE SYSTEM: enemy rarity multipliers (RARITY_MULT) — common 1x;
+  rare 2x HP / 1.5x dmg / 1.5x XP / 2x gold; epic 4x HP / 2x dmg / 2x XP / 4x gold.
+[2026-06-11] — ZONE SYSTEM: gear drops pull from zone dropTable (Ashfields: Rare only;
+  Bleakwood: Rare+Epic; Ironbone: Rare+Epic+5% Legendary). Legendary tier added (orange,
+  2x epic stat bonuses, 500g sell). Dropped items prefixed with zone tier name
+  (e.g. "Ironbone Dragon Sword"). Guild untradeables excluded from drop pool.
+[2026-06-11] — ZONE SYSTEM: portal transitions now fade to black 0.25s → swap zone →
+  fade in 0.25s (#zone-fade overlay, world frozen during fade). Portal labels show only
+  within 60px proximity. HUD shows zone name + "Recommended Level: X-X" (display only,
+  zones never locked). Pending enemy respawn timers cancelled on zone change.
+[2026-06-11] — SCHEMA: player.currentZone added (synced with currentZoneId), saved as
+  `currentZone` in runeportal_save (replaces `zoneId` key). Zone background gradients per
+  zone config. Bleakwood enemies get #00ff88 bioluminescent aura glow.
+⚠️ PLAYER SCHEMA CHANGED — clear localStorage before testing (localStorage.clear() then Ctrl+Shift+R).
+
 [2026-06-11] — DEATH & RESPAWN (GDD §15): triggerDeath() rewritten — drops ALL equipped
   standard gear into a death pile at the death location (untradeable gear never drops);
   pile despawns after 5 minutes; 50% gold death tax (round down), remainder kept by player;
@@ -438,59 +470,96 @@ const TILE_W = 64;
 const TILE_H = 32;
 const GRID   = 30; // larger world
 
-// ── ZONE DEFINITIONS ──
+// ── ZONE DEFINITIONS (GDD §9 + §10) ──
+// All enemy stats live here, not hardcoded. Rarity multipliers (RARITY_MULT)
+// apply on top of these base stats. dropTable governs gear drops per zone.
 const ZONES = {
-  vale: {
-    name: 'The Vale',
-    subtitle: 'A peaceful hunting ground',
-    tilePrimary: '#2d5a1b',
-    tileSecondary: '#3d7a25',
+  ashfields: {
+    name: 'The Ashfields',
+    subtitle: 'Crumbling ruins of the old civilization',
+    tierName: 'Ashfields',
+    recommendedLevel: '1-5',
+    bgGradient: ['#2a1a0a', '#1a0f05'],
+    tilePrimary: '#33200d',
+    tileSecondary: '#241408',
     enemyColor: '#c0392b',
     bossColor: '#8B0000',
-    enemyHpMult: 1,
-    enemyDmgMult: 1,
-    xpMult: 1,
+    auraColor: null,
     lootMult: 1,
+    enemyTypes: [
+      { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b' },
+      { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d' },
+      { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged' },
+    ],
+    boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
+    dropTable: { rarities:['rare'], legendaryChance:0 },
     isHome: true
   },
-  bog: {
-    name: 'The Bog',
-    subtitle: 'Murky waters, deadly creatures',
-    tilePrimary: '#2a3a1a',
-    tileSecondary: '#1a2a10',
+  bleakwood: {
+    name: 'Bleakwood Hollow',
+    subtitle: 'No light reaches the floor',
+    tierName: 'Bleakwood',
+    recommendedLevel: '5-10',
+    bgGradient: ['#0a0f0a', '#050a05'],
+    tilePrimary: '#0d140d',
+    tileSecondary: '#081008',
     enemyColor: '#6b8e23',
-    bossColor: '#3a5a00',
-    enemyHpMult: 2.5,
-    enemyDmgMult: 2,
-    xpMult: 2.5,
+    bossColor: '#1a3a1a',
+    auraColor: '#00ff88',
     lootMult: 2,
+    // HP 2x Zone 1 base, damage 1.5x Zone 1 base
+    enemyTypes: [
+      { name:'Hollow Hunter',  hp:100, damage:7.5, speed:1.8, attackSpeed:1.4, xp:25, weight:0.6, color:'#7a9a3a' },
+      { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing' },
+    ],
+    boss: { name:'The Nightmother', hp:1600, damage:45, speed:1.3, attackSpeed:1.2, xp:500 },
+    dropTable: { rarities:['rare','epic'], legendaryChance:0 },
     isHome: false
   },
-  abyss: {
-    name: 'The Abyss',
-    subtitle: 'Darkness that consumes all',
-    tilePrimary: '#0a0a1a',
-    tileSecondary: '#15152a',
-    enemyColor: '#8e44ad',
-    bossColor: '#4a0080',
-    enemyHpMult: 6,
-    enemyDmgMult: 4,
-    xpMult: 6,
+  ironbone: {
+    name: 'Ironbone Flats',
+    subtitle: 'A battlefield frozen in time',
+    tierName: 'Ironbone',
+    recommendedLevel: '10-20',
+    bgGradient: ['#1a1a1a', '#0f0f0f'],
+    tilePrimary: '#1e1e1e',
+    tileSecondary: '#141414',
+    enemyColor: '#8a8a92',
+    bossColor: '#3a3a4a',
+    auraColor: null,
     lootMult: 4,
+    // HP 4x Zone 1 base, damage 2.5x Zone 1 base
+    enemyTypes: [
+      { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa' },
+      { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal' },
+    ],
+    boss: { name:'General Mourne', hp:3200, damage:75, speed:1.1, attackSpeed:1.1, xp:1200 },
+    dropTable: { rarities:['rare','epic'], legendaryChance:0.05 },
     isHome: false
   },
   homestead: {
     name: 'Homestead',
     subtitle: 'Your sanctuary',
+    tierName: 'Homestead',
+    recommendedLevel: null,
+    bgGradient: ['#0d0d18', '#111122'],
     tilePrimary: '#0d0d18',
     tileSecondary: '#111122',
-    enemyHpMult: 0,
-    enemyDmgMult: 0,
-    xpMult: 0,
+    auraColor: null,
     lootMult: 0,
+    enemyTypes: [],
+    boss: null,
+    dropTable: { rarities:['rare'], legendaryChance:0 },
     isHome: true,
     isSafe: true
   }
+};
+
+// ── ENEMY RARITY MULTIPLIERS (applied on top of zone base stats) ──
+const RARITY_MULT = {
+  common: { hp:1, dmg:1,   xp:1,   gold:1 },
+  rare:   { hp:2, dmg:1.5, xp:1.5, gold:2 },
+  epic:   { hp:4, dmg:2,   xp:2,   gold:4 },
 };
 
 // ── GEAR DATABASE ──
@@ -544,9 +613,9 @@ const FOOD_DB = [
 
 // ── MATERIAL DATABASE ──
 const MATERIAL_DB = [
-  { id:'iron_ore',    name:'Iron Ore',      rarity:'common', dropFrom:['vale'] },
-  { id:'bog_root',    name:'Bog Root',      rarity:'rare',   dropFrom:['bog']  },
-  { id:'void_shard',  name:'Void Shard',    rarity:'epic',   dropFrom:['abyss'] },
+  { id:'iron_ore',    name:'Iron Ore',      rarity:'common', dropFrom:['ashfields'] },
+  { id:'bog_root',    name:'Bog Root',      rarity:'rare',   dropFrom:['bleakwood']  },
+  { id:'void_shard',  name:'Void Shard',    rarity:'epic',   dropFrom:['ironbone'] },
   { id:'iron_bar',    name:'Iron Bar',      rarity:'common', dropFrom:[] },
   { id:'bog_ingot',   name:'Bog Ingot',     rarity:'rare',   dropFrom:[] },
   { id:'void_crystal',name:'Void Crystal',  rarity:'epic',   dropFrom:[] },
@@ -620,20 +689,22 @@ const GUILD_DEFS = {
   },
 };
 
-// ── RARITY RANK (for death loot logic) ──
-const RARITY_RANK = { common:0, rare:1, epic:2 };
+// ── RARITY RANK ──
+const RARITY_RANK = { common:0, rare:1, epic:2, legendary:3 };
 
 // ═══════════════════════════════════════════════════════════
 //  GAME STATE
 // ═══════════════════════════════════════════════════════════
-let currentZoneId = 'vale';
+let currentZoneId = 'ashfields';
 let zoneGrid = [];
+let zoneFading = false; // true during the 0.5s portal fade transition
 
 const player = {
   x: GRID / 2, y: GRID / 2,
   hp: 100, maxHp: 100,
   speed: 2,
   isDead: false,
+  currentZone: 'ashfields', // synced with currentZoneId, persisted in save
   deathSickness: 0, // seconds remaining
   skills: {
     xp:    { dexterity:0, strength:0, vigor:0, intelligence:0 },
@@ -755,24 +826,25 @@ function buildZoneGrid(zoneId) {
 }
 
 // ── PORTAL POSITIONS (edges of the map) ──
+// Portal back to the previous zone is always available.
 function getPortals() {
   const portals = [];
-  if (currentZoneId === 'vale') {
-    portals.push({ x: GRID - 2, y: GRID / 2, target: 'bog',   label: '→ The Bog' });
-  } else if (currentZoneId === 'bog') {
-    portals.push({ x: 1,        y: GRID / 2, target: 'vale',  label: '← The Vale' });
-    portals.push({ x: GRID - 2, y: GRID / 2, target: 'abyss', label: '→ The Abyss' });
-  } else if (currentZoneId === 'abyss') {
-    portals.push({ x: 1,        y: GRID / 2, target: 'bog',   label: '← The Bog' });
+  if (currentZoneId === 'ashfields') {
+    portals.push({ x: GRID - 2, y: GRID / 2, target: 'bleakwood', label: '→ Bleakwood Hollow' });
+  } else if (currentZoneId === 'bleakwood') {
+    portals.push({ x: 1,        y: GRID / 2, target: 'ashfields', label: '← The Ashfields' });
+    portals.push({ x: GRID - 2, y: GRID / 2, target: 'ironbone',  label: '→ Ironbone Flats' });
+  } else if (currentZoneId === 'ironbone') {
+    portals.push({ x: 1,        y: GRID / 2, target: 'bleakwood', label: '← Bleakwood Hollow' });
   } else if (currentZoneId === 'homestead') {
-    portals.push({ x: GRID / 2, y: GRID - 2, target: 'vale',  label: '← The Vale' });
+    portals.push({ x: GRID / 2, y: GRID - 2, target: 'ashfields', label: '← The Ashfields' });
   }
   return portals;
 }
 
 function getHomesteadPortal() {
-  if (currentZoneId !== 'vale') return null;
-  return { x: GRID / 2, y: 2 }; // top-center of vale
+  if (currentZoneId !== 'ashfields') return null;
+  return { x: GRID / 2, y: 2 }; // top-center of the Ashfields
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -781,6 +853,7 @@ function getHomesteadPortal() {
 function spawnEnemies() {
   enemies = [];
   const zone = ZONES[currentZoneId];
+  if (zone.isSafe || !zone.enemyTypes || zone.enemyTypes.length === 0) return; // safe zones spawn nothing
   const count = 12;
   for (let i = 0; i < count; i++) {
     spawnOneEnemy(zone);
@@ -789,24 +862,38 @@ function spawnEnemies() {
   spawnBoss(zone);
 }
 
-function spawnOneEnemy(zone, isRespawn) {
+function pickEnemyType(zone) {
   const r = Math.random();
-  let rarity = r < 0.6 ? 'common' : r < 0.9 ? 'rare' : 'epic';
-  const baseHp = rarity === 'common' ? 50 : rarity === 'rare' ? 120 : 280;
-  const baseDmg = rarity === 'common' ? 5  : rarity === 'rare' ? 12  : 25;
-  const baseSpd = rarity === 'common' ? 0.8 : rarity === 'rare' ? 1.2 : 1.6;
+  let acc = 0;
+  for (const t of zone.enemyTypes) {
+    acc += t.weight;
+    if (r <= acc) return t;
+  }
+  return zone.enemyTypes[zone.enemyTypes.length - 1];
+}
+
+function spawnOneEnemy(zone, isRespawn) {
+  const type = pickEnemyType(zone);
+  const r = Math.random();
+  const rarity = r < 0.6 ? 'common' : r < 0.9 ? 'rare' : 'epic';
+  const m = RARITY_MULT[rarity];
   const e = {
     x: 2 + Math.random() * (GRID - 4),
     y: 2 + Math.random() * (GRID - 4),
-    hp: baseHp * zone.enemyHpMult,
-    maxHp: baseHp * zone.enemyHpMult,
-    damage: baseDmg * zone.enemyDmgMult,
-    speed: baseSpd,
-    attackSpeed: baseSpd,
-    xpReward: 10 * zone.xpMult * (rarity === 'common' ? 1 : rarity === 'rare' ? 2.5 : 6),
+    name: type.name,
+    behavior: type.behavior || null,
+    color: type.color,
+    hp: type.hp * m.hp,
+    maxHp: type.hp * m.hp,
+    damage: type.damage * m.dmg,
+    speed: type.speed,
+    attackSpeed: type.attackSpeed,
+    xpReward: type.xp * m.xp,
+    goldMult: m.gold,
     rarity: rarity,
     direction: Math.random() * Math.PI * 2,
     dirTimer: 0,
+    healTimer: 0,
     isBoss: false,
     phase: 1,
     flashTimer: 0
@@ -818,18 +905,24 @@ function spawnOneEnemy(zone, isRespawn) {
 }
 
 function spawnBoss(zone) {
-  const bossHp = 800 * zone.enemyHpMult;
+  if (!zone.boss) return;
+  const b = zone.boss;
   enemies.push({
     x: GRID / 2 + (Math.random() - 0.5) * 10,
     y: GRID / 2 + (Math.random() - 0.5) * 10,
-    hp: bossHp, maxHp: bossHp,
-    damage: 30 * zone.enemyDmgMult,
-    speed: 1.0,
-    attackSpeed: 1.0,
-    xpReward: 200 * zone.xpMult,
+    name: b.name,
+    behavior: null,
+    color: null,
+    hp: b.hp, maxHp: b.hp,
+    damage: b.damage,
+    speed: b.speed,
+    attackSpeed: b.attackSpeed,
+    xpReward: b.xp,
+    goldMult: RARITY_MULT.epic.gold,
     rarity: 'epic',
     direction: 0,
     dirTimer: 0,
+    healTimer: 0,
     isBoss: true,
     phase: 1,
     flashTimer: 0
@@ -895,8 +988,10 @@ function recalcMaxHp() {
 // ═══════════════════════════════════════════════════════════
 function travelToZone(zoneId) {
   currentZoneId = zoneId;
+  player.currentZone = zoneId;
   const zone = ZONES[zoneId];
   buildZoneGrid(zoneId);
+  // Despawn all current enemies, spawn the new zone's roster
   if (!zone.isSafe) {
     spawnEnemies();
   } else {
@@ -911,6 +1006,23 @@ function travelToZone(zoneId) {
     player.y = GRID / 2;
   }
   showBanner(`${zone.name}\n${zone.subtitle}`);
+  saveGame(); // persist player.currentZone on every transition
+}
+
+// Fade to black (0.25s), swap zone, fade back in (0.25s) — 0.5s total
+function transitionToZone(zoneId) {
+  if (zoneFading || zoneId === currentZoneId || !ZONES[zoneId]) return;
+  zoneFading = true;
+  const fade = document.getElementById('zone-fade');
+  fade.style.opacity = '1';
+  setTimeout(() => {
+    try {
+      travelToZone(zoneId);
+    } finally {
+      fade.style.opacity = '0';
+      setTimeout(() => { zoneFading = false; }, 250);
+    }
+  }, 250);
 }
 
 let bannerTimeout = null;
@@ -999,22 +1111,44 @@ function recalcEquippedBonuses() {
 // ═══════════════════════════════════════════════════════════
 //  LOOT LOGIC
 // ═══════════════════════════════════════════════════════════
+// Roll a gear drop from the current zone's dropTable.
+// Higher zones never drop below their minimum rarity. Legendary items are
+// generated from epic bases with 2x stat bonuses (no legendary entries in GEAR_DB yet).
+function rollZoneGear(zone, isBoss) {
+  const dt = zone.dropTable || { rarities:['rare'], legendaryChance:0 };
+  let rarity;
+  if (Math.random() < (dt.legendaryChance || 0)) {
+    rarity = 'legendary';
+  } else if (isBoss) {
+    rarity = dt.rarities[dt.rarities.length - 1]; // boss drops the zone's top tier
+  } else {
+    rarity = dt.rarities[Math.floor(Math.random() * dt.rarities.length)];
+  }
+  const poolRarity = rarity === 'legendary' ? 'epic' : rarity;
+  const pool = GEAR_DB.filter(g => g.rarity === poolRarity && !g.untradeable);
+  if (pool.length === 0) return null;
+  const base = pool[Math.floor(Math.random() * pool.length)];
+  const item = { ...base, statBonus: { ...base.statBonus }, name: `${zone.tierName} ${base.name}` };
+  if (rarity === 'legendary') {
+    item.rarity = 'legendary';
+    for (const k in item.statBonus) item.statBonus[k] = Math.ceil(item.statBonus[k] * 2);
+  }
+  return item;
+}
+
 function dropLootFromEnemy(enemy) {
   const zone = ZONES[currentZoneId];
   const pile = { x: enemy.x, y: enemy.y, items: [], gold: 0, isDeathPile: false };
 
-  // Gold
+  // Gold — zone loot mult x merchant bonus x enemy rarity gold mult
   const baseGold = Math.floor(Math.random() * 10) + 1;
-  pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus());
+  pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus() * (enemy.goldMult || 1));
 
-  // Gear (30% base, higher rarity enemies = more chance)
+  // Gear (30% base, higher rarity enemies = more chance) — pulls from zone dropTable
   const gearChance = enemy.rarity === 'epic' ? 0.7 : enemy.rarity === 'rare' ? 0.5 : 0.3;
   if (Math.random() < gearChance) {
-    // Boss always drops epic
-    let pool = GEAR_DB;
-    if (enemy.isBoss) pool = GEAR_DB.filter(g => g.rarity === 'epic');
-    else if (enemy.rarity === 'rare') pool = GEAR_DB.filter(g => g.rarity !== 'epic');
-    pile.items.push({...pool[Math.floor(Math.random() * pool.length)]});
+    const item = rollZoneGear(zone, enemy.isBoss);
+    if (item) pile.items.push(item);
   }
 
   // Material drops
@@ -1086,6 +1220,7 @@ function spawnAttackVisual(style, px, py, tx, ty) {
 // ═══════════════════════════════════════════════════════════
 function update(dt) {
   if (player.isDead) return;
+  if (zoneFading) return; // freeze world during zone transition fade
 
   tick++;
 
@@ -1147,17 +1282,17 @@ function update(dt) {
   for (const portal of getPortals()) {
     const dist = Math.hypot(player.x - portal.x, player.y - portal.y);
     if (dist < 1.2) {
-      travelToZone(portal.target);
+      transitionToZone(portal.target);
       return;
     }
   }
 
-  // Homestead portal (vale only)
+  // Homestead portal (Ashfields only)
   const hsPortal = getHomesteadPortal();
   if (hsPortal) {
     const dist = Math.hypot(player.x - hsPortal.x, player.y - hsPortal.y);
     if (dist < 1.2) {
-      travelToZone('homestead');
+      transitionToZone('homestead');
       return;
     }
   }
@@ -1189,6 +1324,19 @@ function update(dt) {
 
     // Flash decay
     if (e.flashTimer > 0) e.flashTimer -= dt;
+
+    // Behavior: Revenant self-heals 5% max HP every 5 seconds
+    if (e.behavior === 'selfheal') {
+      e.healTimer += dt;
+      if (e.healTimer >= 5) {
+        e.healTimer = 0;
+        if (e.hp > 0 && e.hp < e.maxHp) {
+          const heal = Math.ceil(e.maxHp * 0.05);
+          e.hp = Math.min(e.maxHp, e.hp + heal);
+          floatingTexts.push({ x: e.x, y: e.y - 0.8, text: `+${heal}`, timer:0, color:'#4f4' });
+        }
+      }
+    }
 
     // Phase transition for boss
     if (e.isBoss && e.phase === 1 && e.hp < e.maxHp * 0.5) {
@@ -1247,13 +1395,13 @@ function update(dt) {
 
           enemies.splice(i, 1);
 
-          // Respawn after delay (not boss)
+          // Respawn after delay (not boss) — only if player is still in the same zone
           if (!e.isBoss) {
+            const spawnZoneId = currentZoneId;
             setTimeout(() => {
-              if (currentZoneId === zone.name || true) { // always respawn in current zone
-                const newE = spawnOneEnemy(ZONES[currentZoneId], true);
-                enemies.push(newE);
-              }
+              if (currentZoneId !== spawnZoneId) return; // zone changed — don't spawn stale enemy
+              const newE = spawnOneEnemy(ZONES[currentZoneId], true);
+              enemies.push(newE);
             }, e.rarity === 'epic' ? 12000 : e.rarity === 'rare' ? 7000 : 4000);
           }
           continue;
@@ -1264,6 +1412,8 @@ function update(dt) {
       const eAtkInterval = Math.max(20, Math.floor((1 / e.attackSpeed) * 60));
       if (tick % eAtkInterval === 0) {
         if (devInvincible) continue;
+        // Behavior: Bone Collector attacks have a projectile-style visual
+        if (e.behavior === 'ranged') spawnAttackVisual('ranged', e.x, e.y, player.x, player.y);
         player.hp -= e.damage;
         floatingTexts.push({ x: player.x, y: player.y - 0.5, text: `-${e.damage}`, timer:0, color:'#f44' });
         addScreenShake(e.isBoss ? 10 : 4);
@@ -1292,7 +1442,7 @@ function update(dt) {
       // Collect items
       for (const item of pile.items) {
         backpack.items.push(item);
-        floatingTexts.push({ x: player.x, y: player.y - 1, text: `${item.name}!`, timer:0, color: item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#ccc' });
+        floatingTexts.push({ x: player.x, y: player.y - 1, text: `${item.name}!`, timer:0, color: item.rarity === 'legendary' ? '#ff8f00' : item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#ccc' });
       }
       // Collect material
       if (pile.materialDrop) {
@@ -1366,6 +1516,13 @@ function render() {
   const camX = camera.x;
   const camY = camera.y;
 
+  // ── ZONE BACKGROUND GRADIENT ──
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, VH);
+  bgGrad.addColorStop(0, zone.bgGradient[0]);
+  bgGrad.addColorStop(1, zone.bgGradient[1]);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(-Math.abs(sx) - 2, -Math.abs(sy) - 2, VW + Math.abs(sx) * 2 + 4, VH + Math.abs(sy) * 2 + 4);
+
   // ── TILES ──
   for (let x = 0; x < GRID; x++) {
     for (let y = 0; y < GRID; y++) {
@@ -1399,10 +1556,15 @@ function render() {
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.restore();
-    ctx.fillStyle = '#e8c97a';
-    ctx.font = 'bold 10px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText(portal.label, px, py - 26);
+    // Zone name label only when player is within 60px of the portal
+    const labelDx = (player.x - portal.x) * TILE_W;
+    const labelDy = (player.y - portal.y) * TILE_H;
+    if (Math.hypot(labelDx, labelDy) < 60) {
+      ctx.fillStyle = '#e8c97a';
+      ctx.font = 'bold 10px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(portal.label, px, py - 26);
+    }
   }
 
   // ── HOMESTEAD PORTAL (vale only) ──
@@ -1450,7 +1612,7 @@ function render() {
       // Gear item squares
       for (let k = 0; k < pile.items.length; k++) {
         const item = pile.items[k];
-        ctx.fillStyle = item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#888';
+        ctx.fillStyle = item.rarity === 'legendary' ? '#ff8f00' : item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#888';
         ctx.fillRect(lx + 4 + k * 10, ly + 4, 8, 8);
       }
     }
@@ -1509,13 +1671,23 @@ function render() {
     const ey = e.y * TILE_H - camY;
     if (ex + TILE_W * 2 < 0 || ex > VW + TILE_W || ey + TILE_H * 2 < 0 || ey > VH + TILE_H) continue;
 
-    let color = e.flashTimer > 0 ? '#fff' : (e.isBoss ? zone.bossColor : zone.enemyColor);
+    let color = e.flashTimer > 0 ? '#fff' : (e.isBoss ? zone.bossColor : (e.color || zone.enemyColor));
     if (e.isBoss && e.phase === 2) color = e.flashTimer > 0 ? '#fff' : '#ff4400';
 
     const size = e.isBoss ? TILE_W * 0.7 : (e.rarity === 'epic' ? TILE_W * 0.45 : e.rarity === 'rare' ? TILE_W * 0.38 : TILE_W * 0.3);
     const cx = ex + TILE_W / 2;
     const cy = ey + TILE_H / 2;
 
+    ctx.save();
+    // Behavior: Wraith Stalker phases in/out via opacity pulse
+    if (e.behavior === 'phasing') {
+      ctx.globalAlpha = 0.25 + 0.6 * Math.abs(Math.sin(tick * 0.03));
+    }
+    // Bioluminescent aura on Bleakwood enemies
+    if (zone.auraColor && !e.isBoss) {
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = zone.auraColor;
+    }
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.moveTo(cx, cy - size);
@@ -1524,12 +1696,15 @@ function render() {
     ctx.lineTo(cx - size, cy);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
 
-    // Boss crown indicator
+    // Boss crown + name
     if (e.isBoss) {
       ctx.fillStyle = '#e8c97a';
-      ctx.font = '14px Arial';
+      ctx.font = 'bold 10px Courier New';
       ctx.textAlign = 'center';
+      if (e.name) ctx.fillText(e.name, cx, cy - size - 16);
+      ctx.font = '14px Arial';
       ctx.fillText('♛', cx, cy - size - 4);
     }
 
@@ -1647,11 +1822,17 @@ function renderHUD() {
   ctx.fillStyle = '#f80';
   ctx.fillText('DEV', VW - 10, 60);
 
-  // Zone name (top-center)
+  // Zone name + recommended level (top-center)
+  const hudZone = ZONES[currentZoneId];
   ctx.textAlign = 'center';
   ctx.font = 'bold 12px Courier New';
   ctx.fillStyle = '#aaa';
-  ctx.fillText(ZONES[currentZoneId].name, VW / 2, 16);
+  ctx.fillText(hudZone.name, VW / 2, 16);
+  if (hudZone.recommendedLevel) {
+    ctx.font = '10px Courier New';
+    ctx.fillStyle = '#666';
+    ctx.fillText(`Recommended Level: ${hudZone.recommendedLevel}`, VW / 2, 29);
+  }
 
   // HP display
   ctx.textAlign = 'left';
@@ -2447,10 +2628,10 @@ function renderMerchantPanel() {
   } else {
     backpack.items.forEach((item, i) => {
       if (item.untradeable) return;
-      const sellPrice = item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
+      const sellPrice = item.rarity === 'legendary' ? 500 : item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
       html += `<div class="merchant-item">
         <div>
-          <div class="merchant-item-name" style="color:${item.rarity==='epic'?'#9b59b6':item.rarity==='rare'?'#4a90d9':'#ccc'}">${item.name}</div>
+          <div class="merchant-item-name" style="color:${item.rarity==='legendary'?'#ff8f00':item.rarity==='epic'?'#9b59b6':item.rarity==='rare'?'#4a90d9':'#ccc'}">${item.name}</div>
           <div class="merchant-item-price">${sellPrice}g</div>
         </div>
         <button class="merchant-buy-btn" onclick="merchantSell(${i})">Sell</button>
@@ -2476,7 +2657,7 @@ function merchantBuy(idx) {
 function merchantSell(idx) {
   const item = backpack.items[idx];
   if (!item || item.untradeable) return;
-  const sellPrice = item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
+  const sellPrice = item.rarity === 'legendary' ? 500 : item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
   backpack.gold += sellPrice;
   backpack.items.splice(idx, 1);
   // Unequip if equipped
@@ -2682,7 +2863,7 @@ function saveGame() {
       craftQueue:      craftQueue,
       gardenPlot:      gardenPlot,
       shrineBuff:      shrineBuff,
-      zoneId:          currentZoneId,
+      currentZone:     currentZoneId, // player.currentZone — persists through reload
     }));
   } catch(e) { storageAvailable = false; }
 }
@@ -2717,7 +2898,10 @@ function loadGame() {
     if (d.craftQueue)      craftQueue = d.craftQueue;
     if (d.gardenPlot)      Object.assign(gardenPlot, d.gardenPlot);
     if (d.shrineBuff)      Object.assign(shrineBuff, d.shrineBuff);
-    if (d.zoneId && ZONES[d.zoneId]) currentZoneId = d.zoneId;
+    if (d.currentZone && ZONES[d.currentZone]) {
+      currentZoneId = d.currentZone;
+      player.currentZone = d.currentZone;
+    }
   } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
 }
 
