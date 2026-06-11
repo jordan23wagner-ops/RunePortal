@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>RunePortal</title>
+  <!-- PixiJS 8.x UMD (approved CDN import — GDD §3). v7 fallback if v8 CDN breaks:
+       https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #000; overflow: hidden; }
@@ -424,6 +427,33 @@
 <script>
 /*
 === CHANGELOG ===
+[2026-06-11] — PIXIJS RENDERER MIGRATION (GDD §3): Canvas 2D fully replaced by PixiJS 8.x
+  (CDN UMD, WebGL, devicePixelRatio-aware, transparent bg, resizes with window). Stage
+  layers bottom→top: backgroundLayer (zone gradient — TILE GRID REMOVED), worldLayer
+  (buildings/portals, loot, enemies, player — camera-scrolled: worldLayer.pos = -camera),
+  particleLayer (kill bursts, projectiles, hit sparks), uiEffectsLayer (damage numbers +
+  HUD, fixed). Player is a layered container (body/legs/chest/helmet/boots/weapon +
+  auraContainer); gear layers toggle with equipped slots, tint by rarity (rare #4fc3f7 /
+  epic #ab47bc / legendary #ff8f00; common = slot base color). Aura particles (8-12 per
+  frame, rise + fade) colored by highest equipped rarity; none when nothing equipped.
+[2026-06-11] — PIXIJS RENDERER: enemies = container (body rect tinted by rarity, HP bar,
+  rarity glow circle; per-type sizeScale in ZONES config — brute/construct larger,
+  stalker smaller). Wraith Stalker opacity phasing kept; Revenant self-heal now flashes
+  body green; white sparks when player hits, red sparks when player is hit (HP-delta
+  driven — combat logic untouched); boss crown/name/enrage tint kept; Bleakwood biolum
+  glow kept. Loot: gold circle (#ffd700, radius scales with amount), rarity diamonds,
+  white name label. Portals: destination-zone colored ring + core; proximity label
+  radius 60px → 120px (BACKLOG fix). Homestead bgGradient → warm hearth #1a0e05→#0f0805.
+[2026-06-11] — PIXIJS RENDERER: HUD (stats, XP bars, BAG/HOME/DEV, zone name, HP/GOLD,
+  NEW 140px HP bar above HP text, joystick ring, minimap) rebuilt as Pixi objects at the
+  SAME screen coordinates — HUD was canvas-drawn (not HTML); coordinate-based canvas
+  touch/click handlers untouched, so BAG/HOME/DEV taps + joystick behave identically.
+  Minimap rare/epic dot colors aligned to new rarity palette. Game loop: PIXI app.ticker
+  drives update(dt) + renderPixi() — raw requestAnimationFrame loop removed (still
+  exactly ONE loop). All ctx.* calls removed; game logic / combat / zones / death /
+  save-load / joystick input handlers untouched. NO localStorage schema changes —
+  existing saves load unchanged. Floating-text colors remain logic-owned (enemy damage
+  #f88) — renderer displays them verbatim.
 [2026-06-11] — ZONE SYSTEM (GDD §9+§10): zones rebuilt as The Ashfields (Lv 1-5),
   Bleakwood Hollow (Lv 5-10, HP 2x / dmg 1.5x), Ironbone Flats (Lv 10-20, HP 4x / dmg 2.5x)
   + Homestead hub (unchanged). All enemy stats now live in ZONES[id].enemyTypes config —
@@ -460,11 +490,10 @@
 //  CONSTANTS & CONFIG
 // ═══════════════════════════════════════════════════════════
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-const VW = canvas.width;
-const VH = canvas.height;
+// Renderer is PixiJS 8.x (WebGL) — app adopts this canvas in initPixi().
+// VW/VH are LOGICAL (CSS) pixels — input math and camera read them live.
+let VW = window.innerWidth;
+let VH = window.innerHeight;
 
 const TILE_W = 64;
 const TILE_H = 32;
@@ -480,6 +509,7 @@ const ZONES = {
     tierName: 'Ashfields',
     recommendedLevel: '1-5',
     bgGradient: ['#2a1a0a', '#1a0f05'],
+    portalColor: '#e8a05a',
     tilePrimary: '#33200d',
     tileSecondary: '#241408',
     enemyColor: '#c0392b',
@@ -488,7 +518,7 @@ const ZONES = {
     lootMult: 1,
     enemyTypes: [
       { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b' },
-      { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d' },
+      { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.25 },
       { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged' },
     ],
     boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
@@ -501,6 +531,7 @@ const ZONES = {
     tierName: 'Bleakwood',
     recommendedLevel: '5-10',
     bgGradient: ['#0a0f0a', '#050a05'],
+    portalColor: '#00ff88',
     tilePrimary: '#0d140d',
     tileSecondary: '#081008',
     enemyColor: '#6b8e23',
@@ -510,7 +541,7 @@ const ZONES = {
     // HP 2x Zone 1 base, damage 1.5x Zone 1 base
     enemyTypes: [
       { name:'Hollow Hunter',  hp:100, damage:7.5, speed:1.8, attackSpeed:1.4, xp:25, weight:0.6, color:'#7a9a3a' },
-      { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing' },
+      { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing', sizeScale:0.85 },
     ],
     boss: { name:'The Nightmother', hp:1600, damage:45, speed:1.3, attackSpeed:1.2, xp:500 },
     dropTable: { rarities:['rare','epic'], legendaryChance:0 },
@@ -522,6 +553,7 @@ const ZONES = {
     tierName: 'Ironbone',
     recommendedLevel: '10-20',
     bgGradient: ['#1a1a1a', '#0f0f0f'],
+    portalColor: '#9aa0aa',
     tilePrimary: '#1e1e1e',
     tileSecondary: '#141414',
     enemyColor: '#8a8a92',
@@ -530,7 +562,7 @@ const ZONES = {
     lootMult: 4,
     // HP 4x Zone 1 base, damage 2.5x Zone 1 base
     enemyTypes: [
-      { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa' },
+      { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa', sizeScale:1.3 },
       { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal' },
     ],
     boss: { name:'General Mourne', hp:3200, damage:75, speed:1.1, attackSpeed:1.1, xp:1200 },
@@ -542,7 +574,8 @@ const ZONES = {
     subtitle: 'Your sanctuary',
     tierName: 'Homestead',
     recommendedLevel: null,
-    bgGradient: ['#0d0d18', '#111122'],
+    bgGradient: ['#1a0e05', '#0f0805'], // warm hearth (PixiJS migration spec)
+    portalColor: '#88dd66',
     tilePrimary: '#0d0d18',
     tileSecondary: '#111122',
     auraColor: null,
@@ -805,7 +838,6 @@ let particles = [];
 let projectiles = []; // visual-only attack effects
 let screenShake = { x:0, y:0, intensity:0 };
 let tick = 0;
-let lastTime = 0;
 let lastSave = 0;
 let forgeTimer = 0;
 let gardenTimer = 0;
@@ -1502,414 +1534,701 @@ function update(dt) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  RENDER
+//  PIXI RENDERER (PixiJS 8.x — WebGL)
+//  Stage layers bottom→top:
+//    backgroundLayer — zone gradient (tile grid removed)
+//    worldLayer      — statics / loot / enemies / player (camera-scrolled)
+//    particleLayer   — kill bursts, projectiles, hit sparks (camera-scrolled)
+//    uiEffectsLayer  — damage numbers + HUD (fixed, no scroll)
+//  Render-only: game logic never reads from anything in this section.
 // ═══════════════════════════════════════════════════════════
-function render() {
-  ctx.clearRect(0, 0, VW, VH);
+const RARITY_COLORS = { common:0x888888, rare:0x4fc3f7, epic:0xab47bc, legendary:0xff8f00 };
+const SLOT_BASE_COLORS = { helmet:0x555555, chest:0x333366, legs:0x336633, boots:0x663333, weapon:0xaaaaaa };
+const PORTAL_LABEL_RADIUS = 120; // px — BACKLOG fix (was 60)
 
-  const sx = Math.round(screenShake.x);
-  const sy = Math.round(screenShake.y);
-  ctx.save();
-  ctx.translate(sx, sy);
-
-  const zone = ZONES[currentZoneId];
-  const camX = camera.x;
-  const camY = camera.y;
-
-  // ── ZONE BACKGROUND GRADIENT ──
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, VH);
-  bgGrad.addColorStop(0, zone.bgGradient[0]);
-  bgGrad.addColorStop(1, zone.bgGradient[1]);
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(-Math.abs(sx) - 2, -Math.abs(sy) - 2, VW + Math.abs(sx) * 2 + 4, VH + Math.abs(sy) * 2 + 4);
-
-  // ── TILES ──
-  for (let x = 0; x < GRID; x++) {
-    for (let y = 0; y < GRID; y++) {
-      const tx = x * TILE_W - camX;
-      const ty = y * TILE_H - camY;
-      if (tx + TILE_W < 0 || tx > VW || ty + TILE_H < 0 || ty > VH) continue;
-      ctx.fillStyle = zoneGrid[x][y] === 'primary' ? zone.tilePrimary : zone.tileSecondary;
-      ctx.fillRect(tx, ty, TILE_W, TILE_H);
-    }
-  }
-
-  // ── HOMESTEAD BUILDINGS ──
-  if (currentZoneId === 'homestead') {
-    renderBuildings(camX, camY);
-  }
-
-  // ── PORTALS ──
-  for (const portal of getPortals()) {
-    const px = portal.x * TILE_W - camX + TILE_W / 2;
-    const py = portal.y * TILE_H - camY + TILE_H / 2;
-    const pulse = 0.7 + 0.3 * Math.sin(tick * 0.05);
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.strokeStyle = '#e8c97a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(px, py, 20, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 0.3 * pulse;
-    ctx.fillStyle = '#e8c97a';
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
-    // Zone name label only when player is within 60px of the portal
-    const labelDx = (player.x - portal.x) * TILE_W;
-    const labelDy = (player.y - portal.y) * TILE_H;
-    if (Math.hypot(labelDx, labelDy) < 60) {
-      ctx.fillStyle = '#e8c97a';
-      ctx.font = 'bold 10px Courier New';
-      ctx.textAlign = 'center';
-      ctx.fillText(portal.label, px, py - 26);
-    }
-  }
-
-  // ── HOMESTEAD PORTAL (vale only) ──
-  const hsp = getHomesteadPortal();
-  if (hsp) {
-    const px = hsp.x * TILE_W - camX + TILE_W / 2;
-    const py = hsp.y * TILE_H - camY + TILE_H / 2;
-    const pulse = 0.7 + 0.3 * Math.sin(tick * 0.04 + 1);
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.strokeStyle = '#7d5';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(px, py, 20, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 0.3 * pulse;
-    ctx.fillStyle = '#7d5';
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
-    ctx.fillStyle = '#7d5';
-    ctx.font = 'bold 10px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('⚒ HOMESTEAD', px, py - 26);
-  }
-
-  // ── LOOT PILES ──
-  for (const pile of lootPiles) {
-    const lx = pile.x * TILE_W - camX;
-    const ly = pile.y * TILE_H - camY;
-    if (pile.isDeathPile) {
-      // Glowing red skull pile
-      ctx.fillStyle = '#f44';
-      ctx.font = '20px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('☠', lx + TILE_W / 2, ly + TILE_H / 2 + 6);
-    } else {
-      // Gold dot
-      if (pile.gold > 0) {
-        ctx.fillStyle = '#e8c97a';
-        ctx.beginPath();
-        ctx.arc(lx + TILE_W / 2, ly + TILE_H / 2, 7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Gear item squares
-      for (let k = 0; k < pile.items.length; k++) {
-        const item = pile.items[k];
-        ctx.fillStyle = item.rarity === 'legendary' ? '#ff8f00' : item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#888';
-        ctx.fillRect(lx + 4 + k * 10, ly + 4, 8, 8);
-      }
-    }
-  }
-
-  // ── PARTICLES ──
-  for (const p of particles) {
-    const alpha = p.life / p.maxLife;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - camX - p.size/2, p.y - camY - p.size/2, p.size, p.size);
-    ctx.restore();
-  }
-
-  // ── PROJECTILES / ATTACK VISUALS ──
-  for (const p of projectiles) {
-    const t = p.life / p.maxLife;
-    ctx.save();
-    ctx.globalAlpha = t;
-    if (p.type === 'slash') {
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p.x - camX + Math.cos(p.angle) * 6, p.y - camY + Math.sin(p.angle) * 6);
-      ctx.lineTo(p.x - camX + Math.cos(p.angle) * 22, p.y - camY + Math.sin(p.angle) * 22);
-      ctx.stroke();
-    } else if (p.style === 'ranged') {
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x - camX, p.y - camY, 4, 0, Math.PI * 2);
-      ctx.fill();
-      // tail
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(p.x - camX, p.y - camY);
-      ctx.lineTo(p.x - camX - p.vx * 0.04, p.y - camY - p.vy * 0.04);
-      ctx.stroke();
-    } else {
-      // magic orb
-      ctx.shadowBlur = 12; ctx.shadowColor = p.color;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x - camX, p.y - camY, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-    ctx.restore();
-  }
-
-  // ── ENEMIES ──
-  for (const e of enemies) {
-    const ex = e.x * TILE_W - camX;
-    const ey = e.y * TILE_H - camY;
-    if (ex + TILE_W * 2 < 0 || ex > VW + TILE_W || ey + TILE_H * 2 < 0 || ey > VH + TILE_H) continue;
-
-    let color = e.flashTimer > 0 ? '#fff' : (e.isBoss ? zone.bossColor : (e.color || zone.enemyColor));
-    if (e.isBoss && e.phase === 2) color = e.flashTimer > 0 ? '#fff' : '#ff4400';
-
-    const size = e.isBoss ? TILE_W * 0.7 : (e.rarity === 'epic' ? TILE_W * 0.45 : e.rarity === 'rare' ? TILE_W * 0.38 : TILE_W * 0.3);
-    const cx = ex + TILE_W / 2;
-    const cy = ey + TILE_H / 2;
-
-    ctx.save();
-    // Behavior: Wraith Stalker phases in/out via opacity pulse
-    if (e.behavior === 'phasing') {
-      ctx.globalAlpha = 0.25 + 0.6 * Math.abs(Math.sin(tick * 0.03));
-    }
-    // Bioluminescent aura on Bleakwood enemies
-    if (zone.auraColor && !e.isBoss) {
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = zone.auraColor;
-    }
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - size);
-    ctx.lineTo(cx + size, cy);
-    ctx.lineTo(cx, cy + size);
-    ctx.lineTo(cx - size, cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    // Boss crown + name
-    if (e.isBoss) {
-      ctx.fillStyle = '#e8c97a';
-      ctx.font = 'bold 10px Courier New';
-      ctx.textAlign = 'center';
-      if (e.name) ctx.fillText(e.name, cx, cy - size - 16);
-      ctx.font = '14px Arial';
-      ctx.fillText('♛', cx, cy - size - 4);
-    }
-
-    // HP bar
-    const barW = e.isBoss ? TILE_W : TILE_W / 2;
-    const barX = cx - barW / 2;
-    const barY = ey - 10;
-    ctx.fillStyle = '#333';
-    ctx.fillRect(barX, barY, barW, 4);
-    const hpFrac = e.hp / e.maxHp;
-    ctx.fillStyle = hpFrac > 0.5 ? '#4a4' : hpFrac > 0.25 ? '#aa4' : '#a44';
-    ctx.fillRect(barX, barY, barW * hpFrac, 4);
-  }
-
-  // ── PLAYER ──
-  if (!player.isDead) {
-    const px = player.x * TILE_W - camX;
-    const py = player.y * TILE_H - camY;
-    const cx = px + TILE_W / 2;
-    const cy = py + TILE_H / 2;
-    const ps = TILE_W * 0.35;
-
-    // Combat range ring — ellipse matches tile aspect ratio (TILE_W x TILE_H)
-    const rangeStyle = getWeaponStyle();
-    const rangeColor = rangeStyle === 'magic' ? '#aa44ff' : rangeStyle === 'ranged' ? '#44aaff' : '#ff8844';
-    const rangeRx = getCombatRange() * TILE_W;
-    const rangeRy = getCombatRange() * TILE_H;
-    ctx.save();
-    ctx.strokeStyle = rangeColor;
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.3;
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rangeRx, rangeRy, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // Death sickness tint
-    ctx.fillStyle = player.deathSickness > 0 ? '#8844aa' : '#4488ff';
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - ps);
-    ctx.lineTo(cx + ps, cy);
-    ctx.lineTo(cx, cy + ps);
-    ctx.lineTo(cx - ps, cy);
-    ctx.closePath();
-    ctx.fill();
-
-    // Player HP bar
-    const barW = TILE_W;
-    ctx.fillStyle = '#333';
-    ctx.fillRect(px, py - 12, barW, 5);
-    ctx.fillStyle = '#e44';
-    ctx.fillRect(px, py - 12, barW * (player.hp / player.maxHp), 5);
-  }
-
-  // ── FLOATING TEXT ──
-  ctx.textAlign = 'center';
-  for (const ft of floatingTexts) {
-    const alpha = 1 - ft.timer / 1.2;
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = ft.color || '#fff';
-    ctx.font = 'bold 13px Courier New';
-    const ftx = ft.x * TILE_W - camX + TILE_W / 2;
-    const fty = ft.y * TILE_H - camY - ft.timer * 50;
-    ctx.fillText(ft.text, ftx, fty);
-  }
-  ctx.globalAlpha = 1;
-
-  ctx.restore(); // end screen shake
-
-  // ── HUD (no shake) ──
-  renderHUD();
+function hexColor(c) {
+  if (typeof c === 'number') return c;
+  let h = String(c).replace('#', '');
+  if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
+  return parseInt(h, 16);
+}
+function lerpColor(a, b, t) {
+  const r  = Math.round(((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t);
+  const g  = Math.round(((a >> 8)  & 255) + (((b >> 8)  & 255) - ((a >> 8)  & 255)) * t);
+  const bl = Math.round((a & 255) + ((b & 255) - (a & 255)) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+function hudTextStyle(size, color, bold) {
+  return {
+    fontFamily: 'Courier New, monospace',
+    fontSize: size,
+    fontWeight: bold ? 'bold' : 'normal',
+    fill: color,
+    dropShadow: { alpha: 0.9, blur: 4, color: 0x000000, distance: 0, angle: 0 },
+  };
 }
 
-function renderHUD() {
-  ctx.shadowBlur = 4; ctx.shadowColor = '#000';
-  ctx.font = 'bold 13px Courier New';
-  ctx.textAlign = 'left';
+let app = null;
+let backgroundLayer, worldLayer, particleLayer, uiEffectsLayer;
+let staticsContainer, lootContainer, enemiesContainer;
+let playerContainer, playerParts, auraContainer, playerHpBarGfx, rangeRingGfx;
+let fxGraphics;
+let hudContainer, hudTexts, xpBarsGfx, hudHpBarGfx, joystickGfx, minimapGfx;
+const enemyViews = new Map();   // enemy obj -> view
+const lootViews  = new Map();   // pile obj -> container
+const textViews  = new Map();   // floatingText obj -> PIXI.Text
+let portalViews = [];
+let doorGlowViews = [];
+let lastZoneRendered = null;
+let circleTexture = null;
+let auraSprites = [];
+let auraPool = [];
+let sparkFx = [];               // renderer-side hit sparks {x,y,vx,vy,life,maxLife,color}
+let prevPlayerHp = null;
 
-  // Stats top-left
-  const stats = [
-    `DEX: ${getStat('dexterity')}`,
-    `STR: ${getStat('strength')}`,
-    `VIG: ${getStat('vigor')}`,
-    `INT: ${getStat('intelligence')}`,
-  ];
-  ctx.fillStyle = '#e8c97a';
-  stats.forEach((s, i) => ctx.fillText(s, 10, 14 + i * 18));
-
-  // XP bars
-  const skills = ['dexterity','strength','vigor','intelligence'];
-  const labels = {dexterity:'DEX',strength:'STR',vigor:'VIG',intelligence:'INT'};
-  ctx.font = '10px Courier New';
-  ctx.fillStyle = '#888';
-  skills.forEach((sk, i) => {
-    const lv = player.skills.level[sk];
-    const xp = player.skills.xp[sk];
-    const threshold = 100 * lv;
-    ctx.fillText(`Lv${lv}`, 10, 90 + i * 14);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(38, 80 + i * 14, 80, 6);
-    ctx.fillStyle = '#e8c97a55';
-    ctx.fillRect(38, 80 + i * 14, 80 * (xp / threshold), 6);
-    ctx.fillStyle = '#888';
+async function initPixi() {
+  app = new PIXI.Application();
+  await app.init({
+    canvas: canvas,                            // adopt the existing #canvas element —
+    width: VW, height: VH,                     // input handlers + CSS z-index stay valid
+    resolution: window.devicePixelRatio || 1,  // retina/mobile sharpness
+    autoDensity: true,                         // stage coords stay in CSS pixels
+    backgroundAlpha: 0,                        // transparent — backgroundLayer paints zone color
+    antialias: true,
   });
 
-  // Top-right buttons
-  ctx.font = 'bold 14px Courier New';
-  ctx.fillStyle = '#e8c97a';
-  ctx.textAlign = 'right';
-  ctx.fillText('BAG', VW - 10, 20);
-  ctx.fillText('HOME', VW - 10, 40);
-  ctx.fillStyle = '#f80';
-  ctx.fillText('DEV', VW - 10, 60);
+  backgroundLayer = new PIXI.Graphics();
+  worldLayer      = new PIXI.Container();
+  particleLayer   = new PIXI.Container();
+  uiEffectsLayer  = new PIXI.Container();
+  app.stage.addChild(backgroundLayer, worldLayer, particleLayer, uiEffectsLayer);
 
-  // Zone name + recommended level (top-center)
-  const hudZone = ZONES[currentZoneId];
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 12px Courier New';
-  ctx.fillStyle = '#aaa';
-  ctx.fillText(hudZone.name, VW / 2, 16);
-  if (hudZone.recommendedLevel) {
-    ctx.font = '10px Courier New';
-    ctx.fillStyle = '#666';
-    ctx.fillText(`Recommended Level: ${hudZone.recommendedLevel}`, VW / 2, 29);
-  }
+  staticsContainer = new PIXI.Container(); // buildings, portals, paths — rebuilt per zone
+  lootContainer    = new PIXI.Container();
+  enemiesContainer = new PIXI.Container();
+  worldLayer.addChild(staticsContainer, lootContainer, enemiesContainer);
 
-  // HP display
-  ctx.textAlign = 'left';
-  ctx.font = 'bold 12px Courier New';
-  ctx.fillStyle = '#e44';
-  ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 10, VH - 120);
+  buildPlayerContainer();
+  worldLayer.addChild(playerContainer);
 
-  // Gold
-  ctx.fillStyle = '#e8c97a';
-  ctx.fillText(`GOLD: ${backpack.gold}`, 10, VH - 105);
+  fxGraphics = new PIXI.Graphics();
+  particleLayer.addChild(fxGraphics);
 
-  // Joystick ring
-  ctx.beginPath();
-  ctx.arc(70, VH - 70, joystick.radius, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  if (joystick.touching) {
-    ctx.beginPath();
-    ctx.arc(70 + joystick.x, VH - 70 + joystick.y, 18, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fill();
-  }
+  const cg = new PIXI.Graphics().circle(0, 0, 3).fill(0xffffff);
+  circleTexture = app.renderer.generateTexture(cg);
+  cg.destroy();
 
-  // ── MINIMAP ──
-  renderMinimap();
-
-  ctx.shadowBlur = 0;
+  buildHUD();
+  window.addEventListener('resize', onPixiResize);
 }
 
-function renderMinimap() {
+function onPixiResize() {
+  if (!app) return;
+  VW = window.innerWidth;
+  VH = window.innerHeight;
+  app.renderer.resize(VW, VH);
+  layoutHUD();
+  lastZoneRendered = null; // force background + statics rebuild at the new size
+}
+
+// ── PLAYER — layered placeholder container (GDD §2 layer order) ──
+function buildPlayerContainer() {
+  playerContainer = new PIXI.Container();
+
+  rangeRingGfx = new PIXI.Graphics(); // combat range ring sits under the body
+  playerContainer.addChild(rangeRingGfx);
+
+  const mk = (x, y, w, h) => {
+    const g = new PIXI.Graphics().rect(x, y, w, h).fill(0xffffff);
+    playerContainer.addChild(g);
+    return g;
+  };
+  playerParts = {
+    body:   mk(-10, -16, 20, 32), // white base 20x32
+    legs:   mk(-10,   4, 20, 12),
+    chest:  mk(-10,  -8, 20, 14),
+    helmet: mk( -8, -16, 16, 10),
+    boots:  mk(-10,   8, 20,  8),
+    weapon: mk( 12, -12,  8, 24), // held right side
+  };
+  for (const slot of ['legs','chest','helmet','boots','weapon']) playerParts[slot].visible = false;
+
+  auraContainer = new PIXI.Container();
+  playerContainer.addChild(auraContainer);
+
+  playerHpBarGfx = new PIXI.Graphics();
+  playerContainer.addChild(playerHpBarGfx);
+}
+
+function getHighestEquippedRarity() {
+  let best = null;
+  for (const slot in player.equipped) {
+    const it = player.equipped[slot];
+    if (!it) continue;
+    if (best === null || (RARITY_RANK[it.rarity] || 0) > (RARITY_RANK[best] || 0)) best = it.rarity;
+  }
+  return best;
+}
+
+function updatePlayerView() {
+  playerContainer.visible = !player.isDead;
+  if (player.isDead) return;
+  playerContainer.x = player.x * TILE_W + TILE_W / 2;
+  playerContainer.y = player.y * TILE_H + TILE_H / 2;
+
+  // Death sickness tint (was the purple diamond)
+  playerParts.body.tint = player.deathSickness > 0 ? 0x8844aa : 0xffffff;
+
+  // Gear layers: visible when slot filled, tinted by rarity (common = slot base color)
+  for (const slot of ['legs','chest','helmet','boots','weapon']) {
+    const item = player.equipped[slot];
+    playerParts[slot].visible = !!item;
+    if (item) {
+      playerParts[slot].tint = (item.rarity && item.rarity !== 'common')
+        ? (RARITY_COLORS[item.rarity] || SLOT_BASE_COLORS[slot])
+        : SLOT_BASE_COLORS[slot];
+    }
+  }
+
+  // Combat range ring — dashed ellipse approximated with chord segments
+  const style = getWeaponStyle();
+  const ringColor = style === 'magic' ? 0xaa44ff : style === 'ranged' ? 0x44aaff : 0xff8844;
+  const rx = getCombatRange() * TILE_W;
+  const ry = getCombatRange() * TILE_H;
+  rangeRingGfx.clear();
+  const segs = 36;
+  for (let i = 0; i < segs; i += 2) {
+    const a0 = (i / segs) * Math.PI * 2;
+    const a1 = ((i + 1) / segs) * Math.PI * 2;
+    rangeRingGfx.moveTo(Math.cos(a0) * rx, Math.sin(a0) * ry)
+                .lineTo(Math.cos(a1) * rx, Math.sin(a1) * ry);
+  }
+  rangeRingGfx.stroke({ width: 1, color: ringColor, alpha: 0.3 });
+
+  // HP bar above the player
+  playerHpBarGfx.clear();
+  playerHpBarGfx.rect(-TILE_W / 2, -TILE_H / 2 - 12, TILE_W, 5).fill(0x333333);
+  playerHpBarGfx.rect(-TILE_W / 2, -TILE_H / 2 - 12, TILE_W * Math.max(0, player.hp / player.maxHp), 5).fill(0xe44444);
+
+  // Red hit sparks when the player takes damage (HP delta — no combat-logic hooks)
+  if (prevPlayerHp !== null && player.hp < prevPlayerHp) {
+    spawnSparkFx(playerContainer.x, playerContainer.y, 0xff4444);
+  }
+  prevPlayerHp = player.hp;
+}
+
+// ── AURA PARTICLES — emitted from the player, color = highest equipped rarity ──
+function updateAuraParticles() {
+  for (let i = auraSprites.length - 1; i >= 0; i--) {
+    const s = auraSprites[i];
+    s.y -= 0.5;        // float upward
+    s.alpha -= 0.02;   // fade out
+    if (s.alpha <= 0) {
+      auraContainer.removeChild(s);
+      auraPool.push(s);
+      auraSprites.splice(i, 1);
+    }
+  }
+  if (player.isDead) return;
+  const best = getHighestEquippedRarity();
+  if (!best) return; // nothing equipped — no aura
+  if (auraSprites.length > 600) return; // safety cap
+  const color = RARITY_COLORS[best] || 0x888888;
+  const emit = 8 + Math.floor(Math.random() * 5); // 8-12 per frame
+  for (let i = 0; i < emit; i++) {
+    const s = auraPool.pop() || new PIXI.Sprite(circleTexture);
+    s.anchor.set(0.5);
+    s.x = (Math.random() - 0.5) * 26;
+    s.y = 14 - Math.random() * 8;
+    s.alpha = 0.5 + Math.random() * 0.35;
+    s.scale.set(0.5 + Math.random() * 0.8);
+    s.tint = color;
+    auraContainer.addChild(s);
+    auraSprites.push(s);
+  }
+}
+
+// ── ENEMIES — body rect (rarity tint) + HP bar + rarity glow ──
+function makeEnemyView(e, zone) {
+  const c = new PIXI.Container();
+  let size = e.isBoss ? TILE_W * 0.7
+    : (e.rarity === 'epic' ? TILE_W * 0.45 : e.rarity === 'rare' ? TILE_W * 0.38 : TILE_W * 0.3);
+  // Per-type size scale (brute = larger, stalker = smaller) from zone config
+  const typeDef = (zone.enemyTypes || []).find(t => t.name === e.name);
+  if (typeDef && typeDef.sizeScale) size *= typeDef.sizeScale;
+
+  // Rarity glow circle behind the body (rare/epic/legendary)
+  const glow = new PIXI.Graphics().circle(0, 0, size * 1.5).fill(RARITY_COLORS[e.rarity] || 0x888888);
+  glow.alpha = 0.3;
+  glow.visible = e.rarity !== 'common';
+  c.addChild(glow);
+
+  // Bleakwood bioluminescent aura (zone config) — simple static glow
+  let zoneAura = null;
+  if (zone.auraColor && !e.isBoss) {
+    zoneAura = new PIXI.Graphics().circle(0, 0, size * 1.25).fill(hexColor(zone.auraColor));
+    zoneAura.alpha = 0.22;
+    c.addChild(zoneAura);
+  }
+
+  const body = new PIXI.Graphics().rect(-size * 0.65, -size * 0.95, size * 1.3, size * 1.9).fill(0xffffff);
+  c.addChild(body);
+
+  const hpBar = new PIXI.Graphics();
+  c.addChild(hpBar);
+
+  if (e.isBoss) {
+    const name = new PIXI.Text({ text: e.name || '', style: hudTextStyle(10, 0xe8c97a, true) });
+    name.anchor.set(0.5, 1);
+    name.y = -size - 16;
+    c.addChild(name);
+    const crown = new PIXI.Text({ text: '♛', style: { fontFamily: 'Arial', fontSize: 14, fill: 0xe8c97a } });
+    crown.anchor.set(0.5, 1);
+    crown.y = -size - 4;
+    c.addChild(crown);
+  }
+
+  enemiesContainer.addChild(c);
+  return { c, body, glow, zoneAura, hpBar, size, lastHp: e.hp, healFlash: 0 };
+}
+
+function updateEnemyViews(zone) {
+  for (const e of enemies) {
+    let v = enemyViews.get(e);
+    if (!v) { v = makeEnemyView(e, zone); enemyViews.set(e, v); }
+    v.c.x = e.x * TILE_W + TILE_W / 2;
+    v.c.y = e.y * TILE_H + TILE_H / 2;
+
+    // Wraith Stalker phasing — opacity pulse on body + glows (HP bar stays solid)
+    const phaseAlpha = e.behavior === 'phasing' ? 0.25 + 0.6 * Math.abs(Math.sin(tick * 0.03)) : 1;
+    v.body.alpha = phaseAlpha;
+    v.glow.alpha = 0.3 * phaseAlpha;
+    if (v.zoneAura) v.zoneAura.alpha = 0.22 * phaseAlpha;
+
+    // HP deltas drive effects — no combat-logic hooks needed
+    if (e.hp > v.lastHp) v.healFlash = 18;                       // Revenant self-heal → green pulse
+    if (e.hp < v.lastHp) spawnSparkFx(v.c.x, v.c.y, 0xffffff);   // player hit lands → white sparks
+    v.lastHp = e.hp;
+    if (v.healFlash > 0) v.healFlash--;
+
+    // Tint priority: hit flash > heal pulse > boss enrage/boss color > rarity color
+    let tint;
+    if (e.flashTimer > 0) tint = 0xffffff;
+    else if (v.healFlash > 0) tint = 0x44ee66;
+    else if (e.isBoss) tint = e.phase === 2 ? 0xff4400 : hexColor(zone.bossColor || '#8B0000');
+    else tint = RARITY_COLORS[e.rarity] || 0x888888;
+    v.body.tint = tint;
+
+    // HP bar above body — green/amber/red by remaining fraction
+    const barW = e.isBoss ? TILE_W : TILE_W / 2;
+    const frac = Math.max(0, e.hp / e.maxHp);
+    const barColor = frac > 0.5 ? 0x44aa44 : frac > 0.25 ? 0xaaaa44 : 0xaa4444;
+    v.hpBar.clear();
+    v.hpBar.rect(-barW / 2, -TILE_H / 2 - 10, barW, 4).fill(0x333333);
+    v.hpBar.rect(-barW / 2, -TILE_H / 2 - 10, barW * frac, 4).fill(barColor);
+  }
+  // Remove views for despawned enemies
+  for (const [e, v] of enemyViews) {
+    if (!enemies.includes(e)) {
+      v.c.destroy({ children: true });
+      enemyViews.delete(e);
+    }
+  }
+}
+
+// ── LOOT PILES — gold circle (scaled), rarity diamonds, name label ──
+function makeLootView(pile) {
+  const c = new PIXI.Container();
+  c.x = pile.x * TILE_W;
+  c.y = pile.y * TILE_H;
+
+  let labelText = '';
+  if (pile.isDeathPile) {
+    const skull = new PIXI.Text({ text: '☠', style: { fontFamily: 'Arial', fontSize: 20, fill: 0xff4444 } });
+    skull.anchor.set(0.5);
+    skull.x = TILE_W / 2; skull.y = TILE_H / 2;
+    c.addChild(skull);
+    labelText = 'YOUR GEAR';
+  } else {
+    if (pile.gold > 0) {
+      const r = Math.min(11, 4 + Math.sqrt(pile.gold) * 0.4); // size scales with amount
+      c.addChild(new PIXI.Graphics().circle(TILE_W / 2, TILE_H / 2, r).fill(0xffd700));
+    }
+    pile.items.forEach((item, k) => {
+      const dx = 8 + k * 13, dy = 8;
+      c.addChild(new PIXI.Graphics()
+        .poly([dx, dy - 7, dx + 7, dy, dx, dy + 7, dx - 7, dy])
+        .fill(RARITY_COLORS[item.rarity] || 0x888888));
+    });
+    if (pile.items.length > 0) {
+      labelText = pile.items[0].name + (pile.items.length > 1 ? ` +${pile.items.length - 1}` : '');
+    } else if (pile.gold > 0) {
+      labelText = `${pile.gold}g`;
+    }
+  }
+  if (labelText) {
+    const label = new PIXI.Text({ text: labelText, style: hudTextStyle(9, 0xffffff, false) });
+    label.anchor.set(0.5, 1);
+    label.x = TILE_W / 2; label.y = -4;
+    c.addChild(label);
+  }
+  lootContainer.addChild(c);
+  return c;
+}
+
+function updateLootViews() {
+  for (const pile of lootPiles) {
+    if (!lootViews.has(pile)) lootViews.set(pile, makeLootView(pile));
+  }
+  for (const [pile, c] of lootViews) {
+    if (!lootPiles.includes(pile)) {
+      c.destroy({ children: true });
+      lootViews.delete(pile);
+    }
+  }
+}
+
+// ── ZONE STATICS — background gradient, buildings, portals ──
+function rebuildZoneVisuals(zone) {
+  lastZoneRendered = currentZoneId;
+
+  // Zone gradient background, full canvas (banded fill — stable across Pixi 8.x minors)
+  backgroundLayer.clear();
+  const top = hexColor(zone.bgGradient[0]);
+  const bottom = hexColor(zone.bgGradient[1]);
+  const bands = 48;
+  const bandH = Math.ceil(VH / bands);
+  for (let i = 0; i < bands; i++) {
+    backgroundLayer.rect(0, i * bandH, VW, bandH + 1).fill(lerpColor(top, bottom, i / (bands - 1)));
+  }
+
+  staticsContainer.removeChildren().forEach(ch => ch.destroy({ children: true }));
+  portalViews = [];
+  doorGlowViews = [];
+
+  if (currentZoneId === 'homestead') buildHomesteadStatics();
+
+  for (const portal of getPortals()) {
+    const dest = ZONES[portal.target];
+    addPortalView(portal, hexColor((dest && dest.portalColor) || '#e8c97a'), portal.label, false);
+  }
+  const hsp = getHomesteadPortal();
+  if (hsp) {
+    addPortalView(hsp, hexColor(ZONES.homestead.portalColor || '#77dd55'), '⚒ HOMESTEAD', true);
+  }
+}
+
+function addPortalView(portal, color, labelText, alwaysLabel) {
+  const c = new PIXI.Container();
+  c.x = portal.x * TILE_W + TILE_W / 2;
+  c.y = portal.y * TILE_H + TILE_H / 2;
+
+  const halo = new PIXI.Graphics().circle(0, 0, 27).fill(color); // soft outer glow
+  halo.alpha = 0.12;
+  const core = new PIXI.Graphics().circle(0, 0, 10).fill(color); // solid inner circle
+  core.alpha = 0.9;
+  const ring = new PIXI.Graphics().circle(0, 0, 20).stroke({ width: 2, color }); // pulsing ring
+  c.addChild(halo, core, ring);
+
+  const label = new PIXI.Text({ text: labelText, style: hudTextStyle(10, color, true) });
+  label.anchor.set(0.5, 1);
+  label.y = -26;
+  label.visible = !!alwaysLabel;
+  c.addChild(label);
+
+  staticsContainer.addChild(c);
+  portalViews.push({ portal, ring, halo, label, alwaysLabel });
+}
+
+function animateZoneStatics() {
+  for (const pv of portalViews) {
+    const pulse = 0.7 + 0.3 * Math.sin(tick * (pv.alwaysLabel ? 0.04 : 0.05) + (pv.alwaysLabel ? 1 : 0));
+    pv.ring.alpha = pulse;
+    pv.halo.alpha = 0.08 + 0.1 * pulse;
+    if (!pv.alwaysLabel) {
+      // Portal proximity label — 120px radius (BACKLOG fix, was 60px)
+      const dx = (player.x - pv.portal.x) * TILE_W;
+      const dy = (player.y - pv.portal.y) * TILE_H;
+      pv.label.visible = Math.hypot(dx, dy) < PORTAL_LABEL_RADIUS;
+    }
+  }
+  for (const dg of doorGlowViews) {
+    dg.gfx.alpha = 0.4 * (0.5 + 0.5 * Math.sin(tick * 0.06));
+  }
+}
+
+function buildHomesteadStatics() {
+  // Rune path lanes (cross pattern)
+  const paths = new PIXI.Graphics();
+  paths.rect(0, (GRID / 2) * TILE_H, GRID * TILE_W, TILE_H).fill(0x1a3a1a);
+  paths.rect((GRID / 2) * TILE_W, 0, TILE_W, GRID * TILE_H).fill(0x1a3a1a);
+  staticsContainer.addChild(paths);
+
+  for (const b of BUILDINGS) {
+    const bx = b.x * TILE_W, by = b.y * TILE_H;
+    const bw = b.w * TILE_W, bh = b.h * TILE_H;
+    const doorPixX = (b.doorX - b.x) * TILE_W;
+    const color = hexColor(b.runeColor);
+
+    const g = new PIXI.Graphics();
+    g.rect(bx, by, bw, bh).fill(0x1a1a2a);
+    // Glowing border: soft wide underlay + crisp line (approximates canvas shadowBlur)
+    const walls = [
+      [bx, by, bx + bw, by],                                // top
+      [bx, by, bx, by + bh],                                // left
+      [bx + bw, by, bx + bw, by + bh],                      // right
+      [bx, by + bh, bx + doorPixX, by + bh],                // south, left of door
+      [bx + doorPixX + TILE_W, by + bh, bx + bw, by + bh],  // south, right of door
+    ];
+    for (const [x1, y1, x2, y2] of walls) g.moveTo(x1, y1).lineTo(x2, y2);
+    g.stroke({ width: 6, color, alpha: 0.22 });
+    for (const [x1, y1, x2, y2] of walls) g.moveTo(x1, y1).lineTo(x2, y2);
+    g.stroke({ width: 2, color });
+    staticsContainer.addChild(g);
+
+    // Pulsing door glow
+    const door = new PIXI.Graphics().rect(b.doorX * TILE_W, b.doorY * TILE_H, TILE_W, TILE_H).fill(color);
+    staticsContainer.addChild(door);
+    doorGlowViews.push({ gfx: door });
+
+    const label = new PIXI.Text({ text: b.label, style: hudTextStyle(10, color, true) });
+    label.anchor.set(0.5, 1);
+    label.x = bx + bw / 2;
+    label.y = by - 4;
+    staticsContainer.addChild(label);
+  }
+}
+
+// ── FX — kill bursts + projectiles (logic-owned) and hit sparks (renderer-owned) ──
+function spawnSparkFx(wx, wy, color) {
+  const n = 4 + Math.floor(Math.random() * 3); // 4-6 sparks
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1.5 + Math.random() * 2.5;
+    sparkFx.push({ x: wx, y: wy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, life: 15, maxLife: 15, color });
+  }
+}
+
+function updateFxGraphics() {
+  for (let i = sparkFx.length - 1; i >= 0; i--) {
+    const s = sparkFx[i];
+    s.x += s.vx; s.y += s.vy;
+    s.life--;
+    if (s.life <= 0) sparkFx.splice(i, 1);
+  }
+
+  fxGraphics.clear();
+
+  // Kill-burst particles (spawned + aged by game logic)
+  for (const p of particles) {
+    fxGraphics.rect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size)
+              .fill({ color: hexColor(p.color), alpha: Math.max(0, p.life / p.maxLife) });
+  }
+
+  // Attack visuals / projectiles (spawned + aged by game logic)
+  for (const p of projectiles) {
+    const t = Math.max(0, p.life / p.maxLife);
+    const color = hexColor(p.color);
+    if (p.type === 'slash') {
+      fxGraphics.moveTo(p.x + Math.cos(p.angle) * 6, p.y + Math.sin(p.angle) * 6)
+                .lineTo(p.x + Math.cos(p.angle) * 22, p.y + Math.sin(p.angle) * 22)
+                .stroke({ width: 3, color, alpha: t, cap: 'round' });
+    } else if (p.style === 'ranged') {
+      fxGraphics.circle(p.x, p.y, 4).fill({ color, alpha: t });
+      fxGraphics.moveTo(p.x, p.y).lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04)
+                .stroke({ width: 2, color, alpha: t });
+    } else {
+      fxGraphics.circle(p.x, p.y, 11).fill({ color, alpha: t * 0.25 }); // magic orb halo
+      fxGraphics.circle(p.x, p.y, 5).fill({ color, alpha: t });
+    }
+  }
+
+  // Hit sparks
+  for (const s of sparkFx) {
+    fxGraphics.rect(s.x - 1.5, s.y - 1.5, 3, 3).fill({ color: s.color, alpha: s.life / s.maxLife });
+  }
+}
+
+// ── FLOATING TEXTS — damage numbers, XP, pickups (data owned by game logic) ──
+function updateFloatingTextViews() {
+  const sx = Math.round(screenShake.x), sy = Math.round(screenShake.y);
+  for (const ft of floatingTexts) {
+    let t = textViews.get(ft);
+    if (!t) {
+      t = new PIXI.Text({ text: ft.text, style: hudTextStyle(13, hexColor(ft.color || '#fff'), true) });
+      t.anchor.set(0.5, 1);
+      uiEffectsLayer.addChildAt(t, 0); // under the HUD container
+      textViews.set(ft, t);
+      // Level-up visual burst — gold sparks at the player
+      if (typeof ft.text === 'string' && ft.text.endsWith('UP!')) {
+        spawnSparkFx(player.x * TILE_W + TILE_W / 2, player.y * TILE_H + TILE_H / 2, 0xe8c97a);
+        spawnSparkFx(player.x * TILE_W + TILE_W / 2, player.y * TILE_H + TILE_H / 2, 0xffe9a0);
+      }
+    }
+    // World→screen conversion: these live on the fixed layer but track world positions
+    t.x = ft.x * TILE_W - camera.x + TILE_W / 2 + sx;
+    t.y = ft.y * TILE_H - camera.y - ft.timer * 50 + sy;
+    t.alpha = Math.max(0, 1 - ft.timer / 1.2);
+  }
+  for (const [ft, t] of textViews) {
+    if (!floatingTexts.includes(ft)) {
+      t.destroy();
+      textViews.delete(ft);
+    }
+  }
+}
+
+// ── HUD — was canvas-drawn (not HTML); rebuilt in Pixi at identical coordinates
+//    so the existing coordinate-based canvas touch/click handlers keep working ──
+function buildHUD() {
+  hudContainer = new PIXI.Container();
+  uiEffectsLayer.addChild(hudContainer);
+
+  hudTexts = {};
+  const addText = (key, size, color, bold, anchorX, anchorY) => {
+    const t = new PIXI.Text({ text: '', style: hudTextStyle(size, color, bold) });
+    t.anchor.set(anchorX, anchorY);
+    hudContainer.addChild(t);
+    hudTexts[key] = t;
+    return t;
+  };
+
+  for (let i = 0; i < 4; i++) addText('stat' + i, 13, 0xe8c97a, true, 0, 0);  // stats top-left
+  for (let i = 0; i < 4; i++) addText('lv' + i, 10, 0x888888, false, 0, 0);   // XP level labels
+  xpBarsGfx = new PIXI.Graphics();
+  hudContainer.addChild(xpBarsGfx);
+
+  // Top-right buttons — tap targets are handled by the existing canvas listeners
+  addText('bag',  14, 0xe8c97a, true, 1, 0).text = 'BAG';
+  addText('home', 14, 0xe8c97a, true, 1, 0).text = 'HOME';
+  addText('dev',  14, 0xff8800, true, 1, 0).text = 'DEV';
+
+  addText('zone',     12, 0xaaaaaa, true,  0.5, 0); // zone name top-center
+  addText('recLevel', 10, 0x666666, false, 0.5, 0);
+
+  addText('hp',   12, 0xe44444, true, 0, 0); // bottom-left, above joystick area
+  addText('gold', 12, 0xe8c97a, true, 0, 0);
+  hudHpBarGfx = new PIXI.Graphics();
+  hudContainer.addChild(hudHpBarGfx);
+
+  joystickGfx = new PIXI.Graphics();
+  hudContainer.addChild(joystickGfx);
+
+  minimapGfx = new PIXI.Graphics();
+  hudContainer.addChild(minimapGfx);
+
+  layoutHUD();
+}
+
+function layoutHUD() {
+  for (let i = 0; i < 4; i++) hudTexts['stat' + i].position.set(10, 4 + i * 18);
+  for (let i = 0; i < 4; i++) hudTexts['lv' + i].position.set(10, 81 + i * 14);
+  hudTexts.bag.position.set(VW - 10, 8);
+  hudTexts.home.position.set(VW - 10, 28);
+  hudTexts.dev.position.set(VW - 10, 48);
+  hudTexts.zone.position.set(VW / 2, 5);
+  hudTexts.recLevel.position.set(VW / 2, 20);
+  hudTexts.hp.position.set(10, VH - 131);
+  hudTexts.gold.position.set(10, VH - 116);
+  hudHpBarGfx.position.set(10, VH - 146);
+  joystickGfx.position.set(70, VH - 70);
+  minimapGfx.position.set(VW - 100, VH - 100);
+}
+
+function updateHUD(zone) {
+  hudTexts.stat0.text = `DEX: ${getStat('dexterity')}`;
+  hudTexts.stat1.text = `STR: ${getStat('strength')}`;
+  hudTexts.stat2.text = `VIG: ${getStat('vigor')}`;
+  hudTexts.stat3.text = `INT: ${getStat('intelligence')}`;
+
+  const skills = ['dexterity','strength','vigor','intelligence'];
+  xpBarsGfx.clear();
+  skills.forEach((sk, i) => {
+    hudTexts['lv' + i].text = `Lv${player.skills.level[sk]}`;
+    const threshold = 100 * player.skills.level[sk];
+    xpBarsGfx.rect(38, 80 + i * 14, 80, 6).fill(0x333333);
+    xpBarsGfx.rect(38, 80 + i * 14, 80 * Math.min(1, player.skills.xp[sk] / threshold), 6)
+             .fill({ color: 0xe8c97a, alpha: 0.33 });
+  });
+
+  hudTexts.zone.text = zone.name;
+  hudTexts.recLevel.text = zone.recommendedLevel ? `Recommended Level: ${zone.recommendedLevel}` : '';
+
+  hudTexts.hp.text = `HP: ${player.hp}/${player.maxHp}`;
+  hudTexts.gold.text = `GOLD: ${backpack.gold}`;
+
+  // Player HP bar — bottom of screen, above joystick area
+  const frac = Math.max(0, Math.min(1, player.hp / player.maxHp));
+  hudHpBarGfx.clear();
+  hudHpBarGfx.rect(0, 0, 140, 7).fill(0x333333);
+  if (frac > 0) hudHpBarGfx.rect(0, 0, 140 * frac, 7).fill(0xe44444);
+  hudHpBarGfx.rect(0, 0, 140, 7).stroke({ width: 1, color: 0x555555 });
+
+  // Joystick ring + thumb (input handling untouched — this is display only)
+  joystickGfx.clear();
+  joystickGfx.circle(0, 0, joystick.radius).stroke({ width: 2, color: 0xffffff, alpha: 0.25 });
+  if (joystick.touching) {
+    joystickGfx.circle(joystick.x, joystick.y, 18).fill({ color: 0xffffff, alpha: 0.4 });
+  }
+
+  renderMinimapPixi();
+}
+
+function renderMinimapPixi() {
   const range = getMinimapRange();
   const mmSize = 90;
-  const mmX = VW - mmSize - 10;
-  const mmY = VH - mmSize - 10;
   const scale = mmSize / (range * 2);
+  const g = minimapGfx;
+  g.clear();
+  g.rect(0, 0, mmSize, mmSize).fill({ color: 0x000000, alpha: 0.6 });
+  g.rect(0, 0, mmSize, mmSize).stroke({ width: 1, color: 0x444444 });
 
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(mmX, mmY, mmSize, mmSize);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(mmX, mmY, mmSize, mmSize);
-
-  // Enemies as dots
   for (const e of enemies) {
     const dx = (e.x - player.x) * scale;
     const dy = (e.y - player.y) * scale;
-    if (Math.abs(dx) > mmSize/2 || Math.abs(dy) > mmSize/2) continue;
-    ctx.fillStyle = e.isBoss ? '#f80' : (e.rarity === 'epic' ? '#9b59b6' : e.rarity === 'rare' ? '#4a90d9' : '#e44');
-    ctx.fillRect(mmX + mmSize/2 + dx - 2, mmY + mmSize/2 + dy - 2, e.isBoss ? 5 : 3, e.isBoss ? 5 : 3);
+    if (Math.abs(dx) > mmSize / 2 || Math.abs(dy) > mmSize / 2) continue;
+    const color = e.isBoss ? 0xff8800 : e.rarity === 'epic' ? 0xab47bc : e.rarity === 'rare' ? 0x4fc3f7 : 0xee4444;
+    const s = e.isBoss ? 5 : 3;
+    g.rect(mmSize / 2 + dx - 2, mmSize / 2 + dy - 2, s, s).fill(color);
   }
-
-  // Loot piles
   for (const pile of lootPiles) {
     const dx = (pile.x - player.x) * scale;
     const dy = (pile.y - player.y) * scale;
-    if (Math.abs(dx) > mmSize/2 || Math.abs(dy) > mmSize/2) continue;
-    ctx.fillStyle = pile.isDeathPile ? '#f44' : '#e8c97a';
-    ctx.fillRect(mmX + mmSize/2 + dx - 1, mmY + mmSize/2 + dy - 1, 3, 3);
+    if (Math.abs(dx) > mmSize / 2 || Math.abs(dy) > mmSize / 2) continue;
+    g.rect(mmSize / 2 + dx - 1, mmSize / 2 + dy - 1, 3, 3).fill(pile.isDeathPile ? 0xff4444 : 0xe8c97a);
   }
-
-  // Portals
   for (const portal of getPortals()) {
     const dx = (portal.x - player.x) * scale;
     const dy = (portal.y - player.y) * scale;
-    if (Math.abs(dx) > mmSize/2 || Math.abs(dy) > mmSize/2) continue;
-    ctx.fillStyle = '#e8c97a';
-    ctx.beginPath();
-    ctx.arc(mmX + mmSize/2 + dx, mmY + mmSize/2 + dy, 3, 0, Math.PI*2);
-    ctx.fill();
+    if (Math.abs(dx) > mmSize / 2 || Math.abs(dy) > mmSize / 2) continue;
+    g.circle(mmSize / 2 + dx, mmSize / 2 + dy, 3).fill(0xe8c97a);
   }
+  g.circle(mmSize / 2, mmSize / 2, 4).fill(0x44aaff);
+}
 
-  // Player dot (center)
-  ctx.fillStyle = '#4af';
-  ctx.beginPath();
-  ctx.arc(mmX + mmSize/2, mmY + mmSize/2, 4, 0, Math.PI*2);
-  ctx.fill();
+// ── MASTER RENDER — called once per ticker frame, after update(dt) ──
+function renderPixi() {
+  if (!app) return;
+  const zone = ZONES[currentZoneId];
+
+  // Zone background + statics rebuild on zone transition (and on resize)
+  if (lastZoneRendered !== currentZoneId) rebuildZoneVisuals(zone);
+
+  // Camera scroll + screen shake — world & particle layers move, UI stays fixed
+  const sx = Math.round(screenShake.x), sy = Math.round(screenShake.y);
+  worldLayer.x = -camera.x + sx;
+  worldLayer.y = -camera.y + sy;
+  particleLayer.x = worldLayer.x;
+  particleLayer.y = worldLayer.y;
+
+  animateZoneStatics();
+  updatePlayerView();
+  updateAuraParticles();
+  updateEnemyViews(zone);
+  updateLootViews();
+  updateFloatingTextViews();
+  updateFxGraphics();
+  updateHUD(zone);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2226,86 +2545,6 @@ function upgradeStructure(id) {
   recalcMaxHp();
   renderHomestead();
   floatingTexts.push({ x: player.x, y: player.y - 2, text: `${def.name} Lv${s.level}!`, timer:0, color:'#7d5' });
-}
-
-// ═══════════════════════════════════════════════════════════
-//  BUILDINGS RENDER
-// ═══════════════════════════════════════════════════════════
-function renderBuildings(camX, camY) {
-  // Draw rune paths between buildings (cross pattern on floor)
-  ctx.save();
-  ctx.fillStyle = '#1a3a1a';
-  // Horizontal and vertical rune path lanes
-  for (let tx = 0; tx < GRID; tx++) {
-    const sx = tx * TILE_W - camX;
-    const sy = GRID / 2 * TILE_H - camY;
-    ctx.fillRect(sx, sy, TILE_W, TILE_H);
-  }
-  for (let ty = 0; ty < GRID; ty++) {
-    const sx = GRID / 2 * TILE_W - camX;
-    const sy = ty * TILE_H - camY;
-    ctx.fillRect(sx, sy, TILE_W, TILE_H);
-  }
-  ctx.restore();
-
-  for (const b of BUILDINGS) {
-    const bx = b.x * TILE_W - camX;
-    const by = b.y * TILE_H - camY;
-    const bw = b.w * TILE_W;
-    const bh = b.h * TILE_H;
-    const doorPixX = (b.doorX - b.x) * TILE_W;
-
-    // Building fill
-    ctx.fillStyle = '#1a1a2a';
-    ctx.fillRect(bx, by, bw, bh);
-
-    // Glowing border
-    ctx.save();
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = b.runeColor;
-    ctx.strokeStyle = b.runeColor;
-    ctx.lineWidth = 2;
-    // Top wall
-    ctx.beginPath();
-    ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by);
-    ctx.stroke();
-    // Left wall
-    ctx.beginPath();
-    ctx.moveTo(bx, by); ctx.lineTo(bx, by + bh);
-    ctx.stroke();
-    // Right wall
-    ctx.beginPath();
-    ctx.moveTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh);
-    ctx.stroke();
-    // South wall with door gap
-    ctx.beginPath();
-    ctx.moveTo(bx, by + bh); ctx.lineTo(bx + doorPixX, by + bh);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(bx + doorPixX + TILE_W, by + bh); ctx.lineTo(bx + bw, by + bh);
-    ctx.stroke();
-    ctx.restore();
-
-    // Door glow
-    const doorSx = b.doorX * TILE_W - camX;
-    const doorSy = b.doorY * TILE_H - camY;
-    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.06);
-    ctx.save();
-    ctx.globalAlpha = 0.4 * pulse;
-    ctx.fillStyle = b.runeColor;
-    ctx.fillRect(doorSx, doorSy, TILE_W, TILE_H);
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // Label above building
-    ctx.save();
-    ctx.shadowBlur = 6; ctx.shadowColor = b.runeColor;
-    ctx.fillStyle = b.runeColor;
-    ctx.font = 'bold 10px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText(b.label, bx + bw / 2, by - 4);
-    ctx.restore();
-  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2906,25 +3145,32 @@ function loadGame() {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  GAME LOOP
+//  GAME LOOP — PixiJS ticker (single internal rAF; raw
+//  requestAnimationFrame loop removed — still exactly ONE loop)
 // ═══════════════════════════════════════════════════════════
-function loop(ts) {
-  const dt = Math.min((ts - lastTime) / 1000, 0.1);
-  lastTime = ts;
-  update(dt);
-  render();
-  requestAnimationFrame(loop);
-}
-
-// ── INIT ──
-window.addEventListener('load', function() {
+window.addEventListener('load', async function() {
+  if (!window.PIXI) {
+    // CDN failed (offline / blocked). Fallback if v8 ever has CDN issues:
+    // https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js (v7 UMD)
+    console.error('PixiJS failed to load from CDN — renderer cannot start.');
+    const banner = document.getElementById('zone-banner');
+    banner.textContent = 'RENDERER FAILED TO LOAD — CHECK CONNECTION';
+    banner.style.display = 'block';
+    return;
+  }
+  await initPixi();
   buildZoneGrid(currentZoneId);
   loadGame();
   buildZoneGrid(currentZoneId);
   recalcMaxHp();
   spawnEnemies();
-  requestAnimationFrame(loop);
+  app.ticker.add((ticker) => {
+    const dt = Math.min(ticker.deltaMS / 1000, 0.1); // same clamp as the old rAF loop
+    update(dt);   // game logic — unchanged
+    renderPixi(); // render layer
+  });
 });
 </script>
+
 </body>
 </html>

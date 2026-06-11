@@ -22,12 +22,13 @@
 
 ## Zone System
 
-- **[Low]** Portal proximity label appears slightly after portal entry trigger on side approach (60px label vs ~77px entry radius) — bump label radius to ~120px for readability if desired.
+- *(empty — portal label radius fix shipped with the PixiJS migration)*
 
 ---
 
 ## Completed (moved from backlog)
 
+- ✅ Portal proximity label radius bumped 60px → 120px (2026-06-11, PixiJS migration patch)
 - ✅ Death + respawn system (GDD §15)
 - ✅ Zone system — Ashfields, Bleakwood Hollow, Ironbone Flats
 - ✅ Minimap
