@@ -14,7 +14,7 @@
 | **Type** | Single-file mobile-first browser ARPG |
 | **File** | `C:\Users\Jordon\OneDrive\Desktop\runeportal_phase4.html` |
 | **Repo** | jordan23wagner-ops/RunePortal |
-| **Renderer** | [VERIFY] Canvas 2D (phase4) → migrating to PixiJS 8.x |
+| **Renderer** | ✅ PixiJS 8.x WebGL (CDN UMD) — migrated from Canvas 2D 2026-06-11. Placeholder Graphics sprites; PNG art swap pending (Open Q #5) |
 | **Constraint** | One HTML file. No framework. No build step. CDN imports only. |
 | **Dev Server** | `python -m http.server 8080 --directory "C:\Users\Jordon\OneDrive\Desktop"` |
 | **Desktop URL** | http://192.168.1.75:8080/runeportal_phase4.html |
@@ -101,7 +101,7 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Isometric 2D tile world (20x20 grid) | ✅ Built | Green/red checkerboard |
+| 2D world grid (30x30, GRID=30) | ✅ Built | Checkerboard tile RENDERING removed 2026-06-11 (PixiJS migration) — zones now render gradient backgrounds; logical tile coords unchanged |
 | Player movement — WASD + Arrow keys | ✅ Built | Speed = 0.1 |
 | Virtual joystick (mobile) | ✅ Built | Bottom-left |
 | Auto-combat on proximity | ✅ Built | 80px range |
@@ -121,6 +121,7 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 | Untradable armor stub | ✅ Built | `player.untradableArmor = {equipped:false, broken:false}` — stub only, never drops |
 | Zone system (GDD §9/§10) | ✅ Built | 2026-06-11 — Ashfields (Lv1-5), Bleakwood Hollow (Lv5-10), Ironbone Flats (Lv10-20) + Homestead hub. Per-zone enemyTypes config, named bosses (The Warden / The Nightmother / General Mourne), rarity multipliers, zone dropTables, 0.5s fade transitions, portal proximity labels, HUD zone name + rec. level |
 | Legendary rarity tier | ✅ Built | Orange #ff8f00, 5% drop in Ironbone Flats, 2x epic stats, 500g sell — generated from epic bases (no GEAR_DB entries yet) |
+| PixiJS renderer (GDD §3) | ✅ Built | 2026-06-11 — full Canvas 2D → PixiJS 8.x swap. 4-layer stage (bg gradient / world / particles / ui+HUD); layered player container (5 gear layers tint by rarity + aura particles); enemy containers (rarity tint, HP bar, glow, phasing/heal-flash kept); hit sparks; loot shapes + labels; portal labels at 120px; HUD rebuilt in Pixi at same coords (it was canvas-drawn, NOT HTML); PIXI ticker = the single loop. Placeholder shapes — real art pending |
 
 ---
 
@@ -138,10 +139,10 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 
 3. **Minimap** — current zone, player position dot
 
-4. **PixiJS migration** — full renderer swap from Canvas 2D to PixiJS 8.x
-   - Layered character sprites (body, helmet, chest, legs, boots, weapon, aura)
-   - Particle system for auras and hit effects
-   - Parallax zone backgrounds
+4. ~~**PixiJS migration**~~ ✅ DONE 2026-06-11 — renderer swapped to PixiJS 8.x
+   - ✅ Layered character sprites (body, helmet, chest, legs, boots, weapon, aura) — placeholder Graphics rects
+   - ✅ Particle system for auras and hit effects
+   - Remaining: real PNG sprite art (blocked on Open Q #5) + parallax multi-layer backgrounds (currently single gradient layer)
 
 5. **Homestead Hub** — Bonfire centered, merchant huts, portal room
 
@@ -177,8 +178,9 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 | BACKPACK tab | Backpack panel | Item grid |
 | EQUIPMENT tab | Backpack panel | 5 gear slots |
 | Gold display | Backpack panel top | — |
-| HUD HP bar | [VERIFY position in HTML] | — |
-| HUD XP display | [VERIFY position in HTML] | — |
+| HUD HP bar | Bottom-left, above joystick area | PixiJS (hudContainer in uiEffectsLayer), NOT HTML — `HP: x/y` text + 140px bar (bar added 2026-06-11) |
+| HUD XP display | Top-left, under stats | PixiJS — 4 per-skill `LvN` labels + 80px XP bars |
+| Whole HUD layer | PixiJS, same coords as old canvas HUD | Stats / BAG / HOME / DEV / zone name / gold / joystick ring / minimap — tap targets still handled by canvas listeners |
 
 ---
 
