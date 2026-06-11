@@ -24,41 +24,33 @@
 
 ## Current Player Object Schema
 
-> ⚠️ **VERIFY AGAINST HTML** — stat rename (attack→Dexterity, defence→Vigor) may or may not be complete in phase4. Read the HTML `player` init block and update this section.
+> ✅ **VERIFIED AGAINST phase4 HTML — 2026-06-11.** Stat rename is COMPLETE in phase4.
+> Confirmed stat names: `dexterity`, `strength`, `vigor`, `intelligence`.
+> ⚠️ Legacy `magic` and `ranged` keys exist only in the **phase3** `skills` object — phase4 does
+> NOT carry them. Flagged for cleanup in phase3 if it's ever revived; do not port them forward.
+> (Note: phase4 gear uses `weaponStyle: 'melee' | 'ranged' | 'magic'` — that is a gear field, not a player stat.)
 
 ```javascript
-// LAST CONFIRMED STATE (phase3 — verify phase4 matches or differs)
+// CONFIRMED phase4 state (2026-06-11)
 player = {
-    x, y,
-    hp: 100,
-    maxHp: 100,
+    x, y,                 // tile coords (GRID = 30)
+    hp: 100, maxHp: 100,  // maxHp derived: 50 + vigor*5 (halved during death sickness)
     speed: 2,
+    isDead: false,        // ⚠️ renamed from `dead` 2026-06-11 — persisted in save
+    deathSickness: 0,     // seconds remaining
     skills: {
-        attack: 10,      // may be renamed to dexterity in phase4
-        strength: 10,
-        defence: 10,     // may be renamed to vigor in phase4
-        magic: 10,       // may be renamed to intelligence in phase4
-        ranged: 10,
-        xp: { attack: 0, strength: 0, defence: 0 },
-        level: { attack: 1, strength: 1, defence: 1 }
+        xp:    { dexterity: 0, strength: 0, vigor: 0, intelligence: 0 },
+        level: { dexterity: 1, strength: 1, vigor: 1, intelligence: 1 }
     },
-    baseStats: { attack: 10, strength: 10, defence: 10 },
-    equippedBonuses: { attack: 0, strength: 0, defence: 0 }
+    baseStats:       { dexterity: 10, strength: 10, vigor: 10, intelligence: 10 },
+    equippedBonuses: { dexterity: 0,  strength: 0,  vigor: 0,  intelligence: 0 },
+    equipped: { weapon: null, helmet: null, chest: null, legs: null, boots: null },
+    untradableArmor: { equipped: false, broken: false } // stub added 2026-06-11 — NEVER drops on death, no functionality yet
 }
-backpack = { items: [], gold: 0 }
+backpack = { items: [], food: [], materials: { iron_ore, bog_root, void_shard, iron_bar, bog_ingot, void_crystal }, gold: 0 }
 ```
 
-**IMPORTANT:** If stat rename is complete in phase4, this schema will look like:
-```javascript
-skills: {
-    dexterity: 10,    // controls attack speed
-    strength: 10,     // controls damage
-    vigor: 10,        // controls max HP (50 + vigor * 5)
-    intelligence: 10, // controls magic damage (future)
-    xp: { dexterity: 0, strength: 0, vigor: 0, intelligence: 0 },
-    level: { dexterity: 1, strength: 1, vigor: 1, intelligence: 1 }
-}
-```
+> ⚠️ **SCHEMA CHANGED 2026-06-11** (`isDead` rename + `untradableArmor` stub) — clear localStorage before testing.
 
 ---
 
@@ -79,23 +71,28 @@ skills: {
 
 ## localStorage Schema
 
-> ⚠️ **VERIFY AGAINST HTML** — read the save/load functions and list exact keys
+> ✅ **VERIFIED AGAINST phase4 HTML — 2026-06-11.** Single key: `runeportal_save`.
 
 ```javascript
-// EXPECTED SAVE KEYS (verify phase4 matches)
+// CONFIRMED phase4 save payload (2026-06-11)
 localStorage.setItem('runeportal_save', JSON.stringify({
-    skills,          // player.skills object
+    skills,          // player.skills (xp + level objects)
     hp,              // player.hp
-    gold,            // backpack.gold
-    items,           // backpack.items array
     baseStats,       // player.baseStats
-    equippedBonuses  // player.equippedBonuses
+    equippedBonuses, // player.equippedBonuses
+    equipped,        // player.equipped (5 slots)
+    isDead,          // player.isDead       — added 2026-06-11
+    untradableArmor, // player.untradableArmor stub — added 2026-06-11
+    deathSickness,   // player.deathSickness
+    gold, items, food, materials, // backpack
+    homestead, guilds, craftQueue, gardenPlot, shrineBuff,
+    zoneId           // currentZoneId
 }))
 ```
 
-**Save cadence:** Auto-save every 10 seconds + on zone transition  
+**Save cadence:** Auto-save every **10 seconds** in phase4 (`lastSave >= 10` in update loop) + on death and on respawn. There is NO save-on-zone-transition in phase4. (phase3 used a 30s `setInterval` — that cadence does not apply to phase4.)  
 **Load guard:** Always wrapped in try/catch — bad save = localStorage.clear() + hard refresh  
-**Debug command:** `localStorage.clear()` in browser console → Ctrl+Shift+R
+**Debug command:** `localStorage.clear()` in browser console → Ctrl+Shift+R (or DEV panel → "Clear save data & reload")
 
 ---
 
@@ -117,18 +114,20 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 | Gold tracked in backpack.gold | ✅ Built | — |
 | Boundary clamping | ✅ Built | Player + enemies stay in grid |
 | Close button on backpack | ✅ Built | — |
-| Stat rename (ATK→DEX, DEF→VIG, +INT) | ⚠️ VERIFY | Listed as todo in phase3 handoff — may be done in phase4 |
-| Save state (localStorage) | ⚠️ VERIFY | Listed as todo in phase3 — may be done in phase4 |
+| Stat rename (ATK→DEX, DEF→VIG, +INT) | ✅ Built | Confirmed in phase4 (2026-06-11) |
+| Save state (localStorage) | ✅ Built | Confirmed in phase4 — 10s auto-save (2026-06-11) |
+| Player death + respawn (GDD §15) | ✅ Built | 2026-06-11 — drops all equipped standard gear (5 min despawn pile), 50% gold tax, death summary + RESPAWN, respawn at map center, death sickness retained |
+| Untradable armor stub | ✅ Built | `player.untradableArmor = {equipped:false, broken:false}` — stub only, never drops |
 
 ---
 
 ## Features: Next In Queue (priority order)
 
-1. **Player death + respawn** at Homestead Bonfire (center for now)
-   - Drop standard gear at death location, 5 min despawn timer
-   - 50% gold tax on death
-   - Death summary screen with respawn button
-   - Untradable armor schema stub (never drops, broken state on death)
+1. ~~**Player death + respawn**~~ ✅ DONE 2026-06-11 (respawns at map center of current zone — move to Homestead Bonfire when bonfire respawn point is built)
+   - ✅ Drop equipped standard gear at death location, 5 min despawn timer
+   - ✅ 50% gold tax on death (round down, no recovery)
+   - ✅ Death summary screen with RESPAWN button
+   - ✅ Untradable armor schema stub (never drops; broken-state behavior still TODO)
 
 2. **Multiple zones** — minimum 5 with unique environments
    - All zones accessible (no locks)

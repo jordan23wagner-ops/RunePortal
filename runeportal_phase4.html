@@ -411,6 +411,19 @@
   </div>
 
 <script>
+/*
+=== CHANGELOG ===
+[2026-06-11] — DEATH & RESPAWN (GDD §15): triggerDeath() rewritten — drops ALL equipped
+  standard gear into a death pile at the death location (untradeable gear never drops);
+  pile despawns after 5 minutes; 50% gold death tax (round down), remainder kept by player;
+  death summary shows gold lost + list of gear dropped.
+[2026-06-11] — DEATH & RESPAWN: respawnPlayer() respawns at map center of the current zone
+  (was: travel to The Vale). Death sickness mechanic unchanged.
+[2026-06-11] — SCHEMA: player.dead renamed to player.isDead, now persisted in the save and
+  cleared on respawn. Added stub player.untradableArmor = { equipped:false, broken:false }
+  — NEVER drops on death, no other functionality yet.
+⚠️ PLAYER SCHEMA CHANGED — clear localStorage before testing (localStorage.clear() then Ctrl+Shift+R).
+*/
 // ═══════════════════════════════════════════════════════════
 //  CONSTANTS & CONFIG
 // ═══════════════════════════════════════════════════════════
@@ -620,7 +633,7 @@ const player = {
   x: GRID / 2, y: GRID / 2,
   hp: 100, maxHp: 100,
   speed: 2,
-  dead: false,
+  isDead: false,
   deathSickness: 0, // seconds remaining
   skills: {
     xp:    { dexterity:0, strength:0, vigor:0, intelligence:0 },
@@ -628,7 +641,8 @@ const player = {
   },
   baseStats: { dexterity:10, strength:10, vigor:10, intelligence:10 },
   equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
-  equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null }
+  equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null },
+  untradableArmor: { equipped: false, broken: false } // stub — NEVER drops on death, no functionality yet
 };
 
 const backpack = {
@@ -911,69 +925,54 @@ function showBanner(text) {
 // ═══════════════════════════════════════════════════════════
 //  DEATH & RESPAWN
 // ═══════════════════════════════════════════════════════════
+const DEATH_PILE_DESPAWN_MS = 5 * 60 * 1000; // 5 minute despawn timer
+
 function triggerDeath() {
-  if (player.dead) return;
-  player.dead = true;
+  if (player.isDead) return;
+  player.isDead = true;
 
-  // Build death loot pile — keep best gear + 2 random, rest drops
-  const equipped = Object.values(player.equipped).filter(Boolean);
-  const allGear = [...backpack.items, ...equipped];
+  // Drop ALL equipped standard gear — untradeable gear never drops (incl. untradableArmor stub)
+  const dropped = [];
+  for (const slot in player.equipped) {
+    const item = player.equipped[slot];
+    if (!item || item.untradeable) continue;
+    dropped.push(item);
+    player.equipped[slot] = null;
+    const bi = backpack.items.indexOf(item);
+    if (bi !== -1) backpack.items.splice(bi, 1);
+  }
 
-  // Sort by rarity rank desc
-  allGear.sort((a,b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity]);
+  // 50% gold death tax (round down) — remainder stays with player
+  const goldLost = Math.floor(backpack.gold / 2);
+  backpack.gold -= goldLost;
 
-  // Untradeable items are always kept
-  const untradeableItems = allGear.filter(i => i.untradeable);
-  const tradeableGear = allGear.filter(i => !i.untradeable);
-
-  const kept = [...untradeableItems];
-  if (tradeableGear.length > 0) kept.push(tradeableGear[0]); // keep best tradeable
-  const rest = tradeableGear.slice(1);
-  // Keep 2 more random from rest
-  const shuffled = rest.sort(() => Math.random() - 0.5);
-  const keepExtra = shuffled.splice(0, Math.min(2, shuffled.length));
-  kept.push(...keepExtra);
-  const dropped = shuffled;
-
-  // Death pile
-  if (dropped.length > 0 || backpack.gold > 0) {
+  // Death pile at death location
+  if (dropped.length > 0) {
     lootPiles.push({
       x: player.x, y: player.y,
       items: dropped,
-      gold: backpack.gold,
+      gold: 0,
       isDeathPile: true,
-      zoneId: currentZoneId
+      zoneId: currentZoneId,
+      expiresAt: Date.now() + DEATH_PILE_DESPAWN_MS
     });
   }
 
-  // Reset backpack
-  backpack.items = kept.filter(i => !equipped.includes(i));
-  backpack.gold = 0;
-
-  // Reset equipment — only keep kept equipped items
-  for (const slot in player.equipped) {
-    if (player.equipped[slot] && !kept.includes(player.equipped[slot])) {
-      player.equipped[slot] = null;
-    }
-  }
-
   recalcEquippedBonuses();
+  recalcMaxHp();
 
-  const droppedCount = dropped.length;
+  const gearList = dropped.length > 0 ? dropped.map(i => i.name).join(', ') : 'none';
   document.getElementById('death-msg').textContent =
-    `You lost ${droppedCount} item(s) and all gold. Kept your best gear.`;
+    `Gold lost: ${goldLost}g — Gear dropped: ${gearList}`;
   document.getElementById('death-screen').classList.add('show');
+  saveGame();
 }
 
 function respawnPlayer() {
-  player.dead = false;
-  // Travel home if not already there
-  if (currentZoneId !== 'vale') {
-    travelToZone('vale');
-  } else {
-    player.x = GRID / 2;
-    player.y = GRID / 2;
-  }
+  player.isDead = false;
+  // Respawn at map center of the current zone
+  player.x = GRID / 2;
+  player.y = GRID / 2;
 
   const sickDur = getDeathSicknessDuration();
   player.deathSickness = sickDur;
@@ -982,6 +981,7 @@ function respawnPlayer() {
 
   document.getElementById('death-screen').classList.remove('show');
   document.getElementById('sickness-bar').style.display = 'block';
+  saveGame();
 }
 
 function recalcEquippedBonuses() {
@@ -1085,7 +1085,7 @@ function spawnAttackVisual(style, px, py, tx, ty) {
 //  MAIN UPDATE
 // ═══════════════════════════════════════════════════════════
 function update(dt) {
-  if (player.dead) return;
+  if (player.isDead) return;
 
   tick++;
 
@@ -1277,6 +1277,11 @@ function update(dt) {
   // Loot pickup
   for (let i = lootPiles.length - 1; i >= 0; i--) {
     const pile = lootPiles[i];
+    // Death pile despawn (5 min timer)
+    if (pile.expiresAt && Date.now() > pile.expiresAt) {
+      lootPiles.splice(i, 1);
+      continue;
+    }
     const dist = Math.hypot(player.x - pile.x, player.y - pile.y);
     if (dist < 60 / TILE_W) {
       // Collect gold
@@ -1540,7 +1545,7 @@ function render() {
   }
 
   // ── PLAYER ──
-  if (!player.dead) {
+  if (!player.isDead) {
     const px = player.x * TILE_W - camX;
     const py = player.y * TILE_H - camY;
     const cx = px + TILE_W / 2;
@@ -2665,6 +2670,8 @@ function saveGame() {
       baseStats:       player.baseStats,
       equippedBonuses: player.equippedBonuses,
       equipped:        player.equipped,
+      isDead:          player.isDead,
+      untradableArmor: player.untradableArmor,
       deathSickness:   player.deathSickness,
       gold:            backpack.gold,
       items:           backpack.items,
@@ -2691,6 +2698,12 @@ function loadGame() {
     if (d.baseStats)       Object.assign(player.baseStats, d.baseStats);
     if (d.equippedBonuses) Object.assign(player.equippedBonuses, d.equippedBonuses);
     if (d.equipped)        Object.assign(player.equipped, d.equipped);
+    if (d.untradableArmor) Object.assign(player.untradableArmor, d.untradableArmor);
+    if (d.isDead) {
+      player.isDead = true;
+      document.getElementById('death-msg').textContent = 'You died. Press RESPAWN to continue.';
+      document.getElementById('death-screen').classList.add('show');
+    }
     if (d.deathSickness)   {
       player.deathSickness = d.deathSickness;
       if (player.deathSickness > 0) document.getElementById('sickness-bar').style.display = 'block';
