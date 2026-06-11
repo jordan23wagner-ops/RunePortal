@@ -37,6 +37,7 @@ player = {
     hp: 100, maxHp: 100,  // maxHp derived: 50 + vigor*5 (halved during death sickness)
     speed: 2,
     isDead: false,        // ⚠️ renamed from `dead` 2026-06-11 — persisted in save
+    currentZone: 'ashfields', // ⚠️ added 2026-06-11 — synced with currentZoneId, persisted in save
     deathSickness: 0,     // seconds remaining
     skills: {
         xp:    { dexterity: 0, strength: 0, vigor: 0, intelligence: 0 },
@@ -86,7 +87,7 @@ localStorage.setItem('runeportal_save', JSON.stringify({
     deathSickness,   // player.deathSickness
     gold, items, food, materials, // backpack
     homestead, guilds, craftQueue, gardenPlot, shrineBuff,
-    zoneId           // currentZoneId
+    currentZone      // player.currentZone — ⚠️ replaced `zoneId` key 2026-06-11
 }))
 ```
 
@@ -118,6 +119,8 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 | Save state (localStorage) | ✅ Built | Confirmed in phase4 — 10s auto-save (2026-06-11) |
 | Player death + respawn (GDD §15) | ✅ Built | 2026-06-11 — drops all equipped standard gear (5 min despawn pile), 50% gold tax, death summary + RESPAWN, respawn at map center, death sickness retained |
 | Untradable armor stub | ✅ Built | `player.untradableArmor = {equipped:false, broken:false}` — stub only, never drops |
+| Zone system (GDD §9/§10) | ✅ Built | 2026-06-11 — Ashfields (Lv1-5), Bleakwood Hollow (Lv5-10), Ironbone Flats (Lv10-20) + Homestead hub. Per-zone enemyTypes config, named bosses (The Warden / The Nightmother / General Mourne), rarity multipliers, zone dropTables, 0.5s fade transitions, portal proximity labels, HUD zone name + rec. level |
+| Legendary rarity tier | ✅ Built | Orange #ff8f00, 5% drop in Ironbone Flats, 2x epic stats, 500g sell — generated from epic bases (no GEAR_DB entries yet) |
 
 ---
 
@@ -129,10 +132,9 @@ localStorage.setItem('runeportal_save', JSON.stringify({
    - ✅ Death summary screen with RESPAWN button
    - ✅ Untradable armor schema stub (never drops; broken-state behavior still TODO)
 
-2. **Multiple zones** — minimum 5 with unique environments
-   - All zones accessible (no locks)
-   - Enemy HP/damage scaling by zone
-   - Background environments (parallax layers, no tile grid)
+2. ~~**Multiple zones**~~ ✅ 3 of 5 DONE 2026-06-11 (Ashfields / Bleakwood Hollow / Ironbone Flats per GDD §9, all open, scaled enemies, gradient backgrounds)
+   - Remaining: Zones 4-5 (The Brine Wastes, Verdant Decay) for v1.0 ship criteria
+   - Parallax layered backgrounds still pending (currently CSS-style canvas gradients — PixiJS migration handles real art)
 
 3. **Minimap** — current zone, player position dot
 
@@ -157,8 +159,8 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 
 | Property | Value |
 |----------|-------|
-| Count spawned | 10 (phase3) — [VERIFY phase4] |
-| Rarities | Common, Rare, Epic |
+| Count spawned | 12 + 1 named boss per combat zone (phase4, verified 2026-06-11) |
+| Rarities | Common (1x), Rare (2x HP / 1.5x dmg / 1.5x XP / 2x gold), Epic (4x HP / 2x dmg / 2x XP / 4x gold) — multipliers on zone base stats |
 | Aggro range | 80px |
 | Wander behavior | Random direction, changes every 2–3 seconds |
 | Respawn | After death, rarity-based timing |
@@ -182,7 +184,7 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 
 ## Gear System (Current + Target)
 
-**Current rarities in code:** Common, Rare, Epic  
+**Current rarities in code:** Common, Rare, Epic, Legendary (added 2026-06-11 — drops only in Ironbone Flats at 5%)  
 
 **Target rarities (GDD_v2.md):**
 1. Rare
