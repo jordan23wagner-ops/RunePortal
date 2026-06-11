@@ -1,0 +1,2733 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RunePortal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; position: relative; z-index: 1; }
+
+    /* ── BACKPACK PANEL ── */
+    .backpack-panel {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(10,10,10,0.97);
+      color: #ccc; font-family: 'Courier New', monospace;
+      z-index: 100; flex-direction: column; padding: 12px;
+    }
+    .backpack-panel.open { display: flex; }
+
+    .panel-close-btn {
+      position: absolute; top: 10px; right: 16px; z-index: 999999;
+      background: #333; color: #e8c97a; border: 1px solid #e8c97a;
+      padding: 6px 14px; font-size: 18px; cursor: pointer;
+      font-family: monospace; border-radius: 4px;
+    }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px;
+      border-bottom: 1px solid #333; padding-bottom: 8px; flex-wrap: wrap; }
+    .tab { padding: 6px 14px; cursor: pointer; font-size: 12px;
+      letter-spacing: 1px; color: #666; border: 1px solid #333;
+      border-radius: 3px; background: #111; }
+    .tab.active { color: #e8c97a; border-color: #e8c97a; background: #1a1a1a; }
+
+    .gold-display { font-size: 13px; color: #e8c97a; margin-bottom: 10px; letter-spacing: 1px; }
+
+    .backpack-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 6px; overflow-y: auto; max-height: 65vh;
+    }
+    .backpack-grid .item {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
+      padding: 8px 6px; font-size: 11px; cursor: pointer;
+      text-align: center; transition: border-color 0.15s; position: relative;
+    }
+    .backpack-grid .item:hover { border-color: #e8c97a; }
+    .backpack-grid .item.common  { border-color: #555; color: #ccc; }
+    .backpack-grid .item.rare    { border-color: #4a90d9; color: #4a90d9; }
+    .backpack-grid .item.epic    { border-color: #9b59b6; color: #9b59b6; }
+    .backpack-grid .item.material { border-color: #5a3; color: #7d5; }
+    .backpack-grid .item.food   { border-color: #c85; color: #fa8; }
+    .backpack-grid .item.equipped-badge {
+      position: absolute; top: 2px; right: 3px;
+      font-size: 8px; color: #e8c97a; letter-spacing: 0;
+    }
+    .item-type { font-size: 9px; color: #555; text-transform: uppercase;
+      letter-spacing: 1px; margin-top: 3px; }
+
+    .equipment-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 0; }
+    .slot { background: #111; border: 1px solid #2a2a2a; border-radius: 6px;
+      padding: 12px 8px; text-align: center; min-height: 80px;
+      cursor: pointer; transition: border-color 0.15s; }
+    .slot:hover { border-color: #555; }
+    .slot.filled { border-color: #e8c97a44; }
+    .slot-label { font-size: 9px; color: #555; text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 6px; }
+    .slot .slot-item { font-size: 11px; color: #e8c97a; }
+    .slot .slot-item.empty { color: #333; }
+
+    /* ── HOMESTEAD PANEL ── */
+    .homestead-panel {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(8,12,8,0.97);
+      color: #ccc; font-family: 'Courier New', monospace;
+      z-index: 100; flex-direction: column; padding: 12px; overflow-y: auto;
+    }
+    .homestead-panel.open { display: flex; }
+    .homestead-title { color: #7d5; font-size: 18px; letter-spacing: 2px; margin: 30px 0 12px; }
+    .structures-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .structure-card {
+      background: #0f1a0f; border: 1px solid #2a3a2a; border-radius: 6px;
+      padding: 12px; cursor: pointer; transition: border-color 0.15s;
+    }
+    .structure-card:hover { border-color: #5a3; }
+    .structure-card.maxed { border-color: #e8c97a55; }
+    .structure-name { color: #7d5; font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+    .structure-level { color: #e8c97a; font-size: 11px; margin-bottom: 6px; }
+    .structure-desc { color: #888; font-size: 10px; line-height: 1.5; margin-bottom: 8px; }
+    .structure-cost { color: #f90; font-size: 10px; margin-bottom: 6px; }
+    .structure-bonus { color: #4a90d9; font-size: 10px; }
+    .upgrade-btn {
+      margin-top: 8px; padding: 5px 14px; background: #2a3a2a;
+      color: #7d5; border: 1px solid #5a3; border-radius: 3px;
+      cursor: pointer; font-family: inherit; font-size: 11px;
+    }
+    .upgrade-btn:hover { background: #3a4a3a; }
+    .upgrade-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── TOOLTIP ── */
+    #tooltip {
+      display: none; position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      background: #111; border: 1px solid #e8c97a;
+      border-radius: 6px; padding: 12px 16px; font-size: 12px;
+      color: #ccc; z-index: 300; min-width: 180px; text-align: center;
+      font-family: 'Courier New', monospace;
+    }
+    .tt-name { color: #e8c97a; font-size: 14px; margin-bottom: 4px; }
+    .tt-stats { color: #aaa; font-size: 11px; margin: 4px 0; }
+    .tt-btn {
+      margin: 4px 3px 0; padding: 5px 12px; border: none;
+      border-radius: 3px; cursor: pointer; font-family: inherit;
+      font-weight: bold; font-size: 11px;
+    }
+    .tt-equip { background: #e8c97a; color: #111; }
+    .tt-unequip { background: #555; color: #fff; }
+    .tt-eat { background: #c85; color: #fff; }
+    .tt-drop { background: #822; color: #fff; }
+
+    /* ── DEATH SCREEN ── */
+    #death-screen {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; background: rgba(80,0,0,0.85);
+      z-index: 500; align-items: center; justify-content: center;
+      flex-direction: column; font-family: 'Courier New', monospace; color: #fff;
+    }
+    #death-screen.show { display: flex; }
+    #death-screen h1 { font-size: 36px; color: #f44; letter-spacing: 4px; margin-bottom: 16px; }
+    #death-screen p { font-size: 14px; color: #ccc; margin-bottom: 8px; text-align: center; }
+    #death-screen .respawn-btn {
+      margin-top: 20px; padding: 12px 32px; background: #333;
+      color: #e8c97a; border: 1px solid #e8c97a; font-family: inherit;
+      font-size: 16px; cursor: pointer; border-radius: 4px; letter-spacing: 2px;
+    }
+
+    /* ── DEATH SICKNESS HUD ── */
+    #sickness-bar {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(80,0,0,0.7); color: #f88;
+      font-family: 'Courier New', monospace; font-size: 12px;
+      text-align: center; padding: 4px; z-index: 50; letter-spacing: 1px;
+    }
+
+    /* ── DEV PANEL ── */
+    .dev-panel {
+      display: none; position: fixed; top: 0; right: 0;
+      width: 280px; height: 100%; background: rgba(5,5,20,0.97);
+      color: #ccc; font-family: 'Courier New', monospace;
+      z-index: 200; flex-direction: column; padding: 40px 12px 12px;
+      overflow-y: auto; border-left: 1px solid #333;
+    }
+    .dev-panel.open { display: flex; }
+    .dev-title { color: #f80; font-size: 14px; letter-spacing: 2px; margin-bottom: 12px; }
+    .dev-btn {
+      margin: 4px 0; padding: 7px 10px; background: #1a1a2a;
+      color: #aaf; border: 1px solid #334; border-radius: 3px;
+      cursor: pointer; font-family: inherit; font-size: 11px;
+      text-align: left; width: 100%;
+    }
+    .dev-btn:hover { background: #2a2a3a; border-color: #55f; }
+    .dev-section { color: #f80; font-size: 10px; letter-spacing: 1px;
+      margin: 10px 0 4px; text-transform: uppercase; }
+
+    /* ── ZONE TRANSITION ── */
+    #zone-banner {
+      display: none; position: fixed; top: 40%; left: 50%;
+      transform: translateX(-50%); background: rgba(0,0,0,0.85);
+      color: #e8c97a; font-family: 'Courier New', monospace;
+      font-size: 22px; letter-spacing: 4px; padding: 16px 32px;
+      border: 1px solid #e8c97a55; border-radius: 6px; z-index: 200;
+      text-align: center;
+    }
+
+    /* ── BUILDING PANELS ── */
+    .building-panel {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(8,8,20,0.97);
+      color: #ccc; font-family: 'Courier New', monospace;
+      z-index: 100; flex-direction: column; padding: 12px; overflow-y: auto;
+    }
+    .building-panel.open { display: flex; }
+    .building-title { font-size: 17px; letter-spacing: 2px; margin: 30px 0 10px; }
+    .building-subtitle { color: #666; font-size: 11px; margin-bottom: 14px; }
+
+    .recipe-card {
+      background: #0f0f1e; border: 1px solid #2a2a40; border-radius: 5px;
+      padding: 10px 12px; margin-bottom: 8px;
+    }
+    .recipe-card.can-afford { border-color: #4a4a8a; }
+    .recipe-name { color: #e8c97a; font-size: 13px; margin-bottom: 4px; }
+    .recipe-inputs { color: #888; font-size: 10px; margin-bottom: 6px; }
+    .recipe-btns { display: flex; gap: 6px; }
+    .craft-btn {
+      padding: 5px 12px; border: 1px solid #555; border-radius: 3px;
+      cursor: pointer; font-family: inherit; font-size: 10px; background: #1a1a2a; color: #aaa;
+    }
+    .craft-btn:hover:not(:disabled) { background: #2a2a3a; border-color: #888; }
+    .craft-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .craft-btn.instant { border-color: #ff6622; color: #ff9966; }
+    .craft-btn.timed  { border-color: #44aaff; color: #88ccff; }
+
+    .queue-section { margin-top: 14px; }
+    .queue-title { color: #44aaff; font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; }
+    .queue-item { background: #0a0a18; border: 1px solid #223; border-radius: 4px;
+      padding: 6px 10px; font-size: 10px; color: #aaa; margin-bottom: 4px; }
+
+    .bonfire-btn, .guild-btn, .merchant-buy-btn, .shrine-btn {
+      margin: 6px 4px 0 0; padding: 7px 16px; border-radius: 4px;
+      cursor: pointer; font-family: inherit; font-size: 11px; border: 1px solid #555;
+      background: #1a1a2a; color: #ccc;
+    }
+    .bonfire-btn:hover { background: #2a1a1a; border-color: #f80; color: #f80; }
+    .guild-btn:hover   { background: #1a2a1a; border-color: #5a3; color: #7d5; }
+    .shrine-btn:hover  { background: #2a1a2a; border-color: #cc44ff; color: #cc44ff; }
+    .merchant-buy-btn:hover { background: #2a2a1a; border-color: #ffdd44; color: #ffdd44; }
+
+    .guild-unlock-card {
+      background: #0f0f1e; border: 1px solid #2a2a40; border-radius: 5px;
+      padding: 10px; margin: 6px 0;
+    }
+    .guild-unlock-card.claimed { border-color: #e8c97a44; opacity: 0.6; }
+    .guild-unlock-name { color: #e8c97a; font-size: 12px; }
+    .guild-unlock-req  { color: #888; font-size: 10px; margin-top: 2px; }
+
+    .merchant-item {
+      background: #0f0f1e; border: 1px solid #2a2a40; border-radius: 5px;
+      padding: 8px 10px; margin-bottom: 6px; display: flex; align-items: center;
+      justify-content: space-between;
+    }
+    .merchant-item-name { color: #e8c97a; font-size: 12px; }
+    .merchant-item-price { color: #f90; font-size: 10px; }
+
+    .buff-active { color: #cc44ff; font-size: 11px; margin: 6px 0; }
+    .plot-status { color: #44ff88; font-size: 12px; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <!-- BACKPACK PANEL -->
+  <div class="backpack-panel" id="backpackPanel">
+    <button class="panel-close-btn" onclick="closePanel('backpack')">&times; CLOSE</button>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('items')">BACKPACK</div>
+      <div class="tab" onclick="switchTab('equipment')">EQUIPMENT</div>
+      <div class="tab" onclick="switchTab('food')">FOOD</div>
+      <div class="tab" onclick="switchTab('materials')">MATERIALS</div>
+    </div>
+    <div class="gold-display">GOLD: <span id="goldCount">0</span></div>
+    <div id="tab-items" class="backpack-grid"></div>
+    <div id="tab-equipment" class="equipment-slots" style="display:none">
+      <div class="slot" id="slot-weapon"  onclick="unequipSlot('weapon')">
+        <div class="slot-label">Weapon</div><div class="slot-item empty" id="slot-weapon-name">— empty —</div>
+      </div>
+      <div class="slot" id="slot-helmet"  onclick="unequipSlot('helmet')">
+        <div class="slot-label">Helmet</div><div class="slot-item empty" id="slot-helmet-name">— empty —</div>
+      </div>
+      <div class="slot" id="slot-chest"   onclick="unequipSlot('chest')">
+        <div class="slot-label">Chest</div><div class="slot-item empty" id="slot-chest-name">— empty —</div>
+      </div>
+      <div class="slot" id="slot-legs"    onclick="unequipSlot('legs')">
+        <div class="slot-label">Legs</div><div class="slot-item empty" id="slot-legs-name">— empty —</div>
+      </div>
+      <div class="slot" id="slot-boots"   onclick="unequipSlot('boots')">
+        <div class="slot-label">Boots</div><div class="slot-item empty" id="slot-boots-name">— empty —</div>
+      </div>
+    </div>
+    <div id="tab-food" style="display:none">
+      <div style="color:#888;font-size:11px;margin-bottom:10px;">Tap food to eat it and restore HP.</div>
+      <div id="food-grid" class="backpack-grid"></div>
+    </div>
+    <div id="tab-materials" style="display:none">
+      <div style="color:#888;font-size:11px;margin-bottom:10px;">Used to build and upgrade Homestead structures.</div>
+      <div id="materials-list" style="color:#7d5;font-size:13px;line-height:2;"></div>
+    </div>
+  </div>
+
+  <!-- HOMESTEAD PANEL -->
+  <div class="homestead-panel" id="homesteadPanel">
+    <button class="panel-close-btn" onclick="closePanel('homestead')">&times; CLOSE</button>
+    <div class="homestead-title">⚒ HOMESTEAD</div>
+    <div style="color:#888;font-size:11px;margin-bottom:12px;">Build and upgrade structures to earn passive bonuses.</div>
+    <div class="structures-grid" id="structuresGrid"></div>
+  </div>
+
+  <!-- FORGE PANEL -->
+  <div class="building-panel" id="forgePanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('forge')">&times; CLOSE</button>
+    <div class="building-title" style="color:#ff9966;">⚒ FORGE</div>
+    <div class="building-subtitle">Smelt ores into bars, craft weapons. Instant craft may fail; timed craft always succeeds.</div>
+    <div id="forgeRecipes"></div>
+    <div class="queue-section">
+      <div class="queue-title">CRAFT QUEUE</div>
+      <div id="forgeCraftQueue"></div>
+    </div>
+  </div>
+
+  <!-- BONFIRE PANEL -->
+  <div class="building-panel" id="bonfirePanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('bonfire')">&times; CLOSE</button>
+    <div class="building-title" style="color:#ff8800;">🔥 BONFIRE</div>
+    <div class="building-subtitle">Rest at the fire to heal fully and reduce death sickness.</div>
+    <div id="bonfireContent"></div>
+  </div>
+
+  <!-- GARDEN PANEL -->
+  <div class="building-panel" id="gardenPanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('garden')">&times; CLOSE</button>
+    <div class="building-title" style="color:#44ff88;">🌿 GARDEN</div>
+    <div class="building-subtitle">Grow herbs and food passively. One plot to start.</div>
+    <div id="gardenContent"></div>
+  </div>
+
+  <!-- SHRINE PANEL -->
+  <div class="building-panel" id="shrinePanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('shrine')">&times; CLOSE</button>
+    <div class="building-title" style="color:#cc44ff;">🔮 SHRINE</div>
+    <div class="building-subtitle">Offer materials to receive a timed combat buff.</div>
+    <div id="shrineContent"></div>
+  </div>
+
+  <!-- MERCHANT PANEL -->
+  <div class="building-panel" id="merchantPanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('merchant')">&times; CLOSE</button>
+    <div class="building-title" style="color:#ffdd44;">🏪 MERCHANT</div>
+    <div class="building-subtitle">Buy supplies or sell items for gold. Premium prices — for when you'd rather skip the grind.</div>
+    <div id="merchantContent"></div>
+  </div>
+
+  <!-- WATCHTOWER PANEL -->
+  <div class="building-panel" id="watchtowerPanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('watchtower')">&times; CLOSE</button>
+    <div class="building-title" style="color:#44ddff;">🗼 WATCHTOWER</div>
+    <div class="building-subtitle">Upgrade to expand your minimap radar range.</div>
+    <div id="watchtowerContent"></div>
+  </div>
+
+  <!-- STR GUILD PANEL -->
+  <div class="building-panel" id="strGuildPanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('str_guild')">&times; CLOSE</button>
+    <div class="building-title" style="color:#ff4444;">⚔ STRENGTH GUILD</div>
+    <div class="building-subtitle">Upgrade to unlock powerful melee gear and combat bonuses.</div>
+    <div id="strGuildContent"></div>
+  </div>
+
+  <!-- RNG GUILD PANEL -->
+  <div class="building-panel" id="rngGuildPanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('rng_guild')">&times; CLOSE</button>
+    <div class="building-title" style="color:#44aaff;">🏹 RANGE GUILD</div>
+    <div class="building-subtitle">Upgrade to unlock powerful ranged gear and combat bonuses.</div>
+    <div id="rngGuildContent"></div>
+  </div>
+
+  <!-- MGE GUILD PANEL -->
+  <div class="building-panel" id="mgeGuildPanel">
+    <button class="panel-close-btn" onclick="closeBuildingPanel('mge_guild')">&times; CLOSE</button>
+    <div class="building-title" style="color:#cc44ff;">🔯 MAGE GUILD</div>
+    <div class="building-subtitle">Upgrade to unlock powerful magic gear and combat bonuses.</div>
+    <div id="mgeGuildContent"></div>
+  </div>
+
+  <!-- TOOLTIP -->
+  <div id="tooltip"></div>
+
+  <!-- DEATH SCREEN -->
+  <div id="death-screen">
+    <h1>YOU DIED</h1>
+    <p id="death-msg"></p>
+    <p style="color:#f88;font-size:12px;">Death Sickness: 10 minutes at 50% max HP</p>
+    <p style="color:#888;font-size:11px;margin-top:6px;">Your loot pile remains — reach it before dying again.</p>
+    <button class="respawn-btn" onclick="respawnPlayer()">RESPAWN</button>
+  </div>
+
+  <!-- DEATH SICKNESS HUD -->
+  <div id="sickness-bar">☠ DEATH SICKNESS — <span id="sickness-timer"></span> remaining — Max HP halved</div>
+
+  <!-- ZONE BANNER -->
+  <div id="zone-banner" id="zoneBanner"></div>
+
+  <!-- DEV PANEL -->
+  <div class="dev-panel" id="devPanel">
+    <button class="panel-close-btn" onclick="closePanel('dev')">&times;</button>
+    <div class="dev-title">&#9881; DEV / QA</div>
+    <div class="dev-section">Economy</div>
+    <button class="dev-btn" onclick="devGold()">+10,000 Gold</button>
+    <button class="dev-btn" onclick="devMaterials()">Max all materials (x99)</button>
+    <div class="dev-section">Weapons</div>
+    <button class="dev-btn" onclick="devWeapon('melee')">Give melee set (all rarities)</button>
+    <button class="dev-btn" onclick="devWeapon('ranged')">Give ranged set (all rarities)</button>
+    <button class="dev-btn" onclick="devWeapon('magic')">Give magic set (all rarities)</button>
+    <button class="dev-btn" onclick="devAllGear()">Give ALL gear</button>
+    <div class="dev-section">Skills</div>
+    <button class="dev-btn" onclick="devSkills(10)">All skills → Lv 10</button>
+    <button class="dev-btn" onclick="devSkills(50)">All skills → Lv 50</button>
+    <button class="dev-btn" onclick="devResetSkills()">Reset all skills → Lv 1</button>
+    <div class="dev-section">Player</div>
+    <button class="dev-btn" onclick="devHeal()">Full heal</button>
+    <button class="dev-btn" onclick="devClearSickness()">Clear death sickness</button>
+    <button class="dev-btn" id="invincBtn" onclick="devToggleInvincible()">Invincible: OFF</button>
+    <button class="dev-btn" onclick="devKillAll()">Kill all enemies (drop loot)</button>
+    <div class="dev-section">Zones</div>
+    <button class="dev-btn" onclick="closePanel('dev');travelToZone('vale')">Go to The Vale</button>
+    <button class="dev-btn" onclick="closePanel('dev');travelToZone('bog')">Go to The Bog</button>
+    <button class="dev-btn" onclick="closePanel('dev');travelToZone('abyss')">Go to The Abyss</button>
+    <button class="dev-btn" onclick="closePanel('dev');travelToZone('homestead')">Go to Homestead</button>
+    <div class="dev-section">Save</div>
+    <button class="dev-btn" onclick="devClearSave()" style="color:#f88;border-color:#844;">Clear save data &amp; reload</button>
+  </div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTS & CONFIG
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+const VW = canvas.width;
+const VH = canvas.height;
+
+const TILE_W = 64;
+const TILE_H = 32;
+const GRID   = 30; // larger world
+
+// ── ZONE DEFINITIONS ──
+const ZONES = {
+  vale: {
+    name: 'The Vale',
+    subtitle: 'A peaceful hunting ground',
+    tilePrimary: '#2d5a1b',
+    tileSecondary: '#3d7a25',
+    enemyColor: '#c0392b',
+    bossColor: '#8B0000',
+    enemyHpMult: 1,
+    enemyDmgMult: 1,
+    xpMult: 1,
+    lootMult: 1,
+    isHome: true
+  },
+  bog: {
+    name: 'The Bog',
+    subtitle: 'Murky waters, deadly creatures',
+    tilePrimary: '#2a3a1a',
+    tileSecondary: '#1a2a10',
+    enemyColor: '#6b8e23',
+    bossColor: '#3a5a00',
+    enemyHpMult: 2.5,
+    enemyDmgMult: 2,
+    xpMult: 2.5,
+    lootMult: 2,
+    isHome: false
+  },
+  abyss: {
+    name: 'The Abyss',
+    subtitle: 'Darkness that consumes all',
+    tilePrimary: '#0a0a1a',
+    tileSecondary: '#15152a',
+    enemyColor: '#8e44ad',
+    bossColor: '#4a0080',
+    enemyHpMult: 6,
+    enemyDmgMult: 4,
+    xpMult: 6,
+    lootMult: 4,
+    isHome: false
+  },
+  homestead: {
+    name: 'Homestead',
+    subtitle: 'Your sanctuary',
+    tilePrimary: '#0d0d18',
+    tileSecondary: '#111122',
+    enemyHpMult: 0,
+    enemyDmgMult: 0,
+    xpMult: 0,
+    lootMult: 0,
+    isHome: true,
+    isSafe: true
+  }
+};
+
+// ── GEAR DATABASE ──
+// weaponStyle: 'melee' | 'ranged' | 'magic'
+// melee → trains Strength, ranged → trains Dexterity, magic → trains Intelligence
+const GEAR_DB = [
+  // ── Common ──
+  { name:'Rusty Sword',    type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'melee',  statBonus:{dexterity:0,strength:2,vigor:0,intelligence:0} },
+  { name:'Short Bow',      type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'ranged', statBonus:{dexterity:2,strength:0,vigor:0,intelligence:0} },
+  { name:'Gnarled Staff',  type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:2} },
+  { name:'Iron Helm',      type:'helmet', slot:'helmet', rarity:'common', statBonus:{dexterity:0,strength:0,vigor:2,intelligence:0} },
+  { name:'Leather Chest',  type:'chest',  slot:'chest',  rarity:'common', statBonus:{dexterity:0,strength:0,vigor:3,intelligence:0} },
+  { name:'Cloth Legs',     type:'legs',   slot:'legs',   rarity:'common', statBonus:{dexterity:1,strength:0,vigor:1,intelligence:0} },
+  { name:'Worn Boots',     type:'boots',  slot:'boots',  rarity:'common', statBonus:{dexterity:1,strength:0,vigor:0,intelligence:0} },
+  // ── Rare ──
+  { name:'Steel Sword',    type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'melee',  statBonus:{dexterity:0,strength:7,vigor:0,intelligence:0} },
+  { name:'Hunter Bow',     type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'ranged', statBonus:{dexterity:7,strength:0,vigor:0,intelligence:0} },
+  { name:'Bog Staff',      type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:7} },
+  { name:'Golden Helm',    type:'helmet', slot:'helmet', rarity:'rare',   statBonus:{dexterity:0,strength:0,vigor:5,intelligence:1} },
+  { name:'Plate Chest',    type:'chest',  slot:'chest',  rarity:'rare',   statBonus:{dexterity:0,strength:2,vigor:6,intelligence:0} },
+  { name:'Chainmail Legs', type:'legs',   slot:'legs',   rarity:'rare',   statBonus:{dexterity:2,strength:1,vigor:3,intelligence:0} },
+  { name:'Iron Boots',     type:'boots',  slot:'boots',  rarity:'rare',   statBonus:{dexterity:2,strength:0,vigor:2,intelligence:0} },
+  // ── Epic ──
+  { name:'Dragon Sword',   type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'melee',  statBonus:{dexterity:0,strength:15,vigor:0,intelligence:0} },
+  { name:'Void Bow',       type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'ranged', statBonus:{dexterity:15,strength:0,vigor:0,intelligence:0} },
+  { name:'Abyss Staff',    type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:15} },
+  { name:'Mythril Helm',   type:'helmet', slot:'helmet', rarity:'epic',   statBonus:{dexterity:0,strength:0,vigor:10,intelligence:3} },
+  { name:'Mythril Chest',  type:'chest',  slot:'chest',  rarity:'epic',   statBonus:{dexterity:0,strength:4,vigor:12,intelligence:0} },
+  { name:'Shadow Legs',    type:'legs',   slot:'legs',   rarity:'epic',   statBonus:{dexterity:4,strength:2,vigor:6,intelligence:0} },
+  { name:'Void Boots',     type:'boots',  slot:'boots',  rarity:'epic',   statBonus:{dexterity:4,strength:0,vigor:4,intelligence:2} },
+  // ── Guild Untradeable (Strength) ──
+  { name:"Champion's Seal",  type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'str_guild', guildLevel:1, statBonus:{dexterity:0,strength:8,vigor:6,intelligence:0} },
+  { name:"Warlord's Plate",  type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'str_guild', guildLevel:3, statBonus:{dexterity:0,strength:16,vigor:12,intelligence:0} },
+  { name:"Titan's Edge",     type:'weapon', slot:'weapon', rarity:'epic', untradeable:true, guildReq:'str_guild', guildLevel:5, weaponStyle:'melee', statBonus:{dexterity:0,strength:30,vigor:4,intelligence:0} },
+  // ── Guild Untradeable (Range) ──
+  { name:"Scout's Cloak",    type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'rng_guild', guildLevel:1, statBonus:{dexterity:8,strength:0,vigor:6,intelligence:0} },
+  { name:"Phantom Quiver",   type:'legs',   slot:'legs',   rarity:'epic', untradeable:true, guildReq:'rng_guild', guildLevel:3, statBonus:{dexterity:16,strength:0,vigor:4,intelligence:0} },
+  { name:"Wraith Bow",       type:'weapon', slot:'weapon', rarity:'epic', untradeable:true, guildReq:'rng_guild', guildLevel:5, weaponStyle:'ranged', statBonus:{dexterity:30,strength:0,vigor:4,intelligence:0} },
+  // ── Guild Untradeable (Mage) ──
+  { name:"Arcane Vestments", type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'mge_guild', guildLevel:1, statBonus:{dexterity:0,strength:0,vigor:6,intelligence:8} },
+  { name:"Void Robes",       type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'mge_guild', guildLevel:3, statBonus:{dexterity:0,strength:0,vigor:8,intelligence:16} },
+  { name:"Staff of Oblivion",type:'weapon', slot:'weapon', rarity:'epic', untradeable:true, guildReq:'mge_guild', guildLevel:5, weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:4,intelligence:30} },
+];
+
+// ── FOOD DATABASE ──
+const FOOD_DB = [
+  { name:'Bread',       healAmt:15, rarity:'common' },
+  { name:'Cooked Fish', healAmt:30, rarity:'rare'   },
+  { name:'Steak',       healAmt:50, rarity:'epic'   },
+];
+
+// ── MATERIAL DATABASE ──
+const MATERIAL_DB = [
+  { id:'iron_ore',    name:'Iron Ore',      rarity:'common', dropFrom:['vale'] },
+  { id:'bog_root',    name:'Bog Root',      rarity:'rare',   dropFrom:['bog']  },
+  { id:'void_shard',  name:'Void Shard',    rarity:'epic',   dropFrom:['abyss'] },
+  { id:'iron_bar',    name:'Iron Bar',      rarity:'common', dropFrom:[] },
+  { id:'bog_ingot',   name:'Bog Ingot',     rarity:'rare',   dropFrom:[] },
+  { id:'void_crystal',name:'Void Crystal',  rarity:'epic',   dropFrom:[] },
+];
+
+// ── BUILDINGS ──
+const BUILDINGS = [
+  { id:'forge',      x:4,  y:4,  w:4, h:3, doorX:6,  doorY:6,  label:'Forge',         runeColor:'#ff6622' },
+  { id:'bonfire',    x:12, y:4,  w:3, h:3, doorX:13, doorY:6,  label:'Bonfire',        runeColor:'#ff8800' },
+  { id:'garden',     x:20, y:4,  w:4, h:3, doorX:22, doorY:6,  label:'Garden',         runeColor:'#44ff88' },
+  { id:'shrine',     x:4,  y:13, w:4, h:4, doorX:6,  doorY:16, label:'Shrine',         runeColor:'#cc44ff' },
+  { id:'merchant',   x:12, y:13, w:4, h:3, doorX:14, doorY:15, label:'Merchant',       runeColor:'#ffdd44' },
+  { id:'watchtower', x:20, y:13, w:3, h:4, doorX:21, doorY:16, label:'Watchtower',     runeColor:'#44ddff' },
+  { id:'str_guild',  x:4,  y:22, w:5, h:3, doorX:6,  doorY:24, label:'Strength Guild', runeColor:'#ff4444' },
+  { id:'rng_guild',  x:12, y:22, w:5, h:3, doorX:14, doorY:24, label:'Range Guild',    runeColor:'#44aaff' },
+  { id:'mge_guild',  x:20, y:22, w:5, h:3, doorX:22, doorY:24, label:'Mage Guild',     runeColor:'#cc44ff' },
+];
+
+// ── FORGE RECIPES ──
+const FORGE_RECIPES = [
+  { name:'Iron Bar',     inputs:{iron_ore:3},                  output:'iron_bar',     outputName:'Iron Bar',     rarity:'common' },
+  { name:'Bog Ingot',    inputs:{iron_ore:2,bog_root:2},       output:'bog_ingot',    outputName:'Bog Ingot',    rarity:'rare'   },
+  { name:'Void Crystal', inputs:{void_shard:2,bog_root:1},     output:'void_crystal', outputName:'Void Crystal', rarity:'epic'   },
+  { name:'Iron Sword',   inputs:{iron_bar:3},                  outputGear:'Iron Sword',   slot:'weapon', weaponStyle:'melee',  rarity:'common', statBonus:{strength:5,dexterity:0,vigor:0,intelligence:0} },
+  { name:'Iron Bow',     inputs:{iron_bar:2,bog_root:3},       outputGear:'Iron Bow',     slot:'weapon', weaponStyle:'ranged', rarity:'common', statBonus:{dexterity:5,strength:0,vigor:0,intelligence:0} },
+  { name:'Iron Staff',   inputs:{iron_bar:2,bog_root:2},       outputGear:'Iron Staff',   slot:'weapon', weaponStyle:'magic',  rarity:'common', statBonus:{intelligence:5,strength:0,dexterity:0,vigor:0} },
+  { name:'Bog Blade',    inputs:{bog_ingot:3},                  outputGear:'Bog Blade',    slot:'weapon', weaponStyle:'melee',  rarity:'rare',   statBonus:{strength:12,dexterity:0,vigor:0,intelligence:0} },
+  { name:'Void Blade',   inputs:{void_crystal:2,bog_ingot:2},  outputGear:'Void Blade',   slot:'weapon', weaponStyle:'melee',  rarity:'epic',   statBonus:{strength:20,dexterity:0,vigor:2,intelligence:0} },
+];
+
+// ── GUILD DEFS ──
+const GUILD_DEFS = {
+  str_guild: {
+    name: 'Strength Guild',
+    stat: 'strength',
+    upgradeCosts: [
+      { gold:200, iron_bar:5 },
+      { gold:400, iron_bar:10, bog_ingot:3 },
+      { gold:700, bog_ingot:8 },
+      { gold:1200, bog_ingot:5, void_crystal:2 },
+      { gold:2000, void_crystal:5 },
+    ],
+    bonuses: ['Melee DMG +10%','Melee DMG +20%','Melee DMG +30%, STR+5','Melee DMG +45%','Melee DMG +60%, unlock Titan\'s Edge'],
+    unlocks: [0, null, null, null, null], // indices into GEAR_DB for claimable items
+  },
+  rng_guild: {
+    name: 'Range Guild',
+    stat: 'dexterity',
+    upgradeCosts: [
+      { gold:200, iron_bar:5 },
+      { gold:400, iron_bar:10, bog_ingot:3 },
+      { gold:700, bog_ingot:8 },
+      { gold:1200, bog_ingot:5, void_crystal:2 },
+      { gold:2000, void_crystal:5 },
+    ],
+    bonuses: ['Ranged DMG +10%','Ranged DMG +20%','Ranged DMG +30%, DEX+5','Ranged DMG +45%','Ranged DMG +60%, unlock Wraith Bow'],
+    unlocks: [0, null, null, null, null],
+  },
+  mge_guild: {
+    name: 'Mage Guild',
+    stat: 'intelligence',
+    upgradeCosts: [
+      { gold:200, iron_bar:5 },
+      { gold:400, iron_bar:10, bog_ingot:3 },
+      { gold:700, bog_ingot:8 },
+      { gold:1200, bog_ingot:5, void_crystal:2 },
+      { gold:2000, void_crystal:5 },
+    ],
+    bonuses: ['Magic DMG +10%','Magic DMG +20%','Magic DMG +30%, INT+5','Magic DMG +45%','Magic DMG +60%, unlock Staff of Oblivion'],
+    unlocks: [0, null, null, null, null],
+  },
+};
+
+// ── RARITY RANK (for death loot logic) ──
+const RARITY_RANK = { common:0, rare:1, epic:2 };
+
+// ═══════════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════════
+let currentZoneId = 'vale';
+let zoneGrid = [];
+
+const player = {
+  x: GRID / 2, y: GRID / 2,
+  hp: 100, maxHp: 100,
+  speed: 2,
+  dead: false,
+  deathSickness: 0, // seconds remaining
+  skills: {
+    xp:    { dexterity:0, strength:0, vigor:0, intelligence:0 },
+    level: { dexterity:1, strength:1, vigor:1, intelligence:1 }
+  },
+  baseStats: { dexterity:10, strength:10, vigor:10, intelligence:10 },
+  equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
+  equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null }
+};
+
+const backpack = {
+  items: [],     // gear items
+  food: [],      // food items
+  materials: {   // id -> count
+    iron_ore: 0,
+    bog_root: 0,
+    void_shard: 0,
+    iron_bar: 0,
+    bog_ingot: 0,
+    void_crystal: 0
+  },
+  gold: 0
+};
+
+// ── GUILD STATE ──
+const guilds = {
+  str_guild: { level:0, maxLevel:5, claimed:[] },
+  rng_guild: { level:0, maxLevel:5, claimed:[] },
+  mge_guild: { level:0, maxLevel:5, claimed:[] },
+};
+
+// ── CRAFT QUEUE ──
+let craftQueue = []; // { recipeName, outputId, outputGear, finishTime, buildingId }
+
+// ── SHRINE BUFF ──
+let shrineBuff = { active:false, endTime:0, label:'' };
+
+// ── GARDEN STATE ──
+let gardenPlot = { growing: false, herb: null, startTime: 0, duration: 120 }; // 2 min grow time
+
+// ── HOMESTEAD STRUCTURES ──
+const homestead = {
+  forge:      { level:0, maxLevel:5 },
+  shrine:     { level:0, maxLevel:5 },
+  garden:     { level:0, maxLevel:5 },
+  campfire:   { level:0, maxLevel:5 },
+  watchtower: { level:0, maxLevel:5 },
+  merchant:   { level:0, maxLevel:5 },
+};
+
+const STRUCTURE_DEFS = {
+  forge: {
+    name: '⚒ Forge / Anvil',
+    desc: (lv) => lv === 0 ? 'Passively produces Iron Ore over time.' : `Produces ${lv * 2} Iron Ore / min. Reduces material grind.`,
+    bonus: (lv) => lv === 0 ? 'None' : `+${lv*2} Iron Ore/min passively`,
+    cost: (lv) => ({ iron_ore: lv * 3 + 2, gold: lv * 50 }),
+  },
+  shrine: {
+    name: '🔮 Shrine',
+    desc: (lv) => lv === 0 ? 'Grants passive combat buffs when upgraded.' : `+${lv*3}% ATK speed, +${lv*2}% damage`,
+    bonus: (lv) => lv === 0 ? 'None' : `+${lv*3}% ATK speed, +${lv*2}% dmg`,
+    cost: (lv) => ({ iron_ore: lv * 2, bog_root: lv * 1, gold: lv * 80 }),
+  },
+  garden: {
+    name: '🌿 Garden / Pond',
+    desc: (lv) => lv === 0 ? 'Grows food passively — saves buying or fishing.' : `Produces Bread every ${Math.max(1, 5-lv)} min.`,
+    bonus: (lv) => lv === 0 ? 'None' : `Bread every ${Math.max(1,5-lv)} min`,
+    cost: (lv) => ({ iron_ore: lv * 1, gold: lv * 40 }),
+  },
+  campfire: {
+    name: '🔥 Campfire',
+    desc: (lv) => lv === 0 ? 'Reduces Death Sickness timer when upgraded.' : `Death Sickness reduced by ${lv*2} min`,
+    bonus: (lv) => lv === 0 ? 'None' : `-${lv*2} min Death Sickness`,
+    cost: (lv) => ({ iron_ore: lv * 2, gold: lv * 60 }),
+  },
+  watchtower: {
+    name: '🗼 Watchtower',
+    desc: (lv) => lv === 0 ? 'Expands minimap radar range.' : `Minimap range +${lv*2} tiles`,
+    bonus: (lv) => lv === 0 ? 'None' : `Minimap range +${lv*2} tiles`,
+    cost: (lv) => ({ iron_ore: lv * 4, gold: lv * 70 }),
+  },
+  merchant: {
+    name: '🏪 Merchant Stall',
+    desc: (lv) => lv === 0 ? 'Improves gold rates from kills.' : `+${lv*15}% gold from kills`,
+    bonus: (lv) => lv === 0 ? 'None' : `+${lv*15}% gold`,
+    cost: (lv) => ({ iron_ore: lv * 3, bog_root: lv * 1, gold: lv * 100 }),
+  }
+};
+
+const camera = { x: 0, y: 0 };
+const joystick = { x: 0, y: 0, radius: 50, touching: false };
+
+let enemies = [];
+let lootPiles = [];
+let floatingTexts = [];
+let particles = [];
+let projectiles = []; // visual-only attack effects
+let screenShake = { x:0, y:0, intensity:0 };
+let tick = 0;
+let lastTime = 0;
+let lastSave = 0;
+let forgeTimer = 0;
+let gardenTimer = 0;
+let anyPanelOpen = false;
+
+// ═══════════════════════════════════════════════════════════
+//  WORLD GENERATION
+// ═══════════════════════════════════════════════════════════
+function buildZoneGrid(zoneId) {
+  const zone = ZONES[zoneId];
+  zoneGrid = [];
+  for (let x = 0; x < GRID; x++) {
+    zoneGrid[x] = [];
+    for (let y = 0; y < GRID; y++) {
+      zoneGrid[x][y] = (x + y) % 2 === 0 ? 'primary' : 'secondary';
+    }
+  }
+}
+
+// ── PORTAL POSITIONS (edges of the map) ──
+function getPortals() {
+  const portals = [];
+  if (currentZoneId === 'vale') {
+    portals.push({ x: GRID - 2, y: GRID / 2, target: 'bog',   label: '→ The Bog' });
+  } else if (currentZoneId === 'bog') {
+    portals.push({ x: 1,        y: GRID / 2, target: 'vale',  label: '← The Vale' });
+    portals.push({ x: GRID - 2, y: GRID / 2, target: 'abyss', label: '→ The Abyss' });
+  } else if (currentZoneId === 'abyss') {
+    portals.push({ x: 1,        y: GRID / 2, target: 'bog',   label: '← The Bog' });
+  } else if (currentZoneId === 'homestead') {
+    portals.push({ x: GRID / 2, y: GRID - 2, target: 'vale',  label: '← The Vale' });
+  }
+  return portals;
+}
+
+function getHomesteadPortal() {
+  if (currentZoneId !== 'vale') return null;
+  return { x: GRID / 2, y: 2 }; // top-center of vale
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ENEMY SPAWNING
+// ═══════════════════════════════════════════════════════════
+function spawnEnemies() {
+  enemies = [];
+  const zone = ZONES[currentZoneId];
+  const count = 12;
+  for (let i = 0; i < count; i++) {
+    spawnOneEnemy(zone);
+  }
+  // Spawn a boss
+  spawnBoss(zone);
+}
+
+function spawnOneEnemy(zone, isRespawn) {
+  const r = Math.random();
+  let rarity = r < 0.6 ? 'common' : r < 0.9 ? 'rare' : 'epic';
+  const baseHp = rarity === 'common' ? 50 : rarity === 'rare' ? 120 : 280;
+  const baseDmg = rarity === 'common' ? 5  : rarity === 'rare' ? 12  : 25;
+  const baseSpd = rarity === 'common' ? 0.8 : rarity === 'rare' ? 1.2 : 1.6;
+  const e = {
+    x: 2 + Math.random() * (GRID - 4),
+    y: 2 + Math.random() * (GRID - 4),
+    hp: baseHp * zone.enemyHpMult,
+    maxHp: baseHp * zone.enemyHpMult,
+    damage: baseDmg * zone.enemyDmgMult,
+    speed: baseSpd,
+    attackSpeed: baseSpd,
+    xpReward: 10 * zone.xpMult * (rarity === 'common' ? 1 : rarity === 'rare' ? 2.5 : 6),
+    rarity: rarity,
+    direction: Math.random() * Math.PI * 2,
+    dirTimer: 0,
+    isBoss: false,
+    phase: 1,
+    flashTimer: 0
+  };
+  if (!isRespawn) {
+    enemies.push(e);
+  }
+  return e;
+}
+
+function spawnBoss(zone) {
+  const bossHp = 800 * zone.enemyHpMult;
+  enemies.push({
+    x: GRID / 2 + (Math.random() - 0.5) * 10,
+    y: GRID / 2 + (Math.random() - 0.5) * 10,
+    hp: bossHp, maxHp: bossHp,
+    damage: 30 * zone.enemyDmgMult,
+    speed: 1.0,
+    attackSpeed: 1.0,
+    xpReward: 200 * zone.xpMult,
+    rarity: 'epic',
+    direction: 0,
+    dirTimer: 0,
+    isBoss: true,
+    phase: 1,
+    flashTimer: 0
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STAT HELPERS
+// ═══════════════════════════════════════════════════════════
+function getStat(stat) {
+  return player.baseStats[stat] + player.equippedBonuses[stat] + getHomesteadBonus(stat);
+}
+
+function getHomesteadBonus(stat) {
+  let bonus = 0;
+  if (stat === 'dexterity') bonus += homestead.shrine.level * 3 * 0.1; // +3% atkspd per level → approx +0.3 dex per level
+  if (stat === 'strength')  bonus += homestead.shrine.level * 2 * 0.1;
+  return bonus;
+}
+
+function getMinimapRange() {
+  return 6 + homestead.watchtower.level * 2;
+}
+
+function getGoldBonus() {
+  return 1 + homestead.merchant.level * 0.15;
+}
+
+// melee=1.3 tiles, ranged=3.5, magic=2.8
+function getWeaponStyle() {
+  const w = player.equipped.weapon;
+  return w ? (w.weaponStyle || 'melee') : 'melee';
+}
+function getCombatRange() {
+  const style = getWeaponStyle();
+  if (style === 'ranged') return 210 / TILE_W;
+  if (style === 'magic')  return 170 / TILE_W;
+  return 85 / TILE_W; // melee
+}
+function getCombatStat() {
+  const style = getWeaponStyle();
+  if (style === 'ranged') return getStat('dexterity');
+  if (style === 'magic')  return getStat('intelligence');
+  return getStat('strength');
+}
+function getDeathSicknessDuration() {
+  return Math.max(60, 600 - homestead.campfire.level * 120); // base 10min, -2min per campfire level
+}
+
+function recalcMaxHp() {
+  const vig = getStat('vigor');
+  const base = 50 + vig * 5;
+  if (player.deathSickness > 0) {
+    player.maxHp = Math.floor(base * 0.5);
+  } else {
+    player.maxHp = base;
+  }
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ZONE TRANSITION
+// ═══════════════════════════════════════════════════════════
+function travelToZone(zoneId) {
+  currentZoneId = zoneId;
+  const zone = ZONES[zoneId];
+  buildZoneGrid(zoneId);
+  if (!zone.isSafe) {
+    spawnEnemies();
+  } else {
+    enemies = [];
+  }
+  lootPiles = [];
+  if (zoneId === 'homestead') {
+    player.x = 14;
+    player.y = 27;
+  } else {
+    player.x = GRID / 2;
+    player.y = GRID / 2;
+  }
+  showBanner(`${zone.name}\n${zone.subtitle}`);
+}
+
+let bannerTimeout = null;
+function showBanner(text) {
+  const el = document.getElementById('zone-banner');
+  el.innerHTML = text.replace('\n', '<br><span style="font-size:13px;color:#aaa;letter-spacing:2px">');
+  el.style.display = 'block';
+  if (bannerTimeout) clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DEATH & RESPAWN
+// ═══════════════════════════════════════════════════════════
+function triggerDeath() {
+  if (player.dead) return;
+  player.dead = true;
+
+  // Build death loot pile — keep best gear + 2 random, rest drops
+  const equipped = Object.values(player.equipped).filter(Boolean);
+  const allGear = [...backpack.items, ...equipped];
+
+  // Sort by rarity rank desc
+  allGear.sort((a,b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity]);
+
+  // Untradeable items are always kept
+  const untradeableItems = allGear.filter(i => i.untradeable);
+  const tradeableGear = allGear.filter(i => !i.untradeable);
+
+  const kept = [...untradeableItems];
+  if (tradeableGear.length > 0) kept.push(tradeableGear[0]); // keep best tradeable
+  const rest = tradeableGear.slice(1);
+  // Keep 2 more random from rest
+  const shuffled = rest.sort(() => Math.random() - 0.5);
+  const keepExtra = shuffled.splice(0, Math.min(2, shuffled.length));
+  kept.push(...keepExtra);
+  const dropped = shuffled;
+
+  // Death pile
+  if (dropped.length > 0 || backpack.gold > 0) {
+    lootPiles.push({
+      x: player.x, y: player.y,
+      items: dropped,
+      gold: backpack.gold,
+      isDeathPile: true,
+      zoneId: currentZoneId
+    });
+  }
+
+  // Reset backpack
+  backpack.items = kept.filter(i => !equipped.includes(i));
+  backpack.gold = 0;
+
+  // Reset equipment — only keep kept equipped items
+  for (const slot in player.equipped) {
+    if (player.equipped[slot] && !kept.includes(player.equipped[slot])) {
+      player.equipped[slot] = null;
+    }
+  }
+
+  recalcEquippedBonuses();
+
+  const droppedCount = dropped.length;
+  document.getElementById('death-msg').textContent =
+    `You lost ${droppedCount} item(s) and all gold. Kept your best gear.`;
+  document.getElementById('death-screen').classList.add('show');
+}
+
+function respawnPlayer() {
+  player.dead = false;
+  // Travel home if not already there
+  if (currentZoneId !== 'vale') {
+    travelToZone('vale');
+  } else {
+    player.x = GRID / 2;
+    player.y = GRID / 2;
+  }
+
+  const sickDur = getDeathSicknessDuration();
+  player.deathSickness = sickDur;
+  recalcMaxHp();
+  player.hp = player.maxHp;
+
+  document.getElementById('death-screen').classList.remove('show');
+  document.getElementById('sickness-bar').style.display = 'block';
+}
+
+function recalcEquippedBonuses() {
+  player.equippedBonuses = { dexterity:0, strength:0, vigor:0, intelligence:0 };
+  for (const slot in player.equipped) {
+    const item = player.equipped[slot];
+    if (item && item.statBonus) {
+      for (const stat in item.statBonus) {
+        player.equippedBonuses[stat] = (player.equippedBonuses[stat] || 0) + item.statBonus[stat];
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOOT LOGIC
+// ═══════════════════════════════════════════════════════════
+function dropLootFromEnemy(enemy) {
+  const zone = ZONES[currentZoneId];
+  const pile = { x: enemy.x, y: enemy.y, items: [], gold: 0, isDeathPile: false };
+
+  // Gold
+  const baseGold = Math.floor(Math.random() * 10) + 1;
+  pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus());
+
+  // Gear (30% base, higher rarity enemies = more chance)
+  const gearChance = enemy.rarity === 'epic' ? 0.7 : enemy.rarity === 'rare' ? 0.5 : 0.3;
+  if (Math.random() < gearChance) {
+    // Boss always drops epic
+    let pool = GEAR_DB;
+    if (enemy.isBoss) pool = GEAR_DB.filter(g => g.rarity === 'epic');
+    else if (enemy.rarity === 'rare') pool = GEAR_DB.filter(g => g.rarity !== 'epic');
+    pile.items.push({...pool[Math.floor(Math.random() * pool.length)]});
+  }
+
+  // Material drops
+  const matChance = enemy.rarity === 'epic' ? 0.6 : enemy.rarity === 'rare' ? 0.35 : 0.15;
+  if (Math.random() < matChance) {
+    const zoneMats = MATERIAL_DB.filter(m => m.dropFrom.includes(currentZoneId));
+    if (zoneMats.length) {
+      const mat = zoneMats[Math.floor(Math.random() * zoneMats.length)];
+      pile.materialDrop = mat.id;
+    }
+  }
+
+  // Food drop (rare)
+  if (Math.random() < 0.08) {
+    const f = FOOD_DB[Math.min(Math.floor(zone.lootMult - 1), FOOD_DB.length - 1)];
+    pile.foodDrop = {...f};
+  }
+
+  lootPiles.push(pile);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════════════════════
+function spawnParticles(wx, wy, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.5 + Math.random() * 1.5;
+    particles.push({
+      x: wx, y: wy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.6 + Math.random() * 0.4,
+      maxLife: 1,
+      color,
+      size: 3 + Math.random() * 4
+    });
+  }
+}
+
+function addScreenShake(intensity) {
+  screenShake.intensity = Math.max(screenShake.intensity, intensity);
+}
+
+function spawnAttackVisual(style, px, py, tx, ty) {
+  if (style === 'melee') {
+    // slash arc at enemy — 3 short lines radiating outward
+    for (let i = 0; i < 3; i++) {
+      const angle = Math.atan2(ty - py, tx - px) + (i - 1) * 0.5;
+      projectiles.push({ type:'slash', x:tx*TILE_W, y:ty*TILE_H, angle, life:0.18, maxLife:0.18, color:'#ffaa44' });
+    }
+  } else {
+    const speed = style === 'ranged' ? 9 : 6; // tiles/sec
+    const dx = tx - px, dy = ty - py;
+    const dist = Math.hypot(dx, dy) || 0.01;
+    projectiles.push({
+      type: 'proj', style,
+      x: px * TILE_W, y: py * TILE_H,
+      vx: (dx / dist) * speed * TILE_W,
+      vy: (dy / dist) * speed * TILE_H,
+      life: dist / speed, maxLife: dist / speed,
+      color: style === 'ranged' ? '#88ddff' : '#cc44ff'
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MAIN UPDATE
+// ═══════════════════════════════════════════════════════════
+function update(dt) {
+  if (player.dead) return;
+
+  tick++;
+
+  // Death sickness countdown
+  if (player.deathSickness > 0) {
+    player.deathSickness -= dt;
+    if (player.deathSickness <= 0) {
+      player.deathSickness = 0;
+      document.getElementById('sickness-bar').style.display = 'none';
+    }
+    recalcMaxHp();
+    const mins = Math.floor(player.deathSickness / 60);
+    const secs = Math.floor(player.deathSickness % 60);
+    document.getElementById('sickness-timer').textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+  }
+
+  // Passive homestead production
+  forgeTimer += dt;
+  gardenTimer += dt;
+  const forgeLv = homestead.forge.level;
+  if (forgeLv > 0 && forgeTimer >= 60 / (forgeLv * 2)) {
+    backpack.materials.iron_ore += forgeLv * 2;
+    forgeTimer = 0;
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${forgeLv*2} Iron Ore`, timer:0, color:'#7d5' });
+  }
+  const gardenLv = homestead.garden.level;
+  const gardenInterval = Math.max(60, (5 - gardenLv) * 60);
+  if (gardenLv > 0 && gardenTimer >= gardenInterval) {
+    backpack.food.push({...FOOD_DB[0]});
+    gardenTimer = 0;
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: '+Bread', timer:0, color:'#fa8' });
+  }
+
+  // Movement
+  applyKeyboardMovement(dt);
+  if (joystick.touching) {
+    const angle = Math.atan2(joystick.y, joystick.x);
+    player.x += Math.cos(angle) * player.speed * dt;
+    player.y += Math.sin(angle) * player.speed * dt;
+  }
+  player.x = Math.max(0, Math.min(player.x, GRID - 1));
+  player.y = Math.max(0, Math.min(player.y, GRID - 1));
+
+  // Camera
+  camera.x = player.x * TILE_W - VW / 2 + TILE_W / 2;
+  camera.y = player.y * TILE_H - VH / 2 + TILE_H / 2;
+
+  // Screen shake decay
+  if (screenShake.intensity > 0) {
+    screenShake.x = (Math.random() - 0.5) * screenShake.intensity * 2;
+    screenShake.y = (Math.random() - 0.5) * screenShake.intensity * 2;
+    screenShake.intensity *= 0.8;
+    if (screenShake.intensity < 0.5) screenShake.intensity = 0;
+  } else {
+    screenShake.x = 0; screenShake.y = 0;
+  }
+
+  // Portal check
+  for (const portal of getPortals()) {
+    const dist = Math.hypot(player.x - portal.x, player.y - portal.y);
+    if (dist < 1.2) {
+      travelToZone(portal.target);
+      return;
+    }
+  }
+
+  // Homestead portal (vale only)
+  const hsPortal = getHomesteadPortal();
+  if (hsPortal) {
+    const dist = Math.hypot(player.x - hsPortal.x, player.y - hsPortal.y);
+    if (dist < 1.2) {
+      travelToZone('homestead');
+      return;
+    }
+  }
+
+  // Building door check (homestead only)
+  if (currentZoneId === 'homestead') {
+    for (const b of BUILDINGS) {
+      if (Math.hypot(player.x - b.doorX, player.y - b.doorY) < 1.0) {
+        openBuildingPanel(b.id);
+        break;
+      }
+    }
+  }
+
+  // Craft queue check
+  checkCraftQueue();
+
+  // Freeze enemies while any panel is open — no movement, no attacks
+  if (anyPanelOpen) return;
+
+  // Enemy AI + combat
+  const weaponStyle = getWeaponStyle();
+  const combatStat  = getCombatStat();
+  const combatRange = getCombatRange();
+  const atkInterval = Math.max(20, Math.floor((1 / (combatStat / 10)) * 60));
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+
+    // Flash decay
+    if (e.flashTimer > 0) e.flashTimer -= dt;
+
+    // Phase transition for boss
+    if (e.isBoss && e.phase === 1 && e.hp < e.maxHp * 0.5) {
+      e.phase = 2;
+      e.damage *= 1.5;
+      e.speed *= 1.4;
+      addScreenShake(12);
+      floatingTexts.push({ x: e.x, y: e.y - 1, text: 'ENRAGED!', timer:0, color:'#f44' });
+    }
+
+    // Enemy wander
+    e.dirTimer += dt;
+    const dirChange = e.isBoss ? (e.phase === 2 ? 0.8 : 1.5) : (2 + Math.random());
+    if (e.dirTimer > dirChange) {
+      if (e.isBoss && e.phase === 2) {
+        // Phase 2 boss charges at player
+        e.direction = Math.atan2(player.y - e.y, player.x - e.x);
+      } else {
+        e.direction = Math.random() * Math.PI * 2;
+      }
+      e.dirTimer = 0;
+    }
+
+    e.x += Math.cos(e.direction) * e.speed * dt;
+    e.y += Math.sin(e.direction) * e.speed * dt;
+    e.x = Math.max(0, Math.min(e.x, GRID - 1));
+    e.y = Math.max(0, Math.min(e.y, GRID - 1));
+
+    const dist = Math.hypot(player.x - e.x, player.y - e.y);
+
+    if (dist < combatRange) {
+      // Player attacks enemy
+      if (tick % atkInterval === 0) {
+        const dmg = Math.max(1, Math.floor(combatStat / 5));
+        e.hp -= dmg;
+        e.flashTimer = 0.12;
+        spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
+        floatingTexts.push({ x: e.x, y: e.y - 0.5, text: `-${dmg}`, timer:0, color:'#f88' });
+
+        if (e.hp <= 0) {
+          // Particles + shake on kill
+          const zone = ZONES[currentZoneId];
+          spawnParticles(e.x * TILE_W, e.y * TILE_H, zone.enemyColor, e.isBoss ? 25 : 12);
+          addScreenShake(e.isBoss ? 16 : 6);
+
+          // XP: weapon skill gets full xp, vigor gets 50%, other combat skills get nothing
+          const xpGain = e.xpReward;
+          if (weaponStyle === 'melee')  player.skills.xp.strength     += xpGain;
+          if (weaponStyle === 'ranged') player.skills.xp.dexterity    += xpGain;
+          if (weaponStyle === 'magic')  player.skills.xp.intelligence += xpGain;
+          player.skills.xp.vigor += xpGain * 0.5;
+          floatingTexts.push({ x: e.x, y: e.y - 1, text: `+${Math.floor(xpGain)} XP`, timer:0, color:'#e8c97a' });
+
+          // Loot
+          dropLootFromEnemy(e);
+
+          enemies.splice(i, 1);
+
+          // Respawn after delay (not boss)
+          if (!e.isBoss) {
+            setTimeout(() => {
+              if (currentZoneId === zone.name || true) { // always respawn in current zone
+                const newE = spawnOneEnemy(ZONES[currentZoneId], true);
+                enemies.push(newE);
+              }
+            }, e.rarity === 'epic' ? 12000 : e.rarity === 'rare' ? 7000 : 4000);
+          }
+          continue;
+        }
+      }
+
+      // Enemy attacks player
+      const eAtkInterval = Math.max(20, Math.floor((1 / e.attackSpeed) * 60));
+      if (tick % eAtkInterval === 0) {
+        if (devInvincible) continue;
+        player.hp -= e.damage;
+        floatingTexts.push({ x: player.x, y: player.y - 0.5, text: `-${e.damage}`, timer:0, color:'#f44' });
+        addScreenShake(e.isBoss ? 10 : 4);
+        if (player.hp <= 0) {
+          if (devInvincible) { player.hp = 1; } else { player.hp = 0; triggerDeath(); return; }
+        }
+      }
+    }
+  }
+
+  // Loot pickup
+  for (let i = lootPiles.length - 1; i >= 0; i--) {
+    const pile = lootPiles[i];
+    const dist = Math.hypot(player.x - pile.x, player.y - pile.y);
+    if (dist < 60 / TILE_W) {
+      // Collect gold
+      if (pile.gold > 0) {
+        backpack.gold += pile.gold;
+        floatingTexts.push({ x: player.x, y: player.y - 0.8, text: `+${pile.gold}g`, timer:0, color:'#e8c97a' });
+      }
+      // Collect items
+      for (const item of pile.items) {
+        backpack.items.push(item);
+        floatingTexts.push({ x: player.x, y: player.y - 1, text: `${item.name}!`, timer:0, color: item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#ccc' });
+      }
+      // Collect material
+      if (pile.materialDrop) {
+        backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1;
+        const mat = MATERIAL_DB.find(m => m.id === pile.materialDrop);
+        floatingTexts.push({ x: player.x, y: player.y - 1.3, text: `+${mat.name}`, timer:0, color:'#7d5' });
+      }
+      // Collect food
+      if (pile.foodDrop) {
+        backpack.food.push(pile.foodDrop);
+        floatingTexts.push({ x: player.x, y: player.y - 1.5, text: `+${pile.foodDrop.name}`, timer:0, color:'#fa8' });
+      }
+      lootPiles.splice(i, 1);
+    }
+  }
+
+  // Floating text decay
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    floatingTexts[i].timer += dt;
+    if (floatingTexts[i].timer > 1.2) floatingTexts.splice(i, 1);
+  }
+
+  // Particle update
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    p.x += p.vx * TILE_W * dt;
+    p.y += p.vy * TILE_H * dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Projectile update
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.life -= dt;
+    if (p.type === 'proj') { p.x += p.vx * dt; p.y += p.vy * dt; }
+    if (p.life <= 0) projectiles.splice(i, 1);
+  }
+
+  // XP level-up
+  for (const skill of ['dexterity','strength','vigor','intelligence']) {
+    const threshold = 100 * player.skills.level[skill];
+    if (player.skills.xp[skill] >= threshold) {
+      player.skills.level[skill]++;
+      player.skills.xp[skill] -= threshold;
+      player.baseStats[skill]++;
+      floatingTexts.push({ x: player.x, y: player.y - 2, text: `${skill.toUpperCase()} UP!`, timer:0, color:'#e8c97a' });
+    }
+  }
+
+  recalcMaxHp();
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+
+  // Auto-save every 10s
+  lastSave += dt;
+  if (lastSave >= 10) { saveGame(); lastSave = 0; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════════
+function render() {
+  ctx.clearRect(0, 0, VW, VH);
+
+  const sx = Math.round(screenShake.x);
+  const sy = Math.round(screenShake.y);
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  const zone = ZONES[currentZoneId];
+  const camX = camera.x;
+  const camY = camera.y;
+
+  // ── TILES ──
+  for (let x = 0; x < GRID; x++) {
+    for (let y = 0; y < GRID; y++) {
+      const tx = x * TILE_W - camX;
+      const ty = y * TILE_H - camY;
+      if (tx + TILE_W < 0 || tx > VW || ty + TILE_H < 0 || ty > VH) continue;
+      ctx.fillStyle = zoneGrid[x][y] === 'primary' ? zone.tilePrimary : zone.tileSecondary;
+      ctx.fillRect(tx, ty, TILE_W, TILE_H);
+    }
+  }
+
+  // ── HOMESTEAD BUILDINGS ──
+  if (currentZoneId === 'homestead') {
+    renderBuildings(camX, camY);
+  }
+
+  // ── PORTALS ──
+  for (const portal of getPortals()) {
+    const px = portal.x * TILE_W - camX + TILE_W / 2;
+    const py = portal.y * TILE_H - camY + TILE_H / 2;
+    const pulse = 0.7 + 0.3 * Math.sin(tick * 0.05);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#e8c97a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 20, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.3 * pulse;
+    ctx.fillStyle = '#e8c97a';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    ctx.fillStyle = '#e8c97a';
+    ctx.font = 'bold 10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(portal.label, px, py - 26);
+  }
+
+  // ── HOMESTEAD PORTAL (vale only) ──
+  const hsp = getHomesteadPortal();
+  if (hsp) {
+    const px = hsp.x * TILE_W - camX + TILE_W / 2;
+    const py = hsp.y * TILE_H - camY + TILE_H / 2;
+    const pulse = 0.7 + 0.3 * Math.sin(tick * 0.04 + 1);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#7d5';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 20, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.3 * pulse;
+    ctx.fillStyle = '#7d5';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    ctx.fillStyle = '#7d5';
+    ctx.font = 'bold 10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚒ HOMESTEAD', px, py - 26);
+  }
+
+  // ── LOOT PILES ──
+  for (const pile of lootPiles) {
+    const lx = pile.x * TILE_W - camX;
+    const ly = pile.y * TILE_H - camY;
+    if (pile.isDeathPile) {
+      // Glowing red skull pile
+      ctx.fillStyle = '#f44';
+      ctx.font = '20px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('☠', lx + TILE_W / 2, ly + TILE_H / 2 + 6);
+    } else {
+      // Gold dot
+      if (pile.gold > 0) {
+        ctx.fillStyle = '#e8c97a';
+        ctx.beginPath();
+        ctx.arc(lx + TILE_W / 2, ly + TILE_H / 2, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Gear item squares
+      for (let k = 0; k < pile.items.length; k++) {
+        const item = pile.items[k];
+        ctx.fillStyle = item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#888';
+        ctx.fillRect(lx + 4 + k * 10, ly + 4, 8, 8);
+      }
+    }
+  }
+
+  // ── PARTICLES ──
+  for (const p of particles) {
+    const alpha = p.life / p.maxLife;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - camX - p.size/2, p.y - camY - p.size/2, p.size, p.size);
+    ctx.restore();
+  }
+
+  // ── PROJECTILES / ATTACK VISUALS ──
+  for (const p of projectiles) {
+    const t = p.life / p.maxLife;
+    ctx.save();
+    ctx.globalAlpha = t;
+    if (p.type === 'slash') {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.x - camX + Math.cos(p.angle) * 6, p.y - camY + Math.sin(p.angle) * 6);
+      ctx.lineTo(p.x - camX + Math.cos(p.angle) * 22, p.y - camY + Math.sin(p.angle) * 22);
+      ctx.stroke();
+    } else if (p.style === 'ranged') {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x - camX, p.y - camY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // tail
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - camX, p.y - camY);
+      ctx.lineTo(p.x - camX - p.vx * 0.04, p.y - camY - p.vy * 0.04);
+      ctx.stroke();
+    } else {
+      // magic orb
+      ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x - camX, p.y - camY, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  // ── ENEMIES ──
+  for (const e of enemies) {
+    const ex = e.x * TILE_W - camX;
+    const ey = e.y * TILE_H - camY;
+    if (ex + TILE_W * 2 < 0 || ex > VW + TILE_W || ey + TILE_H * 2 < 0 || ey > VH + TILE_H) continue;
+
+    let color = e.flashTimer > 0 ? '#fff' : (e.isBoss ? zone.bossColor : zone.enemyColor);
+    if (e.isBoss && e.phase === 2) color = e.flashTimer > 0 ? '#fff' : '#ff4400';
+
+    const size = e.isBoss ? TILE_W * 0.7 : (e.rarity === 'epic' ? TILE_W * 0.45 : e.rarity === 'rare' ? TILE_W * 0.38 : TILE_W * 0.3);
+    const cx = ex + TILE_W / 2;
+    const cy = ey + TILE_H / 2;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.lineTo(cx + size, cy);
+    ctx.lineTo(cx, cy + size);
+    ctx.lineTo(cx - size, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Boss crown indicator
+    if (e.isBoss) {
+      ctx.fillStyle = '#e8c97a';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('♛', cx, cy - size - 4);
+    }
+
+    // HP bar
+    const barW = e.isBoss ? TILE_W : TILE_W / 2;
+    const barX = cx - barW / 2;
+    const barY = ey - 10;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(barX, barY, barW, 4);
+    const hpFrac = e.hp / e.maxHp;
+    ctx.fillStyle = hpFrac > 0.5 ? '#4a4' : hpFrac > 0.25 ? '#aa4' : '#a44';
+    ctx.fillRect(barX, barY, barW * hpFrac, 4);
+  }
+
+  // ── PLAYER ──
+  if (!player.dead) {
+    const px = player.x * TILE_W - camX;
+    const py = player.y * TILE_H - camY;
+    const cx = px + TILE_W / 2;
+    const cy = py + TILE_H / 2;
+    const ps = TILE_W * 0.35;
+
+    // Combat range ring — ellipse matches tile aspect ratio (TILE_W x TILE_H)
+    const rangeStyle = getWeaponStyle();
+    const rangeColor = rangeStyle === 'magic' ? '#aa44ff' : rangeStyle === 'ranged' ? '#44aaff' : '#ff8844';
+    const rangeRx = getCombatRange() * TILE_W;
+    const rangeRy = getCombatRange() * TILE_H;
+    ctx.save();
+    ctx.strokeStyle = rangeColor;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.3;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rangeRx, rangeRy, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Death sickness tint
+    ctx.fillStyle = player.deathSickness > 0 ? '#8844aa' : '#4488ff';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - ps);
+    ctx.lineTo(cx + ps, cy);
+    ctx.lineTo(cx, cy + ps);
+    ctx.lineTo(cx - ps, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Player HP bar
+    const barW = TILE_W;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(px, py - 12, barW, 5);
+    ctx.fillStyle = '#e44';
+    ctx.fillRect(px, py - 12, barW * (player.hp / player.maxHp), 5);
+  }
+
+  // ── FLOATING TEXT ──
+  ctx.textAlign = 'center';
+  for (const ft of floatingTexts) {
+    const alpha = 1 - ft.timer / 1.2;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = ft.color || '#fff';
+    ctx.font = 'bold 13px Courier New';
+    const ftx = ft.x * TILE_W - camX + TILE_W / 2;
+    const fty = ft.y * TILE_H - camY - ft.timer * 50;
+    ctx.fillText(ft.text, ftx, fty);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore(); // end screen shake
+
+  // ── HUD (no shake) ──
+  renderHUD();
+}
+
+function renderHUD() {
+  ctx.shadowBlur = 4; ctx.shadowColor = '#000';
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'left';
+
+  // Stats top-left
+  const stats = [
+    `DEX: ${getStat('dexterity')}`,
+    `STR: ${getStat('strength')}`,
+    `VIG: ${getStat('vigor')}`,
+    `INT: ${getStat('intelligence')}`,
+  ];
+  ctx.fillStyle = '#e8c97a';
+  stats.forEach((s, i) => ctx.fillText(s, 10, 14 + i * 18));
+
+  // XP bars
+  const skills = ['dexterity','strength','vigor','intelligence'];
+  const labels = {dexterity:'DEX',strength:'STR',vigor:'VIG',intelligence:'INT'};
+  ctx.font = '10px Courier New';
+  ctx.fillStyle = '#888';
+  skills.forEach((sk, i) => {
+    const lv = player.skills.level[sk];
+    const xp = player.skills.xp[sk];
+    const threshold = 100 * lv;
+    ctx.fillText(`Lv${lv}`, 10, 90 + i * 14);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(38, 80 + i * 14, 80, 6);
+    ctx.fillStyle = '#e8c97a55';
+    ctx.fillRect(38, 80 + i * 14, 80 * (xp / threshold), 6);
+    ctx.fillStyle = '#888';
+  });
+
+  // Top-right buttons
+  ctx.font = 'bold 14px Courier New';
+  ctx.fillStyle = '#e8c97a';
+  ctx.textAlign = 'right';
+  ctx.fillText('BAG', VW - 10, 20);
+  ctx.fillText('HOME', VW - 10, 40);
+  ctx.fillStyle = '#f80';
+  ctx.fillText('DEV', VW - 10, 60);
+
+  // Zone name (top-center)
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 12px Courier New';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(ZONES[currentZoneId].name, VW / 2, 16);
+
+  // HP display
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 12px Courier New';
+  ctx.fillStyle = '#e44';
+  ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 10, VH - 120);
+
+  // Gold
+  ctx.fillStyle = '#e8c97a';
+  ctx.fillText(`GOLD: ${backpack.gold}`, 10, VH - 105);
+
+  // Joystick ring
+  ctx.beginPath();
+  ctx.arc(70, VH - 70, joystick.radius, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  if (joystick.touching) {
+    ctx.beginPath();
+    ctx.arc(70 + joystick.x, VH - 70 + joystick.y, 18, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fill();
+  }
+
+  // ── MINIMAP ──
+  renderMinimap();
+
+  ctx.shadowBlur = 0;
+}
+
+function renderMinimap() {
+  const range = getMinimapRange();
+  const mmSize = 90;
+  const mmX = VW - mmSize - 10;
+  const mmY = VH - mmSize - 10;
+  const scale = mmSize / (range * 2);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(mmX, mmY, mmSize, mmSize);
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(mmX, mmY, mmSize, mmSize);
+
+  // Enemies as dots
+  for (const e of enemies) {
+    const dx = (e.x - player.x) * scale;
+    const dy = (e.y - player.y) * scale;
+    if (Math.abs(dx) > mmSize/2 || Math.abs(dy) > mmSize/2) continue;
+    ctx.fillStyle = e.isBoss ? '#f80' : (e.rarity === 'epic' ? '#9b59b6' : e.rarity === 'rare' ? '#4a90d9' : '#e44');
+    ctx.fillRect(mmX + mmSize/2 + dx - 2, mmY + mmSize/2 + dy - 2, e.isBoss ? 5 : 3, e.isBoss ? 5 : 3);
+  }
+
+  // Loot piles
+  for (const pile of lootPiles) {
+    const dx = (pile.x - player.x) * scale;
+    const dy = (pile.y - player.y) * scale;
+    if (Math.abs(dx) > mmSize/2 || Math.abs(dy) > mmSize/2) continue;
+    ctx.fillStyle = pile.isDeathPile ? '#f44' : '#e8c97a';
+    ctx.fillRect(mmX + mmSize/2 + dx - 1, mmY + mmSize/2 + dy - 1, 3, 3);
+  }
+
+  // Portals
+  for (const portal of getPortals()) {
+    const dx = (portal.x - player.x) * scale;
+    const dy = (portal.y - player.y) * scale;
+    if (Math.abs(dx) > mmSize/2 || Math.abs(dy) > mmSize/2) continue;
+    ctx.fillStyle = '#e8c97a';
+    ctx.beginPath();
+    ctx.arc(mmX + mmSize/2 + dx, mmY + mmSize/2 + dy, 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Player dot (center)
+  ctx.fillStyle = '#4af';
+  ctx.beginPath();
+  ctx.arc(mmX + mmSize/2, mmY + mmSize/2, 4, 0, Math.PI*2);
+  ctx.fill();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════════
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.key] = true; });
+document.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+function applyKeyboardMovement(dt) {
+  const spd = 0.08;
+  if (keys['ArrowUp']    || keys['w'] || keys['W']) player.y -= spd;
+  if (keys['ArrowDown']  || keys['s'] || keys['S']) player.y += spd;
+  if (keys['ArrowLeft']  || keys['a'] || keys['A']) player.x -= spd;
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += spd;
+  if (keys['b'] || keys['B']) { openPanel('backpack'); delete keys['b']; delete keys['B']; }
+  if (keys['h'] || keys['H']) { openPanel('homestead'); delete keys['h']; delete keys['H']; }
+  if (keys['Escape']) {
+    closePanel('backpack'); closePanel('homestead'); hideTooltip();
+    delete keys['Escape'];
+  }
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const rx = t.clientX, ry = t.clientY;
+  // Joystick zone
+  if (rx < 150 && ry > VH - 150) {
+    joystick.touching = true;
+    joystick.x = rx - 70;
+    joystick.y = ry - (VH - 70);
+  }
+  if (rx > VW - 60 && ry < 30) openPanel('backpack');
+  if (rx > VW - 70 && ry >= 30 && ry < 50) openPanel('homestead');
+  if (rx > VW - 60 && ry >= 50 && ry < 70) openPanel('dev');
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (!joystick.touching) return;
+  const t = e.touches[0];
+  joystick.x = t.clientX - 70;
+  joystick.y = t.clientY - (VH - 70);
+  const len = Math.hypot(joystick.x, joystick.y);
+  if (len > joystick.radius) {
+    joystick.x = (joystick.x / len) * joystick.radius;
+    joystick.y = (joystick.y / len) * joystick.radius;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => { joystick.touching = false; });
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (x > VW - 60 && y < 30) openPanel('backpack');
+  if (x > VW - 70 && y >= 30 && y < 50) openPanel('homestead');
+  if (x > VW - 60 && y >= 50 && y < 70) openPanel('dev');
+});
+
+// ═══════════════════════════════════════════════════════════
+//  UI — BACKPACK PANEL
+// ═══════════════════════════════════════════════════════════
+let activeTab = 'items';
+let tooltipItemIndex = -1;
+let tooltipItemSource = '';
+
+function openPanel(which) {
+  if (which === 'backpack') {
+    document.getElementById('backpackPanel').classList.add('open');
+    canvas.style.pointerEvents = 'none';
+    renderBackpack();
+  } else if (which === 'homestead') {
+    document.getElementById('homesteadPanel').classList.add('open');
+    canvas.style.pointerEvents = 'none';
+    renderHomestead();
+  } else if (which === 'dev') {
+    document.getElementById('devPanel').classList.add('open');
+    canvas.style.pointerEvents = 'none';
+  }
+  anyPanelOpen = true;
+}
+
+function closePanel(which) {
+  if (which === 'backpack') document.getElementById('backpackPanel').classList.remove('open');
+  else if (which === 'homestead') document.getElementById('homesteadPanel').classList.remove('open');
+  else if (which === 'dev') document.getElementById('devPanel').classList.remove('open');
+  const allPanelIds = ['backpackPanel','homesteadPanel','devPanel',
+    'forgePanel','bonfirePanel','gardenPanel','shrinePanel','merchantPanel',
+    'watchtowerPanel','strGuildPanel','rngGuildPanel','mgeGuildPanel'];
+  const stillOpen = allPanelIds.some(id => document.getElementById(id).classList.contains('open'));
+  anyPanelOpen = stillOpen;
+  if (!stillOpen) canvas.style.pointerEvents = 'auto';
+  hideTooltip();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['items','equipment','food','materials'][i] === tab);
+  });
+  document.getElementById('tab-items').style.display      = tab === 'items'     ? 'grid' : 'none';
+  document.getElementById('tab-equipment').style.display  = tab === 'equipment' ? 'grid' : 'none';
+  document.getElementById('tab-food').style.display       = tab === 'food'      ? 'block' : 'none';
+  document.getElementById('tab-materials').style.display  = tab === 'materials' ? 'block' : 'none';
+  renderBackpack();
+}
+
+function renderBackpack() {
+  document.getElementById('goldCount').textContent = backpack.gold;
+
+  // Items tab
+  const grid = document.getElementById('tab-items');
+  grid.innerHTML = '';
+  if (backpack.items.length === 0) {
+    grid.innerHTML = '<div style="color:#555;font-size:12px;grid-column:1/-1;text-align:center;padding:20px;">Empty</div>';
+  } else {
+    backpack.items.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'item ' + item.rarity.toLowerCase();
+      const isEquipped = Object.values(player.equipped).includes(item);
+      div.innerHTML = `${isEquipped ? '<span class="equipped-badge">EQ</span>' : ''}<div>${item.name}</div><div class="item-type">${item.type}</div>`;
+      div.onclick = () => showItemTooltip(idx, 'gear');
+      grid.appendChild(div);
+    });
+  }
+
+  // Equipment tab
+  const slots = ['weapon','helmet','chest','legs','boots'];
+  slots.forEach(slot => {
+    const item = player.equipped[slot];
+    const nameEl = document.getElementById(`slot-${slot}-name`);
+    const slotEl = document.getElementById(`slot-${slot}`);
+    if (item) {
+      nameEl.textContent = item.name;
+      nameEl.className = 'slot-item ' + item.rarity;
+      slotEl.classList.add('filled');
+    } else {
+      nameEl.textContent = '— empty —';
+      nameEl.className = 'slot-item empty';
+      slotEl.classList.remove('filled');
+    }
+  });
+
+  // Food tab
+  const foodGrid = document.getElementById('food-grid');
+  foodGrid.innerHTML = '';
+  if (backpack.food.length === 0) {
+    foodGrid.innerHTML = '<div style="color:#555;font-size:12px;grid-column:1/-1;text-align:center;padding:20px;">No food</div>';
+  } else {
+    backpack.food.forEach((f, idx) => {
+      const div = document.createElement('div');
+      div.className = 'item food';
+      div.innerHTML = `<div>${f.name}</div><div class="item-type">+${f.healAmt} HP</div>`;
+      div.onclick = () => eatFood(idx);
+      foodGrid.appendChild(div);
+    });
+  }
+
+  // Materials tab
+  const matList = document.getElementById('materials-list');
+  matList.innerHTML = '';
+  MATERIAL_DB.forEach(mat => {
+    const count = backpack.materials[mat.id] || 0;
+    matList.innerHTML += `<div style="color:${count>0?'#7d5':'#444'}">${mat.name}: <b>${count}</b></div>`;
+  });
+}
+
+function showItemTooltip(idx, source) {
+  tooltipItemIndex = idx;
+  tooltipItemSource = source;
+  const item = backpack.items[idx];
+  if (!item) return;
+
+  const isEquipped = Object.values(player.equipped).includes(item);
+  const statsHtml = Object.entries(item.statBonus)
+    .filter(([,v]) => v > 0)
+    .map(([k,v]) => `+${v} ${k}`).join(', ');
+
+  const tt = document.getElementById('tooltip');
+  tt.innerHTML = `
+    <div class="tt-name">${item.name}</div>
+    <div class="item-type">${item.type} · ${item.rarity}</div>
+    <div class="tt-stats">${statsHtml}</div>
+    ${!isEquipped
+      ? `<button class="tt-btn tt-equip" onclick="equipItem(${idx})">Equip</button>`
+      : `<button class="tt-btn tt-unequip" onclick="unequipItemByRef(${idx})">Unequip</button>`
+    }
+    <button class="tt-btn tt-drop" onclick="dropItem(${idx})">Drop</button>
+  `;
+  tt.style.display = 'block';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+  tooltipItemIndex = -1;
+}
+
+function equipItem(idx) {
+  const item = backpack.items[idx];
+  if (!item) return;
+  const slot = item.slot;
+  // Unequip current if occupied
+  if (player.equipped[slot]) {
+    // Current equipped item stays in backpack (already there conceptually)
+  }
+  player.equipped[slot] = item;
+  recalcEquippedBonuses();
+  hideTooltip();
+  renderBackpack();
+}
+
+function unequipSlot(slot) {
+  if (player.equipped[slot]) {
+    player.equipped[slot] = null;
+    recalcEquippedBonuses();
+    renderBackpack();
+  }
+}
+
+function unequipItemByRef(idx) {
+  const item = backpack.items[idx];
+  for (const slot in player.equipped) {
+    if (player.equipped[slot] === item) {
+      player.equipped[slot] = null;
+    }
+  }
+  recalcEquippedBonuses();
+  hideTooltip();
+  renderBackpack();
+}
+
+function dropItem(idx) {
+  const item = backpack.items[idx];
+  if (item && item.untradeable) {
+    alert("Can't drop — untradeable item.");
+    return;
+  }
+  backpack.items.splice(idx, 1);
+  hideTooltip();
+  renderBackpack();
+}
+
+function eatFood(idx) {
+  const food = backpack.food[idx];
+  if (!food) return;
+  player.hp = Math.min(player.maxHp, player.hp + food.healAmt);
+  backpack.food.splice(idx, 1);
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${food.healAmt} HP`, timer: 0, color: '#4f4' });
+  renderBackpack();
+  closePanel('backpack');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI — HOMESTEAD PANEL
+// ═══════════════════════════════════════════════════════════
+function renderHomestead() {
+  const grid = document.getElementById('structuresGrid');
+  grid.innerHTML = '';
+  for (const [id, def] of Object.entries(STRUCTURE_DEFS)) {
+    const s = homestead[id];
+    const lv = s.level;
+    const maxed = lv >= s.maxLevel;
+    const cost = def.cost(lv + 1);
+    const canAfford = !maxed && Object.entries(cost).every(([k,v]) => {
+      if (k === 'gold') return backpack.gold >= v;
+      return (backpack.materials[k] || 0) >= v;
+    });
+
+    let costStr = '';
+    if (!maxed) {
+      costStr = Object.entries(cost).map(([k,v]) => {
+        const label = k === 'gold' ? `${v}g` : `${v} ${MATERIAL_DB.find(m=>m.id===k)?.name||k}`;
+        return label;
+      }).join(', ');
+    }
+
+    const card = document.createElement('div');
+    card.className = 'structure-card' + (maxed ? ' maxed' : '');
+    card.innerHTML = `
+      <div class="structure-name">${def.name}</div>
+      <div class="structure-level">Level ${lv} / ${s.maxLevel}</div>
+      <div class="structure-desc">${def.desc(lv)}</div>
+      <div class="structure-bonus">${lv > 0 ? 'Bonus: ' + def.bonus(lv) : ''}</div>
+      ${!maxed ? `<div class="structure-cost">Cost: ${costStr}</div>` : '<div style="color:#e8c97a;font-size:10px;">MAX LEVEL</div>'}
+      ${!maxed ? `<button class="upgrade-btn" ${canAfford?'':'disabled'} onclick="upgradeStructure('${id}')">${lv===0?'Build':'Upgrade'}</button>` : ''}
+    `;
+    grid.appendChild(card);
+  }
+}
+
+function upgradeStructure(id) {
+  const s = homestead[id];
+  if (s.level >= s.maxLevel) return;
+  const def = STRUCTURE_DEFS[id];
+  const cost = def.cost(s.level + 1);
+
+  // Check and spend cost
+  for (const [k, v] of Object.entries(cost)) {
+    if (k === 'gold') {
+      if (backpack.gold < v) return;
+    } else {
+      if ((backpack.materials[k] || 0) < v) return;
+    }
+  }
+  for (const [k, v] of Object.entries(cost)) {
+    if (k === 'gold') backpack.gold -= v;
+    else backpack.materials[k] -= v;
+  }
+
+  s.level++;
+  recalcMaxHp();
+  renderHomestead();
+  floatingTexts.push({ x: player.x, y: player.y - 2, text: `${def.name} Lv${s.level}!`, timer:0, color:'#7d5' });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BUILDINGS RENDER
+// ═══════════════════════════════════════════════════════════
+function renderBuildings(camX, camY) {
+  // Draw rune paths between buildings (cross pattern on floor)
+  ctx.save();
+  ctx.fillStyle = '#1a3a1a';
+  // Horizontal and vertical rune path lanes
+  for (let tx = 0; tx < GRID; tx++) {
+    const sx = tx * TILE_W - camX;
+    const sy = GRID / 2 * TILE_H - camY;
+    ctx.fillRect(sx, sy, TILE_W, TILE_H);
+  }
+  for (let ty = 0; ty < GRID; ty++) {
+    const sx = GRID / 2 * TILE_W - camX;
+    const sy = ty * TILE_H - camY;
+    ctx.fillRect(sx, sy, TILE_W, TILE_H);
+  }
+  ctx.restore();
+
+  for (const b of BUILDINGS) {
+    const bx = b.x * TILE_W - camX;
+    const by = b.y * TILE_H - camY;
+    const bw = b.w * TILE_W;
+    const bh = b.h * TILE_H;
+    const doorPixX = (b.doorX - b.x) * TILE_W;
+
+    // Building fill
+    ctx.fillStyle = '#1a1a2a';
+    ctx.fillRect(bx, by, bw, bh);
+
+    // Glowing border
+    ctx.save();
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = b.runeColor;
+    ctx.strokeStyle = b.runeColor;
+    ctx.lineWidth = 2;
+    // Top wall
+    ctx.beginPath();
+    ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by);
+    ctx.stroke();
+    // Left wall
+    ctx.beginPath();
+    ctx.moveTo(bx, by); ctx.lineTo(bx, by + bh);
+    ctx.stroke();
+    // Right wall
+    ctx.beginPath();
+    ctx.moveTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh);
+    ctx.stroke();
+    // South wall with door gap
+    ctx.beginPath();
+    ctx.moveTo(bx, by + bh); ctx.lineTo(bx + doorPixX, by + bh);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bx + doorPixX + TILE_W, by + bh); ctx.lineTo(bx + bw, by + bh);
+    ctx.stroke();
+    ctx.restore();
+
+    // Door glow
+    const doorSx = b.doorX * TILE_W - camX;
+    const doorSy = b.doorY * TILE_H - camY;
+    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.06);
+    ctx.save();
+    ctx.globalAlpha = 0.4 * pulse;
+    ctx.fillStyle = b.runeColor;
+    ctx.fillRect(doorSx, doorSy, TILE_W, TILE_H);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Label above building
+    ctx.save();
+    ctx.shadowBlur = 6; ctx.shadowColor = b.runeColor;
+    ctx.fillStyle = b.runeColor;
+    ctx.font = 'bold 10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(b.label, bx + bw / 2, by - 4);
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BUILDING PANEL OPEN/CLOSE
+// ═══════════════════════════════════════════════════════════
+const BUILDING_PANEL_IDS = {
+  forge:      'forgePanel',
+  bonfire:    'bonfirePanel',
+  garden:     'gardenPanel',
+  shrine:     'shrinePanel',
+  merchant:   'merchantPanel',
+  watchtower: 'watchtowerPanel',
+  str_guild:  'strGuildPanel',
+  rng_guild:  'rngGuildPanel',
+  mge_guild:  'mgeGuildPanel',
+};
+
+function openBuildingPanel(id) {
+  const panelId = BUILDING_PANEL_IDS[id];
+  if (!panelId) return;
+  // Close any already-open building panels first
+  Object.values(BUILDING_PANEL_IDS).forEach(pid => document.getElementById(pid).classList.remove('open'));
+  document.getElementById(panelId).classList.add('open');
+  canvas.style.pointerEvents = 'none';
+  anyPanelOpen = true;
+  // Render content
+  if (id === 'forge')      renderForgePanel();
+  else if (id === 'bonfire')    renderBonfirePanel();
+  else if (id === 'garden')     renderGardenPanel();
+  else if (id === 'shrine')     renderShrinePanel();
+  else if (id === 'merchant')   renderMerchantPanel();
+  else if (id === 'watchtower') renderWatchtowerPanel();
+  else if (id === 'str_guild' || id === 'rng_guild' || id === 'mge_guild') renderGuildPanel(id);
+}
+
+function closeBuildingPanel(id) {
+  const panelId = BUILDING_PANEL_IDS[id];
+  if (panelId) document.getElementById(panelId).classList.remove('open');
+  const allPanelIds = ['backpackPanel','homesteadPanel','devPanel', ...Object.values(BUILDING_PANEL_IDS)];
+  const stillOpen = allPanelIds.some(pid => document.getElementById(pid).classList.contains('open'));
+  anyPanelOpen = stillOpen;
+  if (!stillOpen) canvas.style.pointerEvents = 'auto';
+  // Nudge player away from door so panel doesn't immediately reopen
+  player.y += 1.5;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FORGE PANEL
+// ═══════════════════════════════════════════════════════════
+const FAIL_RATES = { common: 0.10, rare: 0.30, epic: 0.50 };
+
+function renderForgePanel() {
+  const container = document.getElementById('forgeRecipes');
+  container.innerHTML = '';
+  FORGE_RECIPES.forEach((recipe, idx) => {
+    const canAfford = canAffordRecipe(recipe);
+    const inputStr = Object.entries(recipe.inputs).map(([k,v]) => {
+      const mat = MATERIAL_DB.find(m => m.id === k);
+      const have = backpack.materials[k] || 0;
+      return `${mat ? mat.name : k} x${v} (have ${have})`;
+    }).join(', ');
+    const failPct = Math.round(FAIL_RATES[recipe.rarity] * 100);
+    const div = document.createElement('div');
+    div.className = 'recipe-card' + (canAfford ? ' can-afford' : '');
+    div.innerHTML = `
+      <div class="recipe-name">${recipe.name} <span style="color:#888;font-size:9px;">[${recipe.rarity}]</span></div>
+      <div class="recipe-inputs">${inputStr}</div>
+      <div class="recipe-btns">
+        <button class="craft-btn instant" ${canAfford?'':'disabled'} onclick="craftInstant(${idx})">
+          Instant (${failPct}% fail)
+        </button>
+        <button class="craft-btn timed" ${canAfford?'':'disabled'} onclick="craftTimed(${idx})">
+          Timed (always succeeds)
+        </button>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  renderCraftQueue();
+}
+
+function canAffordRecipe(recipe) {
+  return Object.entries(recipe.inputs).every(([k,v]) => (backpack.materials[k] || 0) >= v);
+}
+
+function spendRecipeInputs(recipe) {
+  for (const [k, v] of Object.entries(recipe.inputs)) {
+    backpack.materials[k] -= v;
+  }
+}
+
+function giveRecipeOutput(recipe) {
+  if (recipe.output) {
+    backpack.materials[recipe.output] = (backpack.materials[recipe.output] || 0) + 1;
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${recipe.outputName}`, timer:0, color:'#7d5' });
+  } else if (recipe.outputGear) {
+    const gear = {
+      name: recipe.outputGear,
+      type: recipe.slot,
+      slot: recipe.slot,
+      rarity: recipe.rarity,
+      weaponStyle: recipe.weaponStyle || undefined,
+      statBonus: recipe.statBonus || {}
+    };
+    backpack.items.push(gear);
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: `Crafted ${recipe.outputGear}!`, timer:0, color:'#e8c97a' });
+  }
+}
+
+function craftInstant(recipeIdx) {
+  const recipe = FORGE_RECIPES[recipeIdx];
+  if (!canAffordRecipe(recipe)) return;
+  spendRecipeInputs(recipe);
+  const failRate = FAIL_RATES[recipe.rarity] || 0;
+  if (Math.random() < failRate) {
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: 'Craft FAILED!', timer:0, color:'#f44' });
+  } else {
+    giveRecipeOutput(recipe);
+  }
+  renderForgePanel();
+}
+
+const TIMED_DURATIONS = { common: 30, rare: 90, epic: 180 }; // seconds
+
+function craftTimed(recipeIdx) {
+  const recipe = FORGE_RECIPES[recipeIdx];
+  if (!canAffordRecipe(recipe)) return;
+  spendRecipeInputs(recipe);
+  const dur = TIMED_DURATIONS[recipe.rarity] || 60;
+  craftQueue.push({
+    recipeName: recipe.name,
+    recipeIdx,
+    finishTime: Date.now() + dur * 1000,
+    buildingId: 'forge'
+  });
+  renderForgePanel();
+}
+
+function checkCraftQueue() {
+  const now = Date.now();
+  for (let i = craftQueue.length - 1; i >= 0; i--) {
+    const job = craftQueue[i];
+    if (now >= job.finishTime) {
+      const recipe = FORGE_RECIPES[job.recipeIdx];
+      if (recipe) giveRecipeOutput(recipe);
+      craftQueue.splice(i, 1);
+    }
+  }
+}
+
+function renderCraftQueue() {
+  const el = document.getElementById('forgeCraftQueue');
+  if (!el) return;
+  if (craftQueue.length === 0) {
+    el.innerHTML = '<div style="color:#444;font-size:10px;">No active jobs</div>';
+    return;
+  }
+  const now = Date.now();
+  el.innerHTML = craftQueue.map(job => {
+    const secsLeft = Math.max(0, Math.ceil((job.finishTime - now) / 1000));
+    return `<div class="queue-item">${job.recipeName} — ${secsLeft}s remaining</div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BONFIRE PANEL
+// ═══════════════════════════════════════════════════════════
+function renderBonfirePanel() {
+  const el = document.getElementById('bonfireContent');
+  const reduction = homestead.campfire.level * 120; // seconds reduced per level
+  el.innerHTML = `
+    <div style="color:#888;font-size:11px;margin-bottom:12px;">
+      HP: ${player.hp} / ${player.maxHp}<br>
+      Death Sickness: ${player.deathSickness > 0 ? Math.ceil(player.deathSickness) + 's remaining' : 'None'}<br>
+      Campfire level: ${homestead.campfire.level} (reduces sickness by ${reduction / 60} min)
+    </div>
+    <button class="bonfire-btn" onclick="bonfireRest()">🔥 Rest (Heal to Full)</button>
+    ${player.deathSickness > 0 ? `<button class="bonfire-btn" style="margin-left:8px;" onclick="bonfireReduceSickness()">☠ Reduce Sickness</button>` : ''}
+  `;
+}
+
+function bonfireRest() {
+  recalcMaxHp();
+  player.hp = player.maxHp;
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: 'Fully Rested!', timer:0, color:'#4f4' });
+  renderBonfirePanel();
+}
+
+function bonfireReduceSickness() {
+  const reduction = Math.max(60, homestead.campfire.level * 120);
+  player.deathSickness = Math.max(0, player.deathSickness - reduction);
+  if (player.deathSickness === 0) document.getElementById('sickness-bar').style.display = 'none';
+  recalcMaxHp();
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: 'Sickness reduced!', timer:0, color:'#cc44ff' });
+  renderBonfirePanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GARDEN PANEL
+// ═══════════════════════════════════════════════════════════
+const GARDEN_HERBS = [
+  { name:'Swamp Herb', healAmt:20, growTime:60, rarity:'common' },
+  { name:'Bog Flower', healAmt:40, growTime:120, rarity:'rare' },
+];
+
+function renderGardenPanel() {
+  const el = document.getElementById('gardenContent');
+  const now = Date.now();
+  let html = '';
+  if (gardenPlot.growing) {
+    const secsLeft = Math.max(0, Math.ceil((gardenPlot.startTime + gardenPlot.duration * 1000 - now) / 1000));
+    if (secsLeft === 0) {
+      html += `<div class="plot-status">✅ ${gardenPlot.herb.name} — Ready to harvest!</div>`;
+      html += `<button class="guild-btn" onclick="harvestGarden()">Harvest</button>`;
+    } else {
+      html += `<div class="plot-status">🌱 Growing: ${gardenPlot.herb.name} — ${secsLeft}s left</div>`;
+    }
+  } else {
+    html += `<div class="plot-status">Plot is empty. Choose what to grow:</div>`;
+    GARDEN_HERBS.forEach((h, i) => {
+      html += `<button class="guild-btn" onclick="plantGarden(${i})">${h.name} (${h.growTime}s)</button> `;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function plantGarden(idx) {
+  const herb = GARDEN_HERBS[idx];
+  gardenPlot = { growing: true, herb, startTime: Date.now(), duration: herb.growTime };
+  renderGardenPanel();
+}
+
+function harvestGarden() {
+  if (!gardenPlot.growing) return;
+  const now = Date.now();
+  const ready = now >= gardenPlot.startTime + gardenPlot.duration * 1000;
+  if (!ready) return;
+  backpack.food.push({ name: gardenPlot.herb.name, healAmt: gardenPlot.herb.healAmt, rarity: gardenPlot.herb.rarity });
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${gardenPlot.herb.name}`, timer:0, color:'#44ff88' });
+  gardenPlot = { growing: false, herb: null, startTime: 0, duration: 120 };
+  renderGardenPanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SHRINE PANEL
+// ═══════════════════════════════════════════════════════════
+const SHRINE_OFFERINGS = [
+  { label:'Iron Offering',  cost:{iron_ore:5},  buffLabel:'+15% DMG', duration:120,  stat:'dmg', amount:0.15 },
+  { label:'Bog Offering',   cost:{bog_root:3},  buffLabel:'+10% SPD', duration:180,  stat:'spd', amount:0.10 },
+  { label:'Void Offering',  cost:{void_shard:2},buffLabel:'+25% DMG', duration:240,  stat:'dmg', amount:0.25 },
+];
+
+function renderShrinePanel() {
+  const el = document.getElementById('shrineContent');
+  const now = Date.now();
+  let html = '';
+  if (shrineBuff.active && now < shrineBuff.endTime) {
+    const secsLeft = Math.ceil((shrineBuff.endTime - now) / 1000);
+    html += `<div class="buff-active">⚡ Active buff: ${shrineBuff.label} — ${secsLeft}s remaining</div>`;
+  } else {
+    shrineBuff.active = false;
+    html += `<div style="color:#666;font-size:11px;margin-bottom:10px;">No active buff.</div>`;
+  }
+  html += `<div style="color:#aaa;font-size:11px;margin-bottom:8px;">Choose an offering:</div>`;
+  SHRINE_OFFERINGS.forEach((o, i) => {
+    const costStr = Object.entries(o.cost).map(([k,v]) => {
+      const mat = MATERIAL_DB.find(m=>m.id===k);
+      return `${mat?mat.name:k} x${v} (have ${backpack.materials[k]||0})`;
+    }).join(', ');
+    const canAfford = Object.entries(o.cost).every(([k,v]) => (backpack.materials[k]||0) >= v);
+    html += `<div class="recipe-card${canAfford?' can-afford':''}">
+      <div class="recipe-name">${o.label} → ${o.buffLabel} for ${o.duration}s</div>
+      <div class="recipe-inputs">${costStr}</div>
+      <button class="shrine-btn" ${canAfford?'':'disabled'} onclick="activateShrineOffering(${i})"
+        style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Offer</button>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function activateShrineOffering(idx) {
+  const offering = SHRINE_OFFERINGS[idx];
+  if (!Object.entries(offering.cost).every(([k,v]) => (backpack.materials[k]||0) >= v)) return;
+  for (const [k,v] of Object.entries(offering.cost)) backpack.materials[k] -= v;
+  shrineBuff = { active: true, endTime: Date.now() + offering.duration * 1000, label: offering.buffLabel, stat: offering.stat, amount: offering.amount };
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: offering.buffLabel + '!', timer:0, color:'#cc44ff' });
+  renderShrinePanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MERCHANT PANEL
+// ═══════════════════════════════════════════════════════════
+const MERCHANT_BUY_LIST = [
+  { name:'Bread',           type:'food',     healAmt:15, rarity:'common', price:50 },
+  { name:'Cooked Fish',     type:'food',     healAmt:30, rarity:'rare',   price:120 },
+  { name:'Steak',           type:'food',     healAmt:50, rarity:'epic',   price:250 },
+  { name:'Iron Ore (x5)',   type:'material', matId:'iron_ore',   amount:5, price:80 },
+  { name:'Bog Root (x3)',   type:'material', matId:'bog_root',   amount:3, price:150 },
+  { name:'Void Shard (x2)', type:'material', matId:'void_shard', amount:2, price:300 },
+];
+
+function renderMerchantPanel() {
+  const el = document.getElementById('merchantContent');
+  let html = `<div style="color:#e8c97a;font-size:13px;margin-bottom:10px;">GOLD: ${backpack.gold}</div>`;
+  html += `<div style="color:#aaa;font-size:11px;margin-bottom:8px;">BUY:</div>`;
+  MERCHANT_BUY_LIST.forEach((item, i) => {
+    const canAfford = backpack.gold >= item.price;
+    html += `<div class="merchant-item">
+      <div>
+        <div class="merchant-item-name">${item.name}</div>
+        <div class="merchant-item-price">${item.price}g</div>
+      </div>
+      <button class="merchant-buy-btn" ${canAfford?'':'disabled'} onclick="merchantBuy(${i})"
+        style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Buy</button>
+    </div>`;
+  });
+  html += `<div style="color:#aaa;font-size:11px;margin:12px 0 8px;">SELL (gear items for gold):</div>`;
+  if (backpack.items.length === 0) {
+    html += `<div style="color:#444;font-size:10px;">No items to sell.</div>`;
+  } else {
+    backpack.items.forEach((item, i) => {
+      if (item.untradeable) return;
+      const sellPrice = item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
+      html += `<div class="merchant-item">
+        <div>
+          <div class="merchant-item-name" style="color:${item.rarity==='epic'?'#9b59b6':item.rarity==='rare'?'#4a90d9':'#ccc'}">${item.name}</div>
+          <div class="merchant-item-price">${sellPrice}g</div>
+        </div>
+        <button class="merchant-buy-btn" onclick="merchantSell(${i})">Sell</button>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function merchantBuy(idx) {
+  const item = MERCHANT_BUY_LIST[idx];
+  if (backpack.gold < item.price) return;
+  backpack.gold -= item.price;
+  if (item.type === 'food') {
+    backpack.food.push({ name: item.name, healAmt: item.healAmt, rarity: item.rarity });
+  } else if (item.type === 'material') {
+    backpack.materials[item.matId] = (backpack.materials[item.matId] || 0) + item.amount;
+  }
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `Bought ${item.name}`, timer:0, color:'#ffdd44' });
+  renderMerchantPanel();
+}
+
+function merchantSell(idx) {
+  const item = backpack.items[idx];
+  if (!item || item.untradeable) return;
+  const sellPrice = item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
+  backpack.gold += sellPrice;
+  backpack.items.splice(idx, 1);
+  // Unequip if equipped
+  for (const slot in player.equipped) {
+    if (player.equipped[slot] === item) player.equipped[slot] = null;
+  }
+  recalcEquippedBonuses();
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${sellPrice}g`, timer:0, color:'#e8c97a' });
+  renderMerchantPanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WATCHTOWER PANEL
+// ═══════════════════════════════════════════════════════════
+function renderWatchtowerPanel() {
+  const el = document.getElementById('watchtowerContent');
+  const s = homestead.watchtower;
+  const lv = s.level;
+  const maxed = lv >= s.maxLevel;
+  const def = STRUCTURE_DEFS.watchtower;
+  const cost = !maxed ? def.cost(lv + 1) : null;
+  const costStr = cost ? Object.entries(cost).map(([k,v]) => k === 'gold' ? `${v}g` : `${v} ${MATERIAL_DB.find(m=>m.id===k)?.name||k}`).join(', ') : '';
+  const canAfford = !maxed && cost && Object.entries(cost).every(([k,v]) => k === 'gold' ? backpack.gold >= v : (backpack.materials[k]||0) >= v);
+  el.innerHTML = `
+    <div style="color:#aaa;font-size:12px;margin-bottom:10px;">
+      Level: <b style="color:#44ddff;">${lv} / ${s.maxLevel}</b><br>
+      Minimap Range: <b>${getMinimapRange()} tiles</b>
+    </div>
+    ${lv > 0 ? `<div style="color:#44ddff;font-size:11px;margin-bottom:8px;">Bonus: ${def.bonus(lv)}</div>` : ''}
+    ${!maxed ? `<div style="color:#f90;font-size:10px;margin-bottom:8px;">Upgrade cost: ${costStr}</div>
+    <button class="guild-btn" ${canAfford?'':'disabled'} onclick="upgradeStructure('watchtower');renderWatchtowerPanel();"
+      style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Upgrade</button>` : '<div style="color:#e8c97a;font-size:11px;">MAX LEVEL</div>'}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GUILD PANELS
+// ═══════════════════════════════════════════════════════════
+function renderGuildPanel(guildId) {
+  const panelContentId = { str_guild:'strGuildContent', rng_guild:'rngGuildContent', mge_guild:'mgeGuildContent' }[guildId];
+  const el = document.getElementById(panelContentId);
+  const def = GUILD_DEFS[guildId];
+  const g = guilds[guildId];
+  const lv = g.level;
+  const maxed = lv >= g.maxLevel;
+  const cost = !maxed ? def.upgradeCosts[lv] : null;
+  const costStr = cost ? Object.entries(cost).map(([k,v]) => k === 'gold' ? `${v}g` : `${v} ${MATERIAL_DB.find(m=>m.id===k)?.name||k}`).join(', ') : '';
+  const canAfford = !maxed && cost && Object.entries(cost).every(([k,v]) => k === 'gold' ? backpack.gold >= v : (backpack.materials[k]||0) >= v);
+
+  let html = `<div style="color:#aaa;font-size:12px;margin-bottom:10px;">
+    Level: <b style="color:#e8c97a;">${lv} / ${g.maxLevel}</b>
+  </div>`;
+
+  if (lv > 0) {
+    html += `<div style="color:#7d5;font-size:11px;margin-bottom:8px;">Current bonus: ${def.bonuses[lv-1]}</div>`;
+  }
+
+  if (!maxed) {
+    html += `<div style="color:#f90;font-size:10px;margin-bottom:4px;">Next: ${def.bonuses[lv]}</div>`;
+    html += `<div style="color:#f90;font-size:10px;margin-bottom:8px;">Cost: ${costStr}</div>`;
+    html += `<button class="guild-btn" ${canAfford?'':'disabled'} onclick="upgradeGuild('${guildId}')"
+      style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Upgrade Guild</button>`;
+  } else {
+    html += `<div style="color:#e8c97a;font-size:11px;margin-bottom:8px;">MAX LEVEL</div>`;
+  }
+
+  // Unlockable gear
+  const guildGear = GEAR_DB.filter(g => g.guildReq === guildId);
+  if (guildGear.length) {
+    html += `<div style="color:#aaa;font-size:11px;margin:14px 0 6px;letter-spacing:1px;">UNLOCKABLE GEAR:</div>`;
+    guildGear.forEach((item, i) => {
+      const claimed = g.claimed && g.claimed.includes(item.name);
+      const unlocked = lv >= item.guildLevel;
+      const statsStr = Object.entries(item.statBonus).filter(([,v])=>v>0).map(([k,v])=>`+${v} ${k}`).join(', ');
+      html += `<div class="guild-unlock-card${claimed?' claimed':''}">
+        <div class="guild-unlock-name">${item.name} <span style="color:#888;font-size:9px;">[${item.slot}]</span></div>
+        <div class="guild-unlock-req">Requires Guild Lv${item.guildLevel} | ${statsStr}</div>
+        ${!claimed && unlocked
+          ? `<button class="guild-btn" style="margin-top:6px;" onclick="claimGuildGear('${guildId}','${item.name}')">Claim</button>`
+          : claimed ? `<div style="color:#555;font-size:10px;margin-top:4px;">Already claimed</div>`
+          : `<div style="color:#555;font-size:10px;margin-top:4px;">Requires Guild Lv${item.guildLevel}</div>`
+        }
+      </div>`;
+    });
+  }
+
+  el.innerHTML = html;
+}
+
+function upgradeGuild(guildId) {
+  const def = GUILD_DEFS[guildId];
+  const g = guilds[guildId];
+  if (g.level >= g.maxLevel) return;
+  const cost = def.upgradeCosts[g.level];
+  // Check
+  if (!Object.entries(cost).every(([k,v]) => k === 'gold' ? backpack.gold >= v : (backpack.materials[k]||0) >= v)) return;
+  // Spend
+  for (const [k,v] of Object.entries(cost)) {
+    if (k === 'gold') backpack.gold -= v;
+    else backpack.materials[k] -= v;
+  }
+  g.level++;
+  floatingTexts.push({ x: player.x, y: player.y - 2, text: `${def.name} Lv${g.level}!`, timer:0, color:'#e8c97a' });
+  renderGuildPanel(guildId);
+}
+
+function claimGuildGear(guildId, itemName) {
+  const g = guilds[guildId];
+  const item = GEAR_DB.find(i => i.name === itemName && i.guildReq === guildId);
+  if (!item || g.level < item.guildLevel) return;
+  if (!g.claimed) g.claimed = [];
+  if (g.claimed.includes(itemName)) return;
+  g.claimed.push(itemName);
+  backpack.items.push({...item});
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `Claimed ${itemName}!`, timer:0, color:'#e8c97a' });
+  renderGuildPanel(guildId);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DEV / QA FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+function devGold() { backpack.gold += 10000; renderBackpack(); }
+function devMaterials() {
+  MATERIAL_DB.forEach(m => { backpack.materials[m.id] = 99; });
+  renderBackpack();
+}
+function devWeapon(style) {
+  GEAR_DB.filter(g => g.slot === 'weapon' && g.weaponStyle === style).forEach(g => backpack.items.push({...g}));
+  renderBackpack();
+}
+function devAllGear() {
+  GEAR_DB.forEach(g => backpack.items.push({...g}));
+  renderBackpack();
+}
+function devSkills(targetLevel) {
+  ['dexterity','strength','vigor','intelligence'].forEach(sk => {
+    player.skills.level[sk] = targetLevel;
+    player.skills.xp[sk] = 0;
+    player.baseStats[sk] = 10 + (targetLevel - 1);
+  });
+  recalcMaxHp();
+  player.hp = player.maxHp;
+}
+function devResetSkills() {
+  ['dexterity','strength','vigor','intelligence'].forEach(sk => {
+    player.skills.level[sk] = 1;
+    player.skills.xp[sk] = 0;
+    player.baseStats[sk] = 10;
+  });
+  recalcEquippedBonuses();
+  recalcMaxHp();
+  player.hp = player.maxHp;
+}
+function devHeal() { recalcMaxHp(); player.hp = player.maxHp; }
+let devInvincible = false;
+function devToggleInvincible() {
+  devInvincible = !devInvincible;
+  document.getElementById('invincBtn').textContent = `Invincible: ${devInvincible ? 'ON ⚡' : 'OFF'}`;
+  document.getElementById('invincBtn').style.color = devInvincible ? '#4f4' : '';
+  document.getElementById('invincBtn').style.borderColor = devInvincible ? '#4f4' : '';
+}
+function devClearSickness() {
+  player.deathSickness = 0;
+  document.getElementById('sickness-bar').style.display = 'none';
+  recalcMaxHp();
+  player.hp = player.maxHp;
+}
+function devKillAll() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    dropLootFromEnemy(enemies[i]);
+    enemies.splice(i, 1);
+  }
+}
+function devClearSave() {
+  try { localStorage.removeItem('runeportal_save'); } catch(e) {}
+  location.reload();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SAVE / LOAD
+// ═══════════════════════════════════════════════════════════
+let storageAvailable = false;
+try { localStorage.setItem('_test','1'); localStorage.removeItem('_test'); storageAvailable = true; } catch(e) {}
+
+function saveGame() {
+  if (!storageAvailable) return;
+  try {
+    localStorage.setItem('runeportal_save', JSON.stringify({
+      skills:          player.skills,
+      hp:              player.hp,
+      baseStats:       player.baseStats,
+      equippedBonuses: player.equippedBonuses,
+      equipped:        player.equipped,
+      deathSickness:   player.deathSickness,
+      gold:            backpack.gold,
+      items:           backpack.items,
+      food:            backpack.food,
+      materials:       backpack.materials,
+      homestead:       homestead,
+      guilds:          guilds,
+      craftQueue:      craftQueue,
+      gardenPlot:      gardenPlot,
+      shrineBuff:      shrineBuff,
+      zoneId:          currentZoneId,
+    }));
+  } catch(e) { storageAvailable = false; }
+}
+
+function loadGame() {
+  if (!storageAvailable) return;
+  try {
+    const raw = localStorage.getItem('runeportal_save');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.skills)          Object.assign(player.skills, d.skills);
+    if (d.hp !== undefined) player.hp = d.hp;
+    if (d.baseStats)       Object.assign(player.baseStats, d.baseStats);
+    if (d.equippedBonuses) Object.assign(player.equippedBonuses, d.equippedBonuses);
+    if (d.equipped)        Object.assign(player.equipped, d.equipped);
+    if (d.deathSickness)   {
+      player.deathSickness = d.deathSickness;
+      if (player.deathSickness > 0) document.getElementById('sickness-bar').style.display = 'block';
+    }
+    if (d.gold !== undefined) backpack.gold = d.gold;
+    if (d.items)           backpack.items = d.items;
+    if (d.food)            backpack.food = d.food;
+    if (d.materials)       Object.assign(backpack.materials, d.materials);
+    if (d.homestead)       Object.keys(homestead).forEach(k => { if (d.homestead[k]) Object.assign(homestead[k], d.homestead[k]); });
+    if (d.guilds)          Object.keys(guilds).forEach(k => { if (d.guilds[k]) Object.assign(guilds[k], d.guilds[k]); });
+    if (d.craftQueue)      craftQueue = d.craftQueue;
+    if (d.gardenPlot)      Object.assign(gardenPlot, d.gardenPlot);
+    if (d.shrineBuff)      Object.assign(shrineBuff, d.shrineBuff);
+    if (d.zoneId && ZONES[d.zoneId]) currentZoneId = d.zoneId;
+  } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GAME LOOP
+// ═══════════════════════════════════════════════════════════
+function loop(ts) {
+  const dt = Math.min((ts - lastTime) / 1000, 0.1);
+  lastTime = ts;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ── INIT ──
+window.addEventListener('load', function() {
+  buildZoneGrid(currentZoneId);
+  loadGame();
+  buildZoneGrid(currentZoneId);
+  recalcMaxHp();
+  spawnEnemies();
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>
