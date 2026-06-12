@@ -8,11 +8,11 @@
 
 ## UI / Layout
 
-- *(empty — minimap + joystick fixes shipped with the character art pass patch)*
+- **[Low]** Void-tier item-name CSS (`#1a0030` + purple glow) added speculatively per GDD color table — verify readability on the dark panel when Void gear actually drops (zones 6+).
 
 ## Gameplay Bugs
 
-- *(empty — respawn + shop movement lock shipped with the character art pass patch)*
+- *(empty — HP NaN guard shipped with the polish pass patch 2026-06-12)*
 
 ## Loot / Gear
 
@@ -26,6 +26,11 @@
 
 ## Completed (moved from backlog)
 
+- ✅ HP NaN fix — `loadGame` Number.isFinite gate + per-frame self-heal in `recalcMaxHp` + integer HP display (2026-06-12, polish pass)
+- ✅ Aura reworked: cloud → subtle halo (max 6 orbiting 3-4px particles, ~15px radius around torso) (2026-06-12, polish pass)
+- ✅ Equipment tab item names colored by rarity (CSS rules were missing; JS class was already set) (2026-06-12, polish pass)
+- ✅ Player walk / attack / idle-breathing animations; gear layers follow their limbs (2026-06-12, polish pass)
+- ✅ Enemy shape split — Hollow Hunter quadruped, Wraith Stalker legless spectral, Iron Construct mechanical + stomp; humanoids/bosses unchanged (2026-06-12, polish pass)
 - ✅ Minimap moved to top-right, 8px inset; BAG/HOME/DEV buttons + tap zones moved below it (2026-06-11, art pass patch)
 - ✅ Virtual joystick nudged up 40px — clear of death sickness banner (2026-06-11, art pass patch)
 - ✅ Death respawn now fades to Homestead center via existing zone transition (GDD §15) (2026-06-11, art pass patch)

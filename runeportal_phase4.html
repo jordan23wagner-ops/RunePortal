@@ -71,6 +71,17 @@
       letter-spacing: 1px; margin-bottom: 6px; }
     .slot .slot-item { font-size: 11px; color: #e8c97a; }
     .slot .slot-item.empty { color: #333; }
+    /* Rarity colors on equipped item names (GDD color table) —
+       renderBackpack() sets class "slot-item <rarity>" */
+    .slot .slot-item.common    { color: #ccc; }
+    .slot .slot-item.rare      { color: #4fc3f7; }
+    .slot .slot-item.epic      { color: #ab47bc; }
+    .slot .slot-item.legendary { color: #ff8f00; }
+    .slot .slot-item.mythic    { color: #e53935; }
+    .slot .slot-item.void      { color: #1a0030; text-shadow: 0 0 6px #8a2be2; } /* glow keeps it readable on dark bg */
+    .slot .slot-item.radanite  { color: #00e5ff; }
+    .slot .slot-item.titanite  { color: #eceff1; }
+    .slot .slot-item.zionite   { color: #ffd700; }
 
     /* ── HOMESTEAD PANEL ── */
     .homestead-panel {
@@ -427,6 +438,45 @@
 <script>
 /*
 === CHANGELOG ===
+[2026-06-12] — HP NaN FIX (Priority 1): audited every player.hp / player.maxHp
+  read-write — no coordinate from the feet-origin container move feeds any HP math
+  (renderer never writes hp). Real holes sealed: loadGame accepted null/non-numeric
+  hp (JSON serializes NaN → null, which passed the `!== undefined` guard) — now
+  Number.isFinite-gated; recalcMaxHp now sanitizes a non-finite vigor stat AND a
+  non-finite player.hp every frame (self-healing if anything ever corrupts hp at
+  runtime). HUD + Bonfire panel display Math.ceil(hp) — fractional enemy damage
+  (e.g. Bleakwood 7.5) no longer shows decimals. Combat logic untouched.
+[2026-06-12] — AURA REWORK: cloud → subtle halo. Particles now ORBIT the torso
+  center (0,-20 in feet-origin coords) at ~13-17px radius, 3-4px circles
+  (scale 0.5-0.67 on the 6px texture), MAX 6 active (was 8-12 emitted PER FRAME),
+  slow drift + gentle fade, alpha ≤ 0.5 — visible glow that never covers the body.
+[2026-06-12] — EQUIPMENT TAB RARITY COLORS: added .slot .slot-item.<rarity> CSS —
+  rare #4fc3f7 / epic #ab47bc / legendary #ff8f00 + future tiers per GDD color
+  table (mythic #e53935, void #1a0030+glow, radanite #00e5ff, titanite #eceff1,
+  zionite #ffd700). renderBackpack already set the class; the rules were missing.
+  Empty slots stay muted gray (.slot-item.empty unchanged).
+[2026-06-12] — PLAYER ANIMATIONS (render-only, reads game state, never writes):
+  WALK — legs alternate via sin(Date.now()*0.008), ±12px, left phase 0 / right π,
+  arms counter-swing, head bobs ±2px. ATTACK — right arm rest (10,-16) → extended
+  (18,-26) over 0.15s, return 0.1s, phased off the existing tick % atkInterval
+  attack timer (same formula as combat, read-only). IDLE — torso breathing, length
+  ±2% via sin(Date.now()*0.002). Gear follows limbs: leg plates + boots redrawn to
+  the animated leg/foot joints each frame, helmet rides the head bob, chest scales
+  with the breath (anchored at the hip), weapon translates with the right hand.
+  body/legs/boots are per-frame redraws; tint logic untouched (tint persists
+  across Graphics.clear()).
+[2026-06-12] — ENEMY SHAPE SPLIT (creatures vs humanoids): Hollow Hunter →
+  skeletal-werewolf QUADRUPED (low wide body, 4 down-angled limbs from center
+  mass, large oval head + 2 ear triangles, #3d2b1f, wider than humanoids).
+  Wraith Stalker → spectral (NO legs — body tapers to a point, long drooping
+  2-segment arms, hollow OUTLINED head, 3 trailing wisps, #6a5acd; opacity
+  phasing kept). Iron Construct → mechanical (filled box torso #2a2a2a, 4 thick
+  RECT limbs from the box corners, square head with 2 eye slots, 4 rivets,
+  #4a4a4a) + stomp: ±2px y offset alternating every 20 frames (render-only).
+  Humanoids UNCHANGED: Ashwalker Scavenger, Raider Brute, Bone Collector,
+  Revenant, all bosses (__boss shape — The Warden / Nightmother / Gen. Mourne).
+  Hit-flash white overlays redraw the same new shapes (override path kept).
+  NO localStorage schema changes — existing saves load unchanged.
 [2026-06-11] — CHARACTER ART PASS (GDD §2, XP Hero style): player placeholder rects
   replaced with shaped PIXI.Graphics — stick-figure body (#e8d5b0; head, torso, limbs;
   container origin moved to FEET), helmet dome, chest trapezoid + center seam, leg
@@ -1029,13 +1079,17 @@ function getDeathSicknessDuration() {
 }
 
 function recalcMaxHp() {
-  const vig = getStat('vigor');
+  let vig = getStat('vigor');
+  if (!Number.isFinite(vig)) vig = 10; // corrupted stat/bonus guard — never let NaN reach maxHp
   const base = 50 + vig * 5;
   if (player.deathSickness > 0) {
     player.maxHp = Math.floor(base * 0.5);
   } else {
     player.maxHp = base;
   }
+  // HP NaN guard — recalcMaxHp runs every update frame, so this self-heals hp
+  // if a corrupted save or bad arithmetic ever poisons it (NaN/null/undefined).
+  if (!Number.isFinite(player.hp)) player.hp = player.maxHp;
   if (player.hp > player.maxHp) player.hp = player.maxHp;
 }
 
@@ -1675,47 +1729,35 @@ function buildPlayerContainer() {
 
   const add = g => { playerContainer.addChild(g); return g; };
 
-  // bodySprite — stick figure, always visible, behind all gear
-  const body = new PIXI.Graphics();
-  body.circle(0, -40, 8).fill(0xe8d5b0);            // head
-  body.moveTo(0, -32).lineTo(0, -28)                // neck
-      .moveTo(0, -28).lineTo(0, -10)                // torso
-      .moveTo(0, -26).lineTo(-10, -16)              // left arm
-      .moveTo(0, -26).lineTo(10, -16)               // right arm
-      .moveTo(0, -10).lineTo(-6, 0)                 // left leg
-      .moveTo(0, -10).lineTo(6, 0)                  // right leg
-      .stroke({ width: 2.5, color: 0xe8d5b0, cap: 'round' });
-  add(body);
+  // bodySprite — stick figure, always visible, behind all gear.
+  // Geometry is redrawn each frame by drawPlayerFigure() (walk/attack/idle anims);
+  // tint persists across Graphics.clear() so the sickness tint logic is untouched.
+  const body = add(new PIXI.Graphics());
 
-  // legsSprite — two leg plates (parallelograms)
-  const legs = new PIXI.Graphics();
-  legs.poly([-9, -10, -3, -10, -6, 0, -11, 0]).fill({ color: 0xffffff, alpha: 0.85 });
-  legs.poly([3, -10, 9, -10, 11, 0, 6, 0]).fill({ color: 0xffffff, alpha: 0.85 });
-  add(legs);
+  // legsSprite — two leg plates; redrawn each frame to follow the animated legs
+  const legs = add(new PIXI.Graphics());
 
-  // chestSprite — trapezoid plate, wider at shoulders, + center seam detail
+  // chestSprite — trapezoid plate, wider at shoulders, + center seam detail.
+  // Static shape — idle breathing scales it vertically around the hip (y = -10).
   const chest = new PIXI.Graphics();
   chest.poly([-12, -28, 12, -28, 9, -10, -9, -10]).fill({ color: 0xffffff, alpha: 0.85 });
   chest.moveTo(0, -26).lineTo(0, -12).stroke({ width: 1, color: 0x111111, alpha: 0.4 });
   add(chest);
 
-  // helmetSprite — dome over the head
+  // helmetSprite — dome over the head. Static shape — translated with the head bob.
   const helmet = new PIXI.Graphics();
   helmet.poly([-11, -32, -13, -40, 0, -52, 13, -40, 11, -32])
         .fill({ color: 0xffffff, alpha: 0.9 })
         .stroke({ width: 1, color: 0x222222 });
   add(helmet);
 
-  // bootsSprite — two feet with raised toes (toes point outward)
-  const boots = new PIXI.Graphics();
-  boots.poly([-12, -2, -3, -2, -3, 2, -13, 2]).fill({ color: 0xffffff, alpha: 0.9 });
-  boots.rect(-15, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });   // left raised toe
-  boots.poly([3, -2, 12, -2, 13, 2, 3, 2]).fill({ color: 0xffffff, alpha: 0.9 });
-  boots.rect(12, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });    // right raised toe
-  add(boots);
+  // bootsSprite — redrawn each frame to follow the animated foot positions
+  const boots = add(new PIXI.Graphics());
 
   // weaponSprite — upward sword at the right hand (handle brown; blade/guard
-  // white so the runtime rarity tint colors them — handle picks up a slight cast)
+  // white so the runtime rarity tint colors them — handle picks up a slight cast).
+  // Static shape drawn at the REST hand (10,-16) — translated to follow the
+  // right hand during walk/attack swings.
   const weapon = new PIXI.Graphics();
   weapon.poly([14, -30, 17, -20, 14, -10, 11, -20]).fill(0xffffff); // blade diamond
   weapon.rect(10, -16, 8, 2).fill(0xffffff);                       // guard
@@ -1730,6 +1772,101 @@ function buildPlayerContainer() {
 
   playerHpBarGfx = new PIXI.Graphics();
   playerContainer.addChild(playerHpBarGfx);
+}
+
+// ── PLAYER ANIMATION — walk / attack / idle-breathe.
+//    Render-only: reads game state (position, enemies, tick), never writes it.
+//    All joints in figure-local coords, origin = feet (container origin).
+let animPrevPX = null, animPrevPY = null;
+
+function computePlayerPose() {
+  const now = Date.now();
+
+  // Moving? — position delta since last rendered frame (keyboard or joystick)
+  const moving = animPrevPX !== null &&
+    (Math.abs(player.x - animPrevPX) > 0.0001 || Math.abs(player.y - animPrevPY) > 0.0001);
+  animPrevPX = player.x; animPrevPY = player.y;
+
+  // In combat? — same proximity test the combat loop uses (read-only mirror)
+  let inCombat = false;
+  if (!anyPanelOpen && !ZONES[currentZoneId].isSafe) {
+    const range = getCombatRange();
+    for (const e of enemies) {
+      if (Math.hypot(player.x - e.x, player.y - e.y) < range) { inCombat = true; break; }
+    }
+  }
+
+  // IDLE — subtle breathing: torso length oscillates ±2% on a slow sin
+  const breath = (!moving && !inCombat) ? 1 + 0.02 * Math.sin(now * 0.002) : 1;
+  const torsoTopY = -10 - 18 * breath;   // rest -28 (torso bottom fixed at the hip, -10)
+  const shoulderY = torsoTopY + 2;       // rest -26
+  const torsoShift = torsoTopY + 28;     // 0 at rest — lifts neck/head with the breath
+
+  // WALK — legs alternate (left phase 0, right phase π), ±12px swing;
+  // arms counter-swing; head bobs ±2px
+  const ws = moving ? Math.sin(now * 0.008) : 0; // right leg = sin(+π) = -ws
+  const footLX = -6 + 12 * ws;
+  const footRX =  6 - 12 * ws;
+  const headBob = moving ? 2 * Math.sin(now * 0.016) : 0;
+  let handL = [-10 - 10 * ws, -16 + torsoShift];
+  let handR = [ 10 + 10 * ws, -16 + torsoShift];
+
+  // ATTACK — right arm rest (10,-16) → extended (18,-26) over 0.15s, return 0.1s.
+  // Phase comes from the EXISTING attack timer: combat fires at tick % atkInterval
+  // === 0, so (tick % atkInterval)/60 is the time since the last swing.
+  if (inCombat) {
+    const atkInterval = Math.max(20, Math.floor((1 / (getCombatStat() / 10)) * 60));
+    const tSec = (tick % atkInterval) / 60;
+    let t = 0;
+    if (tSec < 0.15)      t = tSec / 0.15;              // swing out
+    else if (tSec < 0.25) t = 1 - (tSec - 0.15) / 0.1;  // return
+    handR = [10 + 8 * t, -16 - 10 * t];
+  }
+
+  return {
+    headY: torsoTopY - 12 + headBob, // rest -40
+    torsoTopY, shoulderY, handL, handR, footLX, footRX, breath,
+  };
+}
+
+// Redraws the animated parts (body, leg plates, boots) and transforms the static
+// gear shapes so every gear layer follows the limb it covers.
+function drawPlayerFigure(p) {
+  const { body, legs, boots, chest, helmet, weapon } = playerParts;
+
+  body.clear();
+  body.circle(0, p.headY, 8).fill(0xe8d5b0);                       // head
+  body.moveTo(0, p.headY + 8).lineTo(0, p.torsoTopY)               // neck
+      .moveTo(0, p.torsoTopY).lineTo(0, -10)                       // torso
+      .moveTo(0, p.shoulderY).lineTo(p.handL[0], p.handL[1])       // left arm
+      .moveTo(0, p.shoulderY).lineTo(p.handR[0], p.handR[1])       // right arm
+      .moveTo(0, -10).lineTo(p.footLX, 0)                          // left leg
+      .moveTo(0, -10).lineTo(p.footRX, 0)                          // right leg
+      .stroke({ width: 2.5, color: 0xe8d5b0, cap: 'round' });
+
+  // Leg plates — top edge pinned at the hip, bottom edge follows each foot
+  legs.clear();
+  legs.poly([-9, -10, -3, -10, p.footLX + 3, 0, p.footLX - 3, 0]).fill({ color: 0xffffff, alpha: 0.85 });
+  legs.poly([3, -10, 9, -10, p.footRX + 3, 0, p.footRX - 3, 0]).fill({ color: 0xffffff, alpha: 0.85 });
+
+  // Boots — same rest shapes, translated to the animated foot positions
+  boots.clear();
+  const ldx = p.footLX + 6, rdx = p.footRX - 6; // x-shift from rest feet (∓6)
+  boots.poly([ldx - 12, -2, ldx - 3, -2, ldx - 3, 2, ldx - 13, 2]).fill({ color: 0xffffff, alpha: 0.9 });
+  boots.rect(ldx - 15, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });   // left raised toe
+  boots.poly([rdx + 3, -2, rdx + 12, -2, rdx + 13, 2, rdx + 3, 2]).fill({ color: 0xffffff, alpha: 0.9 });
+  boots.rect(rdx + 12, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });   // right raised toe
+
+  // Chest breathes with the torso — scaled around the hip (y = -10)
+  chest.scale.y = p.breath;
+  chest.y = -10 * (1 - p.breath);
+
+  // Helmet stays on the head (drawn at rest head -40)
+  helmet.y = p.headY + 40;
+
+  // Weapon follows the right hand (drawn at rest hand (10,-16))
+  weapon.x = p.handR[0] - 10;
+  weapon.y = p.handR[1] + 16;
 }
 
 function getHighestEquippedRarity() {
@@ -1748,6 +1885,9 @@ function updatePlayerView() {
   // Origin is the figure's feet — stand on the bottom edge of the player's tile
   playerContainer.x = player.x * TILE_W + TILE_W / 2;
   playerContainer.y = player.y * TILE_H + TILE_H;
+
+  // Animate the figure (walk/attack/idle) — gear layers follow their limbs
+  drawPlayerFigure(computePlayerPose());
 
   // Death sickness tint (multiplies the skin tone toward purple)
   playerParts.body.tint = player.deathSickness > 0 ? 0x8844aa : 0xffffff;
@@ -1792,12 +1932,20 @@ function updatePlayerView() {
   prevPlayerHp = player.hp;
 }
 
-// ── AURA PARTICLES — emitted from the player, color = highest equipped rarity ──
+// ── AURA PARTICLES — subtle glow halo, color = highest equipped rarity ──
+//    Max 6 active 3-4px circles orbiting ~15px around the torso center
+//    (origin = feet → torso center ≈ (0,-20)). Low alpha + tiny size keep the
+//    character body fully visible — halo, not cloud.
+const AURA_MAX = 6;
+const AURA_TORSO_Y = -20;
 function updateAuraParticles() {
   for (let i = auraSprites.length - 1; i >= 0; i--) {
     const s = auraSprites[i];
-    s.y -= 0.5;        // float upward
-    s.alpha -= 0.02;   // fade out
+    s.auraA += s.auraSpd;                                  // orbit around the torso
+    s.x = Math.cos(s.auraA) * s.auraR;
+    s.y = AURA_TORSO_Y + Math.sin(s.auraA) * s.auraR * 0.6 - s.auraRise;
+    s.auraRise += 0.08;                                    // slow upward drift
+    s.alpha -= 0.006;                                      // gentle fade, then recycle
     if (s.alpha <= 0) {
       auraContainer.removeChild(s);
       auraPool.push(s);
@@ -1807,16 +1955,18 @@ function updateAuraParticles() {
   if (player.isDead) return;
   const best = getHighestEquippedRarity();
   if (!best) return; // nothing equipped — no aura
-  if (auraSprites.length > 600) return; // safety cap
   const color = RARITY_COLORS[best] || 0x888888;
-  const emit = 8 + Math.floor(Math.random() * 5); // 8-12 per frame
-  for (let i = 0; i < emit; i++) {
+  while (auraSprites.length < AURA_MAX) {
     const s = auraPool.pop() || new PIXI.Sprite(circleTexture);
     s.anchor.set(0.5);
-    s.x = (Math.random() - 0.5) * 26;
-    s.y = -4 - Math.random() * 24; // around the torso (origin = feet)
-    s.alpha = 0.5 + Math.random() * 0.35;
-    s.scale.set(0.5 + Math.random() * 0.8);
+    s.auraA = Math.random() * Math.PI * 2;
+    s.auraSpd = 0.02 + Math.random() * 0.02;
+    s.auraR = 13 + Math.random() * 4;                      // ~15px emission radius
+    s.auraRise = 0;
+    s.x = Math.cos(s.auraA) * s.auraR;
+    s.y = AURA_TORSO_Y + Math.sin(s.auraA) * s.auraR * 0.6;
+    s.alpha = 0.25 + Math.random() * 0.25;
+    s.scale.set(0.5 + Math.random() * 0.17);               // 3-4px (texture circle = 6px)
     s.tint = color;
     auraContainer.addChild(s);
     auraSprites.push(s);
@@ -1833,9 +1983,8 @@ const ENEMY_SHAPE_DEFS = {
                            handL: [-16, -24], handR: [16, -24], feetSpread: 8 },               // wide, stocky, arms out
   'Bone Collector':      { color: '#d4c9a8', lw: 1.5, eyes: true, fingers: true,
                            handL: [-12, -28], handR: [12, -28] },                              // tall, skeletal
-  'Hollow Hunter':       { color: '#3d2b1f', lw: 2.5, lean: 0.44, headOval: true, claws: true },// hunched werewolf
-  'Wraith Stalker':      { color: '#6a5acd', lw: 1.5, headR: 10,
-                           handL: [-7, -2], handR: [7, -2] },                                  // wispy, arms to ground
+  'Hollow Hunter':       { color: '#3d2b1f', quad: true },                                     // skeletal werewolf — quadruped
+  'Wraith Stalker':      { color: '#6a5acd', wraith: true },                                   // spectral — no legs, trailing wisps
   'Iron Construct':      { color: '#4a4a4a', boxy: true },                                     // blocky mechanical
   'Revenant':            { color: '#7a7a8a', lw: 2.5, chestPlate: true },                      // spectral armor plates
   '__boss':              { color: '#ffffff', lw: 3.5, headR: 9 },
@@ -1851,16 +2000,45 @@ function drawEnemyShape(g, name, H, override) {
   const Y = v => v * u + H / 2;
   const lw = Math.max(1, (o.lw || 2.5) * u);
 
-  if (o.boxy) { // Iron Construct — box torso, square head, thick rect limbs, rivets
+  if (o.quad) { // Hollow Hunter — skeletal werewolf: low wide quadruped, NOT a stick figure
+    const lwq = Math.max(1.5, 3 * u);
+    g.ellipse(X(0), Y(-15), X(17), X(7)).fill(color);                       // low wide body (wider than humanoids)
+    g.moveTo(X(-11), Y(-12)).lineTo(X(-15), Y(0))                           // 4 limbs angled down from center mass
+     .moveTo(X(-4),  Y(-12)).lineTo(X(-7),  Y(0))
+     .moveTo(X(4),   Y(-12)).lineTo(X(7),   Y(0))
+     .moveTo(X(11),  Y(-12)).lineTo(X(15),  Y(0))
+     .stroke({ width: lwq, color, cap: 'round' });
+    g.ellipse(X(16), Y(-22), X(7), X(5.5)).fill(color);                     // large oval head at the front
+    g.poly([X(11), Y(-26), X(13), Y(-33), X(15), Y(-26)]).fill(color);      // pointed ear triangles
+    g.poly([X(16), Y(-26), X(18), Y(-33), X(20), Y(-26)]).fill(color);
+    return;
+  }
+
+  if (o.wraith) { // Wraith Stalker — spectral: NO legs, body tapers to a point
+    g.poly([X(-9), Y(-28), X(9), Y(-28), X(0), Y(2)]).fill({ color, alpha: 0.85 }); // tapered wispy body
+    g.moveTo(X(-8), Y(-25)).lineTo(X(-14), Y(-12)).lineTo(X(-12), Y(-2))            // long arms drooping at the ends
+     .moveTo(X(8),  Y(-25)).lineTo(X(14),  Y(-12)).lineTo(X(12),  Y(-2))
+     .stroke({ width: Math.max(1, 1.5 * u), color, cap: 'round' });
+    g.circle(X(0), Y(-37), 9 * u).stroke({ width: Math.max(1.5, 2 * u), color });    // hollow head — outlined only
+    g.moveTo(X(-4), Y(0)).lineTo(X(-5), Y(8))                                        // 3 trailing wisps, varied lengths
+     .moveTo(X(0),  Y(2)).lineTo(X(0),  Y(12))
+     .moveTo(X(4),  Y(0)).lineTo(X(5),  Y(7))
+     .stroke({ width: Math.max(1, 1.2 * u), color, alpha: 0.7, cap: 'round' });
+    return;
+  }
+
+  if (o.boxy) { // Iron Construct — box torso, square head + eye slots, thick rect limbs, rivets
     const torsoC = override !== undefined ? override : 0x2a2a2a;
     const rivetC = override !== undefined ? override : 0x6a6a6a;
-    g.rect(X(-7), Y(-30), X(14), X(20)).fill(torsoC);
-    g.rect(X(-5), Y(-42), X(10), X(10)).fill(color);
-    g.moveTo(X(-7), Y(-26)).lineTo(X(-14), Y(-14))
-     .moveTo(X(7), Y(-26)).lineTo(X(14), Y(-14))
-     .moveTo(X(-4), Y(-10)).lineTo(X(-6), Y(0))
-     .moveTo(X(4), Y(-10)).lineTo(X(6), Y(0))
-     .stroke({ width: Math.max(2, 5 * u), color, cap: 'square' });
+    const eyeC   = override !== undefined ? override : 0x1a1a1a;
+    g.rect(X(-13), Y(-28), X(6), X(16)).fill(color);   // 4 thick rectangular limbs
+    g.rect(X(7),   Y(-28), X(6), X(16)).fill(color);   // extending from the box corners
+    g.rect(X(-7),  Y(-12), X(5), X(12)).fill(color);
+    g.rect(X(2),   Y(-12), X(5), X(12)).fill(color);
+    g.rect(X(-7), Y(-30), X(14), X(20)).fill(torsoC);  // filled box torso
+    g.rect(X(-5), Y(-42), X(10), X(10)).fill(color);   // square head
+    g.rect(X(-3.5), Y(-39), X(2.5), X(1.5)).fill(eyeC); // two small rect eye slots
+    g.rect(X(1),    Y(-39), X(2.5), X(1.5)).fill(eyeC);
     for (const [rx, ry] of [[-4, -26], [4, -26], [-4, -16], [4, -16]]) {
       g.circle(X(rx), Y(ry), Math.max(1, 1.2 * u)).fill(rivetC);
     }
@@ -1983,6 +2161,8 @@ function updateEnemyViews(zone) {
     if (!v) { v = makeEnemyView(e, zone); enemyViews.set(e, v); }
     v.c.x = e.x * TILE_W + TILE_W / 2;
     v.c.y = e.y * TILE_H + TILE_H / 2;
+    // Iron Construct stomp — y offset alternates ±2px every 20 frames (render-only)
+    if (e.name === 'Iron Construct') v.c.y += (Math.floor(tick / 20) % 2) ? 2 : -2;
 
     // Wraith Stalker phasing — opacity pulse on body + glows (HP bar stays solid)
     const phaseAlpha = e.behavior === 'phasing' ? 0.25 + 0.6 * Math.abs(Math.sin(tick * 0.03)) : 1;
@@ -2343,7 +2523,7 @@ function updateHUD(zone) {
   hudTexts.zone.text = zone.name;
   hudTexts.recLevel.text = zone.recommendedLevel ? `Recommended Level: ${zone.recommendedLevel}` : '';
 
-  hudTexts.hp.text = `HP: ${player.hp}/${player.maxHp}`;
+  hudTexts.hp.text = `HP: ${Math.ceil(player.hp)}/${player.maxHp}`; // ceil — fractional enemy damage never shows decimals
   hudTexts.gold.text = `GOLD: ${backpack.gold}`;
 
   // Player HP bar — bottom of screen, above joystick area
@@ -2914,7 +3094,7 @@ function renderBonfirePanel() {
   const reduction = homestead.campfire.level * 120; // seconds reduced per level
   el.innerHTML = `
     <div style="color:#888;font-size:11px;margin-bottom:12px;">
-      HP: ${player.hp} / ${player.maxHp}<br>
+      HP: ${Math.ceil(player.hp)} / ${player.maxHp}<br>
       Death Sickness: ${player.deathSickness > 0 ? Math.ceil(player.deathSickness) + 's remaining' : 'None'}<br>
       Campfire level: ${homestead.campfire.level} (reduces sickness by ${reduction / 60} min)
     </div>
@@ -3311,7 +3491,7 @@ function loadGame() {
     if (!raw) return;
     const d = JSON.parse(raw);
     if (d.skills)          Object.assign(player.skills, d.skills);
-    if (d.hp !== undefined) player.hp = d.hp;
+    if (Number.isFinite(d.hp)) player.hp = d.hp; // NaN fix: JSON turns NaN → null, which passed the old !== undefined guard
     if (d.baseStats)       Object.assign(player.baseStats, d.baseStats);
     if (d.equippedBonuses) Object.assign(player.equippedBonuses, d.equippedBonuses);
     if (d.equipped)        Object.assign(player.equipped, d.equipped);
