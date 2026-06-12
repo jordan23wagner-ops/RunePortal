@@ -8,13 +8,11 @@
 
 ## UI / Layout
 
-- **[Low]** Minimap overlaps slightly with death sickness notification — move minimap to top-right of screen
-- **[Low]** Virtual joystick sits too low on left side — nudge up slightly so death sickness notification doesn't cover it
+- *(empty — minimap + joystick fixes shipped with the character art pass patch)*
 
 ## Gameplay Bugs
 
-- **[High]** On death, player respawns in current zone instead of Homestead Bonfire — spec (GDD §15) says respawn at Homestead. Now that Homestead zone exists, respawn should transition player to Homestead zone center.
-- **[Medium]** Player can freely move while a shop/merchant UI is open at the Homestead — movement should be locked when any shop screen is active, unlocked on close.
+- *(empty — respawn + shop movement lock shipped with the character art pass patch)*
 
 ## Loot / Gear
 
@@ -28,6 +26,10 @@
 
 ## Completed (moved from backlog)
 
+- ✅ Minimap moved to top-right, 8px inset; BAG/HOME/DEV buttons + tap zones moved below it (2026-06-11, art pass patch)
+- ✅ Virtual joystick nudged up 40px — clear of death sickness banner (2026-06-11, art pass patch)
+- ✅ Death respawn now fades to Homestead center via existing zone transition (GDD §15) (2026-06-11, art pass patch)
+- ✅ Movement locked while any shop/panel UI is open — transient `player.uiLocked`, never saved (2026-06-11, art pass patch)
 - ✅ Portal proximity label radius bumped 60px → 120px (2026-06-11, PixiJS migration patch)
 - ✅ Death + respawn system (GDD §15)
 - ✅ Zone system — Ashfields, Bleakwood Hollow, Ironbone Flats

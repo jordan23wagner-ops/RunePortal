@@ -427,6 +427,29 @@
 <script>
 /*
 === CHANGELOG ===
+[2026-06-11] — CHARACTER ART PASS (GDD §2, XP Hero style): player placeholder rects
+  replaced with shaped PIXI.Graphics — stick-figure body (#e8d5b0; head, torso, limbs;
+  container origin moved to FEET), helmet dome, chest trapezoid + center seam, leg
+  plates, boots with raised toes, sword (blade/guard/#4a3000 handle). Gear shapes still
+  drawn white + runtime rarity tint — tint logic untouched. Range ring re-anchored to
+  tile center, HP bar above head, aura emits around the torso.
+[2026-06-11] — CHARACTER ART PASS: enemies now per-type humanoid silhouettes via
+  ENEMY_SHAPE_DEFS + drawEnemyShape() — Ashwalker (lean, arm raised, #8b6914), Raider
+  Brute (wide/thick, #5c3317), Bone Collector (skeletal, eye sockets, fingers, #d4c9a8),
+  Hollow Hunter (hunched, oval head, claws, #3d2b1f), Wraith Stalker (wispy, arms to
+  ground, #6a5acd), Iron Construct (boxy, rivets, #4a4a4a), Revenant (+spectral chest
+  plate, #7a7a8a). Rarity now applies as a light cast (RARITY_LIGHT) over type colors;
+  hit flash = white silhouette overlay; heal flash / phasing / boss tints unchanged.
+  Type sizeScales updated to art-pass values (Brute 1.3, Wraith 1.2, Construct 1.15...).
+[2026-06-11] — BACKLOG FIXES (all 4): (1) minimap → top-right 8px inset; BAG/HOME/DEV
+  buttons + touch/click zones moved below it (y 100-166). (2) Joystick nudged up 40px
+  (center VH-110, zone VH-190; HUD HP/GOLD/bar shifted to match) — clears the death
+  sickness banner. (3) Respawn now fades to Homestead CENTER via the existing zone
+  transition (travelToZone/transitionToZone gained an optional arrivalPos override —
+  default arrivals unchanged). (4) Movement locked while ANY panel/shop UI is open:
+  transient player.uiLocked flag wired to all panel open/close paths; B/H/Escape
+  hotkeys still work while locked. uiLocked is NEVER saved — NO localStorage schema
+  change; existing saves load unchanged.
 [2026-06-11] — PIXIJS RENDERER MIGRATION (GDD §3): Canvas 2D fully replaced by PixiJS 8.x
   (CDN UMD, WebGL, devicePixelRatio-aware, transparent bg, resizes with window). Stage
   layers bottom→top: backgroundLayer (zone gradient — TILE GRID REMOVED), worldLayer
@@ -517,9 +540,9 @@ const ZONES = {
     auraColor: null,
     lootMult: 1,
     enemyTypes: [
-      { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b' },
-      { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.25 },
-      { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged' },
+      { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
+      { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
+      { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
     ],
     boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
     dropTable: { rarities:['rare'], legendaryChance:0 },
@@ -540,8 +563,8 @@ const ZONES = {
     lootMult: 2,
     // HP 2x Zone 1 base, damage 1.5x Zone 1 base
     enemyTypes: [
-      { name:'Hollow Hunter',  hp:100, damage:7.5, speed:1.8, attackSpeed:1.4, xp:25, weight:0.6, color:'#7a9a3a' },
-      { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing', sizeScale:0.85 },
+      { name:'Hollow Hunter',  hp:100, damage:7.5, speed:1.8, attackSpeed:1.4, xp:25, weight:0.6, color:'#7a9a3a', sizeScale:1.1 },
+      { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing', sizeScale:1.2 },
     ],
     boss: { name:'The Nightmother', hp:1600, damage:45, speed:1.3, attackSpeed:1.2, xp:500 },
     dropTable: { rarities:['rare','epic'], legendaryChance:0 },
@@ -562,8 +585,8 @@ const ZONES = {
     lootMult: 4,
     // HP 4x Zone 1 base, damage 2.5x Zone 1 base
     enemyTypes: [
-      { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa', sizeScale:1.3 },
-      { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal' },
+      { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa', sizeScale:1.15 },
+      { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal', sizeScale:1.0 },
     ],
     boss: { name:'General Mourne', hp:3200, damage:75, speed:1.1, attackSpeed:1.1, xp:1200 },
     dropTable: { rarities:['rare','epic'], legendaryChance:0.05 },
@@ -737,6 +760,7 @@ const player = {
   hp: 100, maxHp: 100,
   speed: 2,
   isDead: false,
+  uiLocked: false, // transient — movement lock while shop/panel UI open; NEVER saved
   currentZone: 'ashfields', // synced with currentZoneId, persisted in save
   deathSickness: 0, // seconds remaining
   skills: {
@@ -1018,7 +1042,7 @@ function recalcMaxHp() {
 // ═══════════════════════════════════════════════════════════
 //  ZONE TRANSITION
 // ═══════════════════════════════════════════════════════════
-function travelToZone(zoneId) {
+function travelToZone(zoneId, arrivalPos) {
   currentZoneId = zoneId;
   player.currentZone = zoneId;
   const zone = ZONES[zoneId];
@@ -1030,7 +1054,10 @@ function travelToZone(zoneId) {
     enemies = [];
   }
   lootPiles = [];
-  if (zoneId === 'homestead') {
+  if (arrivalPos) {
+    player.x = arrivalPos.x; // explicit arrival override (used by Homestead respawn)
+    player.y = arrivalPos.y;
+  } else if (zoneId === 'homestead') {
     player.x = 14;
     player.y = 27;
   } else {
@@ -1042,14 +1069,14 @@ function travelToZone(zoneId) {
 }
 
 // Fade to black (0.25s), swap zone, fade back in (0.25s) — 0.5s total
-function transitionToZone(zoneId) {
+function transitionToZone(zoneId, arrivalPos) {
   if (zoneFading || zoneId === currentZoneId || !ZONES[zoneId]) return;
   zoneFading = true;
   const fade = document.getElementById('zone-fade');
   fade.style.opacity = '1';
   setTimeout(() => {
     try {
-      travelToZone(zoneId);
+      travelToZone(zoneId, arrivalPos);
     } finally {
       fade.style.opacity = '0';
       setTimeout(() => { zoneFading = false; }, 250);
@@ -1114,9 +1141,14 @@ function triggerDeath() {
 
 function respawnPlayer() {
   player.isDead = false;
-  // Respawn at map center of the current zone
-  player.x = GRID / 2;
-  player.y = GRID / 2;
+  // BACKLOG fix (GDD §15): respawn at the Homestead center via the existing
+  // fade transition. If somehow already there, just snap to center.
+  if (currentZoneId !== 'homestead') {
+    transitionToZone('homestead', { x: GRID / 2, y: GRID / 2 });
+  } else {
+    player.x = GRID / 2;
+    player.y = GRID / 2;
+  }
 
   const sickDur = getDeathSicknessDuration();
   player.deathSickness = sickDur;
@@ -1286,9 +1318,9 @@ function update(dt) {
     floatingTexts.push({ x: player.x, y: player.y - 1, text: '+Bread', timer:0, color:'#fa8' });
   }
 
-  // Movement
+  // Movement — joystick locked while shop/panel UI is open (BACKLOG fix)
   applyKeyboardMovement(dt);
-  if (joystick.touching) {
+  if (!player.uiLocked && joystick.touching) {
     const angle = Math.atan2(joystick.y, joystick.x);
     player.x += Math.cos(angle) * player.speed * dt;
     player.y += Math.sin(angle) * player.speed * dt;
@@ -1543,6 +1575,7 @@ function update(dt) {
 //  Render-only: game logic never reads from anything in this section.
 // ═══════════════════════════════════════════════════════════
 const RARITY_COLORS = { common:0x888888, rare:0x4fc3f7, epic:0xab47bc, legendary:0xff8f00 };
+const RARITY_LIGHT  = { common:0xffffff, rare:0xaad8ff, epic:0xe2b6ff, legendary:0xffcf90 }; // light casts over typed enemy shapes
 const SLOT_BASE_COLORS = { helmet:0x555555, chest:0x333366, legs:0x336633, boots:0x663333, weapon:0xaaaaaa };
 const PORTAL_LABEL_RADIUS = 120; // px — BACKLOG fix (was 60)
 
@@ -1631,26 +1664,65 @@ function onPixiResize() {
   lastZoneRendered = null; // force background + statics rebuild at the new size
 }
 
-// ── PLAYER — layered placeholder container (GDD §2 layer order) ──
+// ── PLAYER — layered shaped container (GDD §2 layer order, XP Hero style)
+//    Origin = character center-bottom (feet). Shapes drawn white where rarity
+//    tint applies at runtime; body drawn in skin tone (sickness tint multiplies).
 function buildPlayerContainer() {
   playerContainer = new PIXI.Container();
 
   rangeRingGfx = new PIXI.Graphics(); // combat range ring sits under the body
   playerContainer.addChild(rangeRingGfx);
 
-  const mk = (x, y, w, h) => {
-    const g = new PIXI.Graphics().rect(x, y, w, h).fill(0xffffff);
-    playerContainer.addChild(g);
-    return g;
-  };
-  playerParts = {
-    body:   mk(-10, -16, 20, 32), // white base 20x32
-    legs:   mk(-10,   4, 20, 12),
-    chest:  mk(-10,  -8, 20, 14),
-    helmet: mk( -8, -16, 16, 10),
-    boots:  mk(-10,   8, 20,  8),
-    weapon: mk( 12, -12,  8, 24), // held right side
-  };
+  const add = g => { playerContainer.addChild(g); return g; };
+
+  // bodySprite — stick figure, always visible, behind all gear
+  const body = new PIXI.Graphics();
+  body.circle(0, -40, 8).fill(0xe8d5b0);            // head
+  body.moveTo(0, -32).lineTo(0, -28)                // neck
+      .moveTo(0, -28).lineTo(0, -10)                // torso
+      .moveTo(0, -26).lineTo(-10, -16)              // left arm
+      .moveTo(0, -26).lineTo(10, -16)               // right arm
+      .moveTo(0, -10).lineTo(-6, 0)                 // left leg
+      .moveTo(0, -10).lineTo(6, 0)                  // right leg
+      .stroke({ width: 2.5, color: 0xe8d5b0, cap: 'round' });
+  add(body);
+
+  // legsSprite — two leg plates (parallelograms)
+  const legs = new PIXI.Graphics();
+  legs.poly([-9, -10, -3, -10, -6, 0, -11, 0]).fill({ color: 0xffffff, alpha: 0.85 });
+  legs.poly([3, -10, 9, -10, 11, 0, 6, 0]).fill({ color: 0xffffff, alpha: 0.85 });
+  add(legs);
+
+  // chestSprite — trapezoid plate, wider at shoulders, + center seam detail
+  const chest = new PIXI.Graphics();
+  chest.poly([-12, -28, 12, -28, 9, -10, -9, -10]).fill({ color: 0xffffff, alpha: 0.85 });
+  chest.moveTo(0, -26).lineTo(0, -12).stroke({ width: 1, color: 0x111111, alpha: 0.4 });
+  add(chest);
+
+  // helmetSprite — dome over the head
+  const helmet = new PIXI.Graphics();
+  helmet.poly([-11, -32, -13, -40, 0, -52, 13, -40, 11, -32])
+        .fill({ color: 0xffffff, alpha: 0.9 })
+        .stroke({ width: 1, color: 0x222222 });
+  add(helmet);
+
+  // bootsSprite — two feet with raised toes (toes point outward)
+  const boots = new PIXI.Graphics();
+  boots.poly([-12, -2, -3, -2, -3, 2, -13, 2]).fill({ color: 0xffffff, alpha: 0.9 });
+  boots.rect(-15, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });   // left raised toe
+  boots.poly([3, -2, 12, -2, 13, 2, 3, 2]).fill({ color: 0xffffff, alpha: 0.9 });
+  boots.rect(12, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });    // right raised toe
+  add(boots);
+
+  // weaponSprite — upward sword at the right hand (handle brown; blade/guard
+  // white so the runtime rarity tint colors them — handle picks up a slight cast)
+  const weapon = new PIXI.Graphics();
+  weapon.poly([14, -30, 17, -20, 14, -10, 11, -20]).fill(0xffffff); // blade diamond
+  weapon.rect(10, -16, 8, 2).fill(0xffffff);                       // guard
+  weapon.rect(13, -14, 2, 6).fill(0x4a3000);                       // handle
+  add(weapon);
+
+  playerParts = { body, legs, chest, helmet, boots, weapon };
   for (const slot of ['legs','chest','helmet','boots','weapon']) playerParts[slot].visible = false;
 
   auraContainer = new PIXI.Container();
@@ -1673,10 +1745,11 @@ function getHighestEquippedRarity() {
 function updatePlayerView() {
   playerContainer.visible = !player.isDead;
   if (player.isDead) return;
+  // Origin is the figure's feet — stand on the bottom edge of the player's tile
   playerContainer.x = player.x * TILE_W + TILE_W / 2;
-  playerContainer.y = player.y * TILE_H + TILE_H / 2;
+  playerContainer.y = player.y * TILE_H + TILE_H;
 
-  // Death sickness tint (was the purple diamond)
+  // Death sickness tint (multiplies the skin tone toward purple)
   playerParts.body.tint = player.deathSickness > 0 ? 0x8844aa : 0xffffff;
 
   // Gear layers: visible when slot filled, tinted by rarity (common = slot base color)
@@ -1690,29 +1763,31 @@ function updatePlayerView() {
     }
   }
 
-  // Combat range ring — dashed ellipse approximated with chord segments
+  // Combat range ring — dashed ellipse, centered on the player's TILE center
+  // (combat distance is measured from player.x/y, not from the feet origin)
   const style = getWeaponStyle();
   const ringColor = style === 'magic' ? 0xaa44ff : style === 'ranged' ? 0x44aaff : 0xff8844;
   const rx = getCombatRange() * TILE_W;
   const ry = getCombatRange() * TILE_H;
+  const ringCy = -TILE_H / 2;
   rangeRingGfx.clear();
   const segs = 36;
   for (let i = 0; i < segs; i += 2) {
     const a0 = (i / segs) * Math.PI * 2;
     const a1 = ((i + 1) / segs) * Math.PI * 2;
-    rangeRingGfx.moveTo(Math.cos(a0) * rx, Math.sin(a0) * ry)
-                .lineTo(Math.cos(a1) * rx, Math.sin(a1) * ry);
+    rangeRingGfx.moveTo(Math.cos(a0) * rx, ringCy + Math.sin(a0) * ry)
+                .lineTo(Math.cos(a1) * rx, ringCy + Math.sin(a1) * ry);
   }
   rangeRingGfx.stroke({ width: 1, color: ringColor, alpha: 0.3 });
 
-  // HP bar above the player
+  // HP bar above the head (helmet apex is -52)
   playerHpBarGfx.clear();
-  playerHpBarGfx.rect(-TILE_W / 2, -TILE_H / 2 - 12, TILE_W, 5).fill(0x333333);
-  playerHpBarGfx.rect(-TILE_W / 2, -TILE_H / 2 - 12, TILE_W * Math.max(0, player.hp / player.maxHp), 5).fill(0xe44444);
+  playerHpBarGfx.rect(-TILE_W / 2, -62, TILE_W, 5).fill(0x333333);
+  playerHpBarGfx.rect(-TILE_W / 2, -62, TILE_W * Math.max(0, player.hp / player.maxHp), 5).fill(0xe44444);
 
   // Red hit sparks when the player takes damage (HP delta — no combat-logic hooks)
   if (prevPlayerHp !== null && player.hp < prevPlayerHp) {
-    spawnSparkFx(playerContainer.x, playerContainer.y, 0xff4444);
+    spawnSparkFx(playerContainer.x, playerContainer.y - 24, 0xff4444);
   }
   prevPlayerHp = player.hp;
 }
@@ -1739,7 +1814,7 @@ function updateAuraParticles() {
     const s = auraPool.pop() || new PIXI.Sprite(circleTexture);
     s.anchor.set(0.5);
     s.x = (Math.random() - 0.5) * 26;
-    s.y = 14 - Math.random() * 8;
+    s.y = -4 - Math.random() * 24; // around the torso (origin = feet)
     s.alpha = 0.5 + Math.random() * 0.35;
     s.scale.set(0.5 + Math.random() * 0.8);
     s.tint = color;
@@ -1748,14 +1823,114 @@ function updateAuraParticles() {
   }
 }
 
-// ── ENEMIES — body rect (rarity tint) + HP bar + rarity glow ──
+// ── ENEMY SILHOUETTES — per-type humanoid shapes (PIXI.Graphics only) ──
+// Drawn in their own type colors; rarity applies as a light tint cast on top
+// (RARITY_LIGHT). Hit flash uses a white overlay copy of the same silhouette.
+// Bosses are drawn white so the existing boss-color/enrage/flash tints apply.
+const ENEMY_SHAPE_DEFS = {
+  'Ashwalker Scavenger': { color: '#8b6914', lw: 2,   lean: 0.26, handR: [12, -34] },          // lean, hunched, arm raised
+  'Raider Brute':        { color: '#5c3317', lw: 4,   torsoLw: 6.5, headR: 11,
+                           handL: [-16, -24], handR: [16, -24], feetSpread: 8 },               // wide, stocky, arms out
+  'Bone Collector':      { color: '#d4c9a8', lw: 1.5, eyes: true, fingers: true,
+                           handL: [-12, -28], handR: [12, -28] },                              // tall, skeletal
+  'Hollow Hunter':       { color: '#3d2b1f', lw: 2.5, lean: 0.44, headOval: true, claws: true },// hunched werewolf
+  'Wraith Stalker':      { color: '#6a5acd', lw: 1.5, headR: 10,
+                           handL: [-7, -2], handR: [7, -2] },                                  // wispy, arms to ground
+  'Iron Construct':      { color: '#4a4a4a', boxy: true },                                     // blocky mechanical
+  'Revenant':            { color: '#7a7a8a', lw: 2.5, chestPlate: true },                      // spectral armor plates
+  '__boss':              { color: '#ffffff', lw: 3.5, headR: 9 },
+};
+
+// Draws a humanoid into g. Origin = container center; total height H (feet at +H/2).
+// override: draw everything in this color (white flash copy / white-drawn bosses).
+function drawEnemyShape(g, name, H, override) {
+  const o = ENEMY_SHAPE_DEFS[name] || {};
+  const color = override !== undefined ? override : hexColor(o.color || '#888888');
+  const u = H / 48;                       // template is 48px tall
+  const X = v => v * u;
+  const Y = v => v * u + H / 2;
+  const lw = Math.max(1, (o.lw || 2.5) * u);
+
+  if (o.boxy) { // Iron Construct — box torso, square head, thick rect limbs, rivets
+    const torsoC = override !== undefined ? override : 0x2a2a2a;
+    const rivetC = override !== undefined ? override : 0x6a6a6a;
+    g.rect(X(-7), Y(-30), X(14), X(20)).fill(torsoC);
+    g.rect(X(-5), Y(-42), X(10), X(10)).fill(color);
+    g.moveTo(X(-7), Y(-26)).lineTo(X(-14), Y(-14))
+     .moveTo(X(7), Y(-26)).lineTo(X(14), Y(-14))
+     .moveTo(X(-4), Y(-10)).lineTo(X(-6), Y(0))
+     .moveTo(X(4), Y(-10)).lineTo(X(6), Y(0))
+     .stroke({ width: Math.max(2, 5 * u), color, cap: 'square' });
+    for (const [rx, ry] of [[-4, -26], [4, -26], [-4, -16], [4, -16]]) {
+      g.circle(X(rx), Y(ry), Math.max(1, 1.2 * u)).fill(rivetC);
+    }
+    return;
+  }
+
+  // Stick-figure template (player proportions), optionally leaned around the hip
+  const lean = o.lean || 0;
+  const rot = (x, y) => {
+    const dx = x, dy = y + 10; // hip at (0,-10)
+    return [dx * Math.cos(lean) - dy * Math.sin(lean),
+            -10 + dx * Math.sin(lean) + dy * Math.cos(lean)];
+  };
+  const headR = (o.headR || 8) * u;
+  const [hcx, hcy] = rot(0, -40);
+  const [ntx, nty] = rot(0, -32);
+  const [nbx, nby] = rot(0, -28);
+  const [shx, shy] = rot(0, -26);
+  const hl = rot(...(o.handL || [-10, -16]));
+  const hr = rot(...(o.handR || [10, -16]));
+  const fs = o.feetSpread || 6;
+
+  // Head (oval hint for Hollow Hunter; eye sockets for Bone Collector)
+  if (o.headOval) g.ellipse(X(hcx), Y(hcy), headR * 0.85, headR * 1.15).fill(color);
+  else g.circle(X(hcx), Y(hcy), headR).fill(color);
+  if (o.eyes && override === undefined) {
+    g.circle(X(hcx) - headR * 0.35, Y(hcy) - headR * 0.1, Math.max(1, headR * 0.18)).fill(0x222222);
+    g.circle(X(hcx) + headR * 0.35, Y(hcy) - headR * 0.1, Math.max(1, headR * 0.18)).fill(0x222222);
+  }
+
+  // Neck, torso, arms, legs
+  g.moveTo(X(ntx), Y(nty)).lineTo(X(nbx), Y(nby))
+   .moveTo(X(nbx), Y(nby)).lineTo(X(0), Y(-10))
+   .moveTo(X(shx), Y(shy)).lineTo(X(hl[0]), Y(hl[1]))
+   .moveTo(X(shx), Y(shy)).lineTo(X(hr[0]), Y(hr[1]))
+   .moveTo(X(0), Y(-10)).lineTo(X(-fs), Y(0))
+   .moveTo(X(0), Y(-10)).lineTo(X(fs), Y(0))
+   .stroke({ width: lw, color, cap: 'round' });
+  if (o.torsoLw) { // Brute: chunky wide torso redraw on top
+    g.moveTo(X(nbx), Y(nby)).lineTo(X(0), Y(-10))
+     .stroke({ width: Math.max(3, o.torsoLw * u), color, cap: 'round' });
+  }
+
+  // Hand details — 3 short fanned lines (fingers/claws)
+  if (o.fingers || o.claws) {
+    const len = (o.claws ? 5 : 4) * u;
+    for (const [hx, hy] of [hl, hr]) {
+      for (let k = -1; k <= 1; k++) {
+        g.moveTo(X(hx), Y(hy)).lineTo(X(hx) + k * len * 0.5, Y(hy) + len);
+      }
+    }
+    g.stroke({ width: Math.max(1, lw * 0.6), color, cap: 'round' });
+  }
+
+  // Revenant — faint spectral chest plate over the torso
+  if (o.chestPlate) {
+    const pc = override !== undefined ? override : 0xaaaaff;
+    g.poly([X(-8), Y(-27), X(8), Y(-27), X(6), Y(-12), X(-6), Y(-12)]).fill({ color: pc, alpha: 0.4 });
+  }
+}
+
+// ── ENEMIES — typed humanoid silhouette + HP bar + rarity glow ──
 function makeEnemyView(e, zone) {
   const c = new PIXI.Container();
   let size = e.isBoss ? TILE_W * 0.7
     : (e.rarity === 'epic' ? TILE_W * 0.45 : e.rarity === 'rare' ? TILE_W * 0.38 : TILE_W * 0.3);
-  // Per-type size scale (brute = larger, stalker = smaller) from zone config
+  // Per-type size scale from zone config (art-pass values)
   const typeDef = (zone.enemyTypes || []).find(t => t.name === e.name);
   if (typeDef && typeDef.sizeScale) size *= typeDef.sizeScale;
+  const H = size * 2; // figure height
 
   // Rarity glow circle behind the body (rare/epic/legendary)
   const glow = new PIXI.Graphics().circle(0, 0, size * 1.5).fill(RARITY_COLORS[e.rarity] || 0x888888);
@@ -1771,8 +1946,18 @@ function makeEnemyView(e, zone) {
     c.addChild(zoneAura);
   }
 
-  const body = new PIXI.Graphics().rect(-size * 0.65, -size * 0.95, size * 1.3, size * 1.9).fill(0xffffff);
+  const body = new PIXI.Graphics();
+  let flashOverlay = null;
+  if (e.isBoss) {
+    drawEnemyShape(body, '__boss', H, 0xffffff); // white-drawn — boss tints color it
+  } else {
+    drawEnemyShape(body, e.name, H);
+    flashOverlay = new PIXI.Graphics();          // white copy shown during hit flash
+    drawEnemyShape(flashOverlay, e.name, H, 0xffffff);
+    flashOverlay.visible = false;
+  }
   c.addChild(body);
+  if (flashOverlay) c.addChild(flashOverlay);
 
   const hpBar = new PIXI.Graphics();
   c.addChild(hpBar);
@@ -1789,7 +1974,7 @@ function makeEnemyView(e, zone) {
   }
 
   enemiesContainer.addChild(c);
-  return { c, body, glow, zoneAura, hpBar, size, lastHp: e.hp, healFlash: 0 };
+  return { c, body, flashOverlay, glow, zoneAura, hpBar, size, lastHp: e.hp, healFlash: 0 };
 }
 
 function updateEnemyViews(zone) {
@@ -1804,6 +1989,7 @@ function updateEnemyViews(zone) {
     v.body.alpha = phaseAlpha;
     v.glow.alpha = 0.3 * phaseAlpha;
     if (v.zoneAura) v.zoneAura.alpha = 0.22 * phaseAlpha;
+    if (v.flashOverlay) v.flashOverlay.alpha = phaseAlpha;
 
     // HP deltas drive effects — no combat-logic hooks needed
     if (e.hp > v.lastHp) v.healFlash = 18;                       // Revenant self-heal → green pulse
@@ -1811,13 +1997,15 @@ function updateEnemyViews(zone) {
     v.lastHp = e.hp;
     if (v.healFlash > 0) v.healFlash--;
 
-    // Tint priority: hit flash > heal pulse > boss enrage/boss color > rarity color
-    let tint;
-    if (e.flashTimer > 0) tint = 0xffffff;
-    else if (v.healFlash > 0) tint = 0x44ee66;
-    else if (e.isBoss) tint = e.phase === 2 ? 0xff4400 : hexColor(zone.bossColor || '#8B0000');
-    else tint = RARITY_COLORS[e.rarity] || 0x888888;
-    v.body.tint = tint;
+    // Bosses (white-drawn) keep full tint logic; typed humanoids are drawn in their
+    // own colors — rarity applies as a light cast, hit flash via the white overlay
+    if (e.isBoss) {
+      v.body.tint = e.flashTimer > 0 ? 0xffffff
+        : (e.phase === 2 ? 0xff4400 : hexColor(zone.bossColor || '#8B0000'));
+    } else {
+      v.body.tint = v.healFlash > 0 ? 0x44ee66 : (RARITY_LIGHT[e.rarity] || 0xffffff);
+      if (v.flashOverlay) v.flashOverlay.visible = e.flashTimer > 0;
+    }
 
     // HP bar above body — green/amber/red by remaining fraction
     const barW = e.isBoss ? TILE_W : TILE_W / 2;
@@ -2123,16 +2311,17 @@ function buildHUD() {
 function layoutHUD() {
   for (let i = 0; i < 4; i++) hudTexts['stat' + i].position.set(10, 4 + i * 18);
   for (let i = 0; i < 4; i++) hudTexts['lv' + i].position.set(10, 81 + i * 14);
-  hudTexts.bag.position.set(VW - 10, 8);
-  hudTexts.home.position.set(VW - 10, 28);
-  hudTexts.dev.position.set(VW - 10, 48);
+  // BAG/HOME/DEV sit below the top-right minimap (BACKLOG fix: minimap moved)
+  hudTexts.bag.position.set(VW - 10, 106);
+  hudTexts.home.position.set(VW - 10, 126);
+  hudTexts.dev.position.set(VW - 10, 146);
   hudTexts.zone.position.set(VW / 2, 5);
   hudTexts.recLevel.position.set(VW / 2, 20);
-  hudTexts.hp.position.set(10, VH - 131);
-  hudTexts.gold.position.set(10, VH - 116);
-  hudHpBarGfx.position.set(10, VH - 146);
-  joystickGfx.position.set(70, VH - 70);
-  minimapGfx.position.set(VW - 100, VH - 100);
+  hudTexts.hp.position.set(10, VH - 171);
+  hudTexts.gold.position.set(10, VH - 156);
+  hudHpBarGfx.position.set(10, VH - 186);
+  joystickGfx.position.set(70, VH - 110); // nudged up 40px — clears death sickness banner (BACKLOG fix)
+  minimapGfx.position.set(VW - 98, 8);    // top-right, 8px inset (BACKLOG fix)
 }
 
 function updateHUD(zone) {
@@ -2240,10 +2429,12 @@ document.addEventListener('keyup',   e => { keys[e.key] = false; });
 
 function applyKeyboardMovement(dt) {
   const spd = 0.08;
-  if (keys['ArrowUp']    || keys['w'] || keys['W']) player.y -= spd;
-  if (keys['ArrowDown']  || keys['s'] || keys['S']) player.y += spd;
-  if (keys['ArrowLeft']  || keys['a'] || keys['A']) player.x -= spd;
-  if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += spd;
+  if (!player.uiLocked) { // movement locked while shop/panel UI is open (BACKLOG fix)
+    if (keys['ArrowUp']    || keys['w'] || keys['W']) player.y -= spd;
+    if (keys['ArrowDown']  || keys['s'] || keys['S']) player.y += spd;
+    if (keys['ArrowLeft']  || keys['a'] || keys['A']) player.x -= spd;
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += spd;
+  }
   if (keys['b'] || keys['B']) { openPanel('backpack'); delete keys['b']; delete keys['B']; }
   if (keys['h'] || keys['H']) { openPanel('homestead'); delete keys['h']; delete keys['H']; }
   if (keys['Escape']) {
@@ -2257,14 +2448,15 @@ canvas.addEventListener('touchstart', (e) => {
   const t = e.touches[0];
   const rx = t.clientX, ry = t.clientY;
   // Joystick zone
-  if (rx < 150 && ry > VH - 150) {
+  if (rx < 150 && ry > VH - 190) { // joystick zone raised 40px (BACKLOG fix)
     joystick.touching = true;
     joystick.x = rx - 70;
-    joystick.y = ry - (VH - 70);
+    joystick.y = ry - (VH - 110);
   }
-  if (rx > VW - 60 && ry < 30) openPanel('backpack');
-  if (rx > VW - 70 && ry >= 30 && ry < 50) openPanel('homestead');
-  if (rx > VW - 60 && ry >= 50 && ry < 70) openPanel('dev');
+  // BAG/HOME/DEV tap zones moved below the top-right minimap (BACKLOG fix)
+  if (rx > VW - 60 && ry >= 100 && ry < 124) openPanel('backpack');
+  if (rx > VW - 70 && ry >= 124 && ry < 144) openPanel('homestead');
+  if (rx > VW - 60 && ry >= 144 && ry < 166) openPanel('dev');
 }, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
@@ -2272,7 +2464,7 @@ canvas.addEventListener('touchmove', (e) => {
   if (!joystick.touching) return;
   const t = e.touches[0];
   joystick.x = t.clientX - 70;
-  joystick.y = t.clientY - (VH - 70);
+  joystick.y = t.clientY - (VH - 110); // joystick raised 40px (BACKLOG fix)
   const len = Math.hypot(joystick.x, joystick.y);
   if (len > joystick.radius) {
     joystick.x = (joystick.x / len) * joystick.radius;
@@ -2286,9 +2478,10 @@ canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  if (x > VW - 60 && y < 30) openPanel('backpack');
-  if (x > VW - 70 && y >= 30 && y < 50) openPanel('homestead');
-  if (x > VW - 60 && y >= 50 && y < 70) openPanel('dev');
+  // BAG/HOME/DEV click zones moved below the top-right minimap (BACKLOG fix)
+  if (x > VW - 60 && y >= 100 && y < 124) openPanel('backpack');
+  if (x > VW - 70 && y >= 124 && y < 144) openPanel('homestead');
+  if (x > VW - 60 && y >= 144 && y < 166) openPanel('dev');
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -2312,6 +2505,7 @@ function openPanel(which) {
     canvas.style.pointerEvents = 'none';
   }
   anyPanelOpen = true;
+  player.uiLocked = true; // BACKLOG fix: block movement while UI is open
 }
 
 function closePanel(which) {
@@ -2323,6 +2517,7 @@ function closePanel(which) {
     'watchtowerPanel','strGuildPanel','rngGuildPanel','mgeGuildPanel'];
   const stillOpen = allPanelIds.some(id => document.getElementById(id).classList.contains('open'));
   anyPanelOpen = stillOpen;
+  player.uiLocked = stillOpen; // BACKLOG fix: unlock movement when all panels closed
   if (!stillOpen) canvas.style.pointerEvents = 'auto';
   hideTooltip();
 }
@@ -2570,6 +2765,7 @@ function openBuildingPanel(id) {
   document.getElementById(panelId).classList.add('open');
   canvas.style.pointerEvents = 'none';
   anyPanelOpen = true;
+  player.uiLocked = true; // BACKLOG fix: block movement while shop UI is open
   // Render content
   if (id === 'forge')      renderForgePanel();
   else if (id === 'bonfire')    renderBonfirePanel();
@@ -2586,6 +2782,7 @@ function closeBuildingPanel(id) {
   const allPanelIds = ['backpackPanel','homesteadPanel','devPanel', ...Object.values(BUILDING_PANEL_IDS)];
   const stillOpen = allPanelIds.some(pid => document.getElementById(pid).classList.contains('open'));
   anyPanelOpen = stillOpen;
+  player.uiLocked = stillOpen; // BACKLOG fix: unlock movement when all panels closed
   if (!stillOpen) canvas.style.pointerEvents = 'auto';
   // Nudge player away from door so panel doesn't immediately reopen
   player.y += 1.5;
