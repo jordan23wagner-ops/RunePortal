@@ -37,6 +37,7 @@ player = {
     hp: 100, maxHp: 100,  // maxHp derived: 50 + vigor*5 (halved during death sickness)
     speed: 2,
     isDead: false,        // ⚠️ renamed from `dead` 2026-06-11 — persisted in save
+    uiLocked: false,      // transient movement lock while shop/panel UI open — NEVER saved (added 2026-06-11)
     currentZone: 'ashfields', // ⚠️ added 2026-06-11 — synced with currentZoneId, persisted in save
     deathSickness: 0,     // seconds remaining
     skills: {
@@ -117,17 +118,18 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 | Close button on backpack | ✅ Built | — |
 | Stat rename (ATK→DEX, DEF→VIG, +INT) | ✅ Built | Confirmed in phase4 (2026-06-11) |
 | Save state (localStorage) | ✅ Built | Confirmed in phase4 — 10s auto-save (2026-06-11) |
-| Player death + respawn (GDD §15) | ✅ Built | 2026-06-11 — drops all equipped standard gear (5 min despawn pile), 50% gold tax, death summary + RESPAWN, respawn at map center, death sickness retained |
+| Player death + respawn (GDD §15) | ✅ Built | 2026-06-11 — drops all equipped standard gear (5 min despawn pile), 50% gold tax, death summary + RESPAWN, respawns at HOMESTEAD CENTER via fade transition (backlog fix 2026-06-11), death sickness retained |
 | Untradable armor stub | ✅ Built | `player.untradableArmor = {equipped:false, broken:false}` — stub only, never drops |
 | Zone system (GDD §9/§10) | ✅ Built | 2026-06-11 — Ashfields (Lv1-5), Bleakwood Hollow (Lv5-10), Ironbone Flats (Lv10-20) + Homestead hub. Per-zone enemyTypes config, named bosses (The Warden / The Nightmother / General Mourne), rarity multipliers, zone dropTables, 0.5s fade transitions, portal proximity labels, HUD zone name + rec. level |
 | Legendary rarity tier | ✅ Built | Orange #ff8f00, 5% drop in Ironbone Flats, 2x epic stats, 500g sell — generated from epic bases (no GEAR_DB entries yet) |
-| PixiJS renderer (GDD §3) | ✅ Built | 2026-06-11 — full Canvas 2D → PixiJS 8.x swap. 4-layer stage (bg gradient / world / particles / ui+HUD); layered player container (5 gear layers tint by rarity + aura particles); enemy containers (rarity tint, HP bar, glow, phasing/heal-flash kept); hit sparks; loot shapes + labels; portal labels at 120px; HUD rebuilt in Pixi at same coords (it was canvas-drawn, NOT HTML); PIXI ticker = the single loop. Placeholder shapes — real art pending |
+| PixiJS renderer (GDD §3) | ✅ Built | 2026-06-11 — full Canvas 2D → PixiJS 8.x swap. 4-layer stage (bg gradient / world / particles / ui+HUD); layered player container (5 gear layers tint by rarity + aura particles); enemy containers (rarity tint, HP bar, glow, phasing/heal-flash kept); hit sparks; loot shapes + labels; portal labels at 120px; HUD rebuilt in Pixi (it was canvas-drawn, NOT HTML); PIXI ticker = the single loop |
+| Character art pass (GDD §2, XP Hero style) | ✅ Built | 2026-06-11 — player stick figure (origin at feet) with shaped gear: helmet dome, chest trapezoid, leg plates, boots, sword; gear still white-drawn + rarity-tinted. Enemies: per-type humanoid silhouettes (ENEMY_SHAPE_DEFS — Ashwalker/Brute/Bone Collector/Hollow Hunter/Wraith/Construct/Revenant), rarity as light cast over type colors, hit flash = white overlay. All PIXI.Graphics, no PNGs — real art still pending (Open Q #5) |
 
 ---
 
 ## Features: Next In Queue (priority order)
 
-1. ~~**Player death + respawn**~~ ✅ DONE 2026-06-11 (respawns at map center of current zone — move to Homestead Bonfire when bonfire respawn point is built)
+1. ~~**Player death + respawn**~~ ✅ DONE 2026-06-11 (respawns at Homestead center via fade transition since the 2026-06-11 backlog fix — snap to the Bonfire itself when the bonfire respawn point visual is built)
    - ✅ Drop equipped standard gear at death location, 5 min despawn timer
    - ✅ 50% gold tax on death (round down, no recovery)
    - ✅ Death summary screen with RESPAWN button
@@ -173,7 +175,9 @@ localStorage.setItem('runeportal_save', JSON.stringify({
 
 | Element | Location | Notes |
 |---------|----------|-------|
-| BAG button | Top-right | Opens backpack overlay |
+| Minimap | Top-right, 8px inset (PixiJS) | Moved from bottom-right 2026-06-11 (backlog fix) |
+| BAG/HOME/DEV buttons | Right edge, below minimap (y 106/126/146; tap zones y 100–166) | Moved from top-right corner 2026-06-11 to make room for the minimap |
+| Virtual joystick | Bottom-left, center (70, VH-110) | Nudged up 40px 2026-06-11 (backlog fix) — clears death sickness banner; HUD HP/GOLD/bar shifted to match |
 | Backpack overlay | Full screen | Dark slate #1a1a2e, gold accents #e8c97a |
 | BACKPACK tab | Backpack panel | Item grid |
 | EQUIPMENT tab | Backpack panel | 5 gear slots |
