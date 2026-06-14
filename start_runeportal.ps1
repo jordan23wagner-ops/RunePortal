@@ -1,6 +1,6 @@
-ï»¿# RunePortal Dev Startup â€” syncs repo, runs studio + token tracker
+# RunePortal Dev Startup — syncs repo, runs studio + token tracker
 $repoPath = "C:\Users\Jordon\OneDrive\Desktop"
-$studioScript = "$repoPath\runeportal_studio.py"
+$studioScript = "C:\Users\Jordon\runeportal_studio.py"
 $trackerScript = "C:\Users\Jordon\token_tracker.ps1"
 
 Set-Location $repoPath
@@ -10,7 +10,7 @@ git pull origin main 2>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Repo synced" -ForegroundColor Green
 } else {
-    Write-Host "Git pull failed â€” proceeding locally" -ForegroundColor Yellow
+    Write-Host "Git pull failed — proceeding locally" -ForegroundColor Yellow
 }
 
 Write-Host "`nReading SESSION_STATE (CONTEXT.md)..." -ForegroundColor Cyan
