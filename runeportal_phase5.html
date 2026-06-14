@@ -167,14 +167,15 @@
 
   /* Backpack + Dev full-screen overlays */
   #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel, #merchant-panel,
-  #shrine-panel, #guild-panel {
+  #shrine-panel, #guild-panel, #garden-panel, #campfire-panel {
     display:none; position:fixed; inset:0; z-index:100;
     background:rgba(26,26,46,0.97); color:#ccc; font-family:'Courier New',monospace;
     flex-direction:column; padding:14px; overflow-y:auto;
   }
   #backpack-overlay.open, #dev-overlay.open,
   #storage-panel.open, #forge-panel.open,
-  #merchant-panel.open, #shrine-panel.open, #guild-panel.open { display:flex; }
+  #merchant-panel.open, #shrine-panel.open, #guild-panel.open,
+  #garden-panel.open, #campfire-panel.open { display:flex; }
   .stc-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
     background:#1a2a1a; color:#44cc44; border:1px solid #44cc44; border-radius:3px; cursor:pointer; }
   .use-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
@@ -201,6 +202,19 @@
   .guild-stat-val{color:#ccc;font:22px monospace;margin-bottom:4px;}
   .guild-cost{color:#aa88ff;font:10px monospace;margin-bottom:10px;}
   .guild-train-btn{min-height:36px;width:100%;font:10px monospace;border-radius:3px;border:1px solid #aa88ff;background:#0a0a1a;color:#aa88ff;cursor:pointer;}
+  .garden-plot{background:#111a0a;border:1px solid #2a3a1a;border-radius:6px;padding:10px;text-align:center;display:flex;flex-direction:column;min-height:130px;}
+  .garden-plot.growing{border-color:#5a7a2a;} .garden-plot.ready{border-color:#44cc44;}
+  .gp-name{font:12px monospace;font-weight:bold;margin-bottom:4px;}
+  .gp-status{font:10px monospace;color:#888;flex:1;margin-bottom:6px;line-height:1.4;}
+  .gp-btn{min-height:28px;width:100%;font:9px monospace;border-radius:3px;cursor:pointer;border:1px solid;margin-top:2px;}
+  .gp-plant-btn{color:#44cc44;background:#0a1a0a;border-color:#44cc44;}
+  .gp-collect-btn{color:#ffdd44;background:#1a1800;border-color:#ffdd44;}
+  .gp-select{width:100%;background:#0a1a0a;color:#44cc44;border:1px solid #2a4a1a;border-radius:3px;font:9px monospace;padding:3px;margin-bottom:4px;}
+  .cf-section{background:#15150a;border:1px solid #3a2a0a;border-radius:6px;padding:12px;margin-bottom:10px;}
+  .cf-section-title{color:#ff9944;font:11px monospace;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;font-weight:bold;}
+  .cf-rest-btn{min-height:44px;width:100%;font:12px monospace;letter-spacing:2px;border-radius:4px;border:2px solid #44cc44;background:#0a1a0a;color:#44cc44;cursor:pointer;margin-top:8px;}
+  .cf-rested-btn{min-height:34px;width:100%;font:10px monospace;border-radius:3px;border:1px solid #44aaff;background:#0a0a1a;color:#44aaff;cursor:pointer;margin-top:6px;}
+  .cf-buff-row{padding:4px 0;border-bottom:1px solid #1e1e20;font:11px monospace;}
   .bp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .bp-gold { color:#e8c97a; font-size:15px; letter-spacing:1px; }
   .bp-close { background:#333; color:#e8c97a; border:1px solid #e8c97a; border-radius:4px;
@@ -336,6 +350,27 @@
       </div>
     </div>
     <div id="guild-train-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px"></div>
+  </div>
+  <div id="garden-panel">
+    <div class="bp-header">
+      <div>
+        <span style="color:#44cc44;font:13px monospace;letter-spacing:2px">GARDEN</span>
+        <span style="color:#888;font:11px monospace;margin-left:10px">Tend the Land</span>
+      </div>
+      <button class="bp-close" onclick="closeGardenUI()">&#10005;</button>
+    </div>
+    <div id="garden-plot-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px"></div>
+    <div id="garden-seed-summary" style="color:#666;font:10px monospace;padding-top:8px;border-top:1px solid #222"></div>
+  </div>
+  <div id="campfire-panel">
+    <div class="bp-header">
+      <div>
+        <span style="color:#ff9944;font:13px monospace;letter-spacing:2px">CAMPFIRE</span>
+        <span style="color:#888;font:11px monospace;margin-left:10px">Rest &amp; Recover</span>
+      </div>
+      <button class="bp-close" onclick="closeCampfireUI()">&#10005;</button>
+    </div>
+    <div id="campfire-content"></div>
   </div>
   <div id="backpack-overlay">
     <div class="bp-header">
@@ -668,7 +703,11 @@
     { id:'leather_scraps',name:'Leather Scraps',rarity:'common',   dropFrom:[] },
     { id:'iron_bar', name:'Iron Bar', rarity:'common', dropFrom:[] },
     { id:'bog_ingot', name:'Bog Ingot', rarity:'rare', dropFrom:[] },
-    { id:'void_crystal', name:'Void Crystal', rarity:'epic', dropFrom:[] },
+    { id:'void_crystal', name:'Void Crystal', rarity:'epic',   dropFrom:[] },
+    { id:'herb_seed',    name:'Herb Seed',    rarity:'common',   dropFrom:[] },
+    { id:'root_seed',    name:'Root Seed',    rarity:'common',   dropFrom:[] },
+    { id:'runic_seed',   name:'Runic Seed',   rarity:'uncommon', dropFrom:[] },
+    { id:'void_seed',    name:'Void Seed',    rarity:'rare',     dropFrom:[] },
   ];
 
   const MERCHANT_STOCK = [
@@ -680,6 +719,10 @@
     { name:'Traveler Boots',   type:'boots',   slot:'boots',   rarity:'common', cost:80,  stats:{vig:2} },
     { name:'Worn Shortbow',    type:'weapon',  slot:'weapon',  rarity:'common', cost:90,  weaponStyle:'ranged', stats:{dex:3} },
     { name:'Apprentice Staff', type:'weapon',  slot:'weapon',  rarity:'common', cost:90,  weaponStyle:'magic',  stats:{int:3} },
+    { name:'Herb Seed',  type:'material', rarity:'common',   cost:20,  materialKey:'herb_seed',  effect:'Grows: Leather Scraps (30 min)' },
+    { name:'Root Seed',  type:'material', rarity:'common',   cost:45,  materialKey:'root_seed',  effect:'Grows: Iron Ingot (1 hr)' },
+    { name:'Runic Seed', type:'material', rarity:'uncommon', cost:120, materialKey:'runic_seed', effect:'Grows: Runic Dust (2 hr)' },
+    { name:'Void Seed',  type:'material', rarity:'rare',     cost:400, materialKey:'void_seed',  effect:'Grows: Void Shard (6 hr)' },
   ];
 
   const MAT_KEY = {
@@ -726,6 +769,15 @@
   const STAT_LABEL = { strength:'STR', dexterity:'DEX', vigor:'VIG', intelligence:'INT' };
   const STAT_DESC  = { strength:'Melee damage', dexterity:'Attack speed & ranged', vigor:'+10 max HP per rank', intelligence:'Magic damage' };
 
+  const GARDEN_CROPS = [
+    { id:'herb_seed',  name:'Herb Seed',  yield:{ item:'Leather Scraps', matKey:'leather_scraps', qty:[2,4] }, growTime:30*60*1000,   seedCost:{gold:20}  },
+    { id:'root_seed',  name:'Root Seed',  yield:{ item:'Iron Ingot',     matKey:'iron_ingot',     qty:[1,3] }, growTime:60*60*1000,   seedCost:{gold:45}  },
+    { id:'runic_seed', name:'Runic Seed', yield:{ item:'Runic Dust',     matKey:'runic_dust',     qty:[1,2] }, growTime:2*60*60*1000, seedCost:{gold:120} },
+    { id:'void_seed',  name:'Void Seed',  yield:{ item:'Void Shard',     matKey:'void_shard',     qty:[1,1] }, growTime:6*60*60*1000, seedCost:{gold:400} },
+  ];
+
+  const RESTED_BUFF = { id:'rested', name:'Rested Bonus', effect:'+10% XP gain', duration:10*60*1000, statMod:{ xpMult:1.10 } };
+
   // ═══════════════════════════════════════════════════════════
   //  GAME STATE  (player schema verbatim — ⚠️ no changes; loads phase4 saves)
   // ═══════════════════════════════════════════════════════════
@@ -754,7 +806,7 @@
   };
   const backpack = {
     items: [], food: [],
-    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0, runic_dust:0, iron_ingot:0, leather_scraps:0 },
+    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0, runic_dust:0, iron_ingot:0, leather_scraps:0, herb_seed:0, root_seed:0, runic_seed:0, void_seed:0 },
     gold: 0
   };
   // Minimal homestead/guild state (levels stay 0 this session — no panels to raise them)
@@ -767,7 +819,9 @@
     mge_guild:{level:0,maxLevel:5,claimed:[]},
   };
   let craftQueue = [];
-  let gardenPlot = { growing:false, herb:null, startTime:0, duration:120 };
+  let gardenPlot = { growing:false, herb:null, startTime:0, duration:120 }; // legacy stub
+  let gardenPlots = Array.from({length:6}, (_, i) => ({slotId:i, cropId:null, plantedAt:null}));
+  let restedBonusClaimed = false;
   let shrineBuff = { active:false, endTime:0, label:'' };
 
   let enemies = [];
@@ -1258,6 +1312,7 @@
     const zone = ZONES[zoneId];
     if (!zone.isSafe) spawnEnemies(); else enemies = [];
     lootPiles = []; playerNearMerchant = false;
+    if (zoneId === 'homestead') restedBonusClaimed = false;
     if (arrivalPos) { player.x = arrivalPos.x; player.y = arrivalPos.y; }
     else if (zoneId === 'homestead') { player.x = 50; player.y = 53; }
     else { player.x = GRID/2; player.y = GRID/2; }
@@ -1305,6 +1360,7 @@
         deathSickness: player.deathSickness, gold: backpack.gold, items: backpack.items,
         food: backpack.food, materials: backpack.materials, homestead: homestead,
         guilds: guilds, craftQueue: craftQueue, gardenPlot: gardenPlot,
+        gardenPlots: gardenPlots,
         shrineBuff: shrineBuff, currentZone: currentZoneId,
         discoveredWaypoints: discoveredWaypoints,
         totalXP: player.totalXP,
@@ -1342,6 +1398,7 @@
       if (d.guilds)    Object.keys(guilds).forEach(k => { if (d.guilds[k]) Object.assign(guilds[k], d.guilds[k]); });
       if (d.craftQueue) craftQueue = d.craftQueue;
       if (d.gardenPlot) Object.assign(gardenPlot, d.gardenPlot);
+      if (Array.isArray(d.gardenPlots)) gardenPlots = d.gardenPlots;
       if (d.shrineBuff) Object.assign(shrineBuff, d.shrineBuff);
       if (d.currentZone && ZONES[d.currentZone]) { currentZoneId = d.currentZone; player.currentZone = d.currentZone; }
       if (Array.isArray(d.discoveredWaypoints)) discoveredWaypoints = d.discoveredWaypoints;
@@ -1864,7 +1921,9 @@
       if (nearBuilding && nearBuilding.key === 'shrine')    openShrineUI();
       if (nearBuilding && nearBuilding.key === 'str_guild') openGuildUI('str_guild');
       if (nearBuilding && nearBuilding.key === 'rng_guild') openGuildUI('rng_guild');
-      if (nearBuilding && nearBuilding.key === 'mge_guild') openGuildUI('mge_guild'); } }
+      if (nearBuilding && nearBuilding.key === 'mge_guild') openGuildUI('mge_guild');
+      if (nearBuilding && nearBuilding.key === 'campfire')  openCampfireUI();
+      if (nearBuilding && nearBuilding.key === 'garden')    openGardenUI(); } }
     else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
     else if (e.code === 'Escape') {
       document.getElementById('backpack-overlay').classList.remove('open');
@@ -1874,6 +1933,8 @@
       document.getElementById('merchant-panel').classList.remove('open');
       document.getElementById('shrine-panel').classList.remove('open');
       document.getElementById('guild-panel').classList.remove('open');
+      document.getElementById('garden-panel').classList.remove('open');
+      document.getElementById('campfire-panel').classList.remove('open');
       storageOpen = false;
       syncPanelState();
     }
@@ -2037,8 +2098,9 @@
             if (weaponStyle === 'magic')  player.skills.xp.intelligence += xpGain;
             player.skills.xp.vigor += xpGain * 0.5;
             const _prevLvl = levelFromXP(player.totalXP);
-            player.totalXP += xpGain;
-            player.trainingXP += Math.floor(xpGain * 0.6);
+            const _xm = getBuffMult('xpMult');
+            player.totalXP += Math.round(xpGain * _xm);
+            player.trainingXP += Math.floor(xpGain * 0.6 * _xm);
             if (levelFromXP(player.totalXP) > _prevLvl) showToast('Level Up! Now level ' + levelFromXP(player.totalXP) + '!');
             showHitSplat(toWorldX(e.x), toWorldZ(e.y) - 0.5, '+' + xpGain + ' XP', '#44dddd');
             dropLootFromEnemy(e);
@@ -2298,7 +2360,9 @@
               || document.getElementById('forge-panel').classList.contains('open')
               || document.getElementById('merchant-panel').classList.contains('open')
               || document.getElementById('shrine-panel').classList.contains('open')
-              || document.getElementById('guild-panel').classList.contains('open');
+              || document.getElementById('guild-panel').classList.contains('open')
+              || document.getElementById('garden-panel').classList.contains('open')
+              || document.getElementById('campfire-panel').classList.contains('open');
     anyPanelOpen = open;
     player.uiLocked = open;
   }
@@ -2410,9 +2474,167 @@
   }
 
   // ── SHRINE ─────────────────────────────────────────────────────
+  // ── GARDEN ──────────────────────────────────────────────────────
+  function openGardenUI() {
+    document.getElementById('garden-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderGarden();
+  }
+  function closeGardenUI() {
+    document.getElementById('garden-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function formatGrowTime(ms) {
+    const s = Math.ceil(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60), rs = s % 60;
+    if (m < 60) return m + 'm ' + rs.toString().padStart(2,'0') + 's';
+    const h = Math.floor(m / 60), rm = m % 60;
+    return h + 'h ' + rm.toString().padStart(2,'0') + 'm';
+  }
+  function renderGarden() {
+    const grid = document.getElementById('garden-plot-grid'); grid.innerHTML = '';
+    const now = Date.now();
+    gardenPlots.forEach((plot, slotIdx) => {
+      const card = document.createElement('div');
+      if (!plot.cropId) {
+        card.className = 'garden-plot';
+        const avail = GARDEN_CROPS.filter(c => (backpack.materials[c.id] || 0) > 0);
+        const opts = avail.map(s => '<option value="' + s.id + '">' + s.name + ' (' + (backpack.materials[s.id]||0) + ')</option>').join('');
+        card.innerHTML = '<div class="gp-name" style="color:#555">— Empty —</div>'
+          + '<div class="gp-status">Plant a seed to start growing</div>'
+          + (avail.length
+            ? '<select class="gp-select" id="gpsel' + slotIdx + '">' + opts + '</select>'
+              + '<button class="gp-btn gp-plant-btn" onclick="plantSeed(' + slotIdx + ',\'gpsel' + slotIdx + '\')">Plant</button>'
+            : '<div style="color:#444;font:9px monospace;margin-top:4px">No seeds — buy from Merchant</div>');
+      } else {
+        const crop = GARDEN_CROPS.find(c => c.id === plot.cropId);
+        if (!crop) { gardenPlots[slotIdx] = {slotId:slotIdx,cropId:null,plantedAt:null}; return; }
+        const elapsed = now - plot.plantedAt;
+        const ready = elapsed >= crop.growTime;
+        card.className = 'garden-plot ' + (ready ? 'ready' : 'growing');
+        const label = crop.name.replace(' Seed', '');
+        if (ready) {
+          card.innerHTML = '<div class="gp-name" style="color:#44cc44">' + label + ' ✓</div>'
+            + '<div class="gp-status" style="color:#44cc44">Ready to collect!<br><span style="color:#888">' + crop.yield.item + ' ×' + crop.yield.qty[0] + '–' + crop.yield.qty[1] + '</span></div>'
+            + '<button class="gp-btn gp-collect-btn" onclick="collectPlot(' + slotIdx + ')">Collect</button>';
+        } else {
+          const rem = crop.growTime - elapsed;
+          card.innerHTML = '<div class="gp-name" style="color:#aabb88">' + label + '</div>'
+            + '<div class="gp-status">Ready in<br>' + formatGrowTime(rem) + '</div>';
+        }
+      }
+      grid.appendChild(card);
+    });
+    const sumEl = document.getElementById('garden-seed-summary');
+    sumEl.innerHTML = 'Seeds in stock: ' + GARDEN_CROPS.map(c =>
+      '<span style="color:' + ((backpack.materials[c.id]||0) > 0 ? '#aabb88' : '#444') + '">' + c.name.replace(' Seed','') + ' ×' + (backpack.materials[c.id]||0) + '</span>'
+    ).join(' <span style="color:#333">|</span> ');
+  }
+  function plantSeed(slotId, selectId) {
+    const sel = document.getElementById(selectId);
+    const cropId = sel ? sel.value : null; if (!cropId) return;
+    if ((backpack.materials[cropId] || 0) < 1) { showToast('No seeds of that type'); return; }
+    backpack.materials[cropId]--;
+    gardenPlots[slotId] = { slotId, cropId, plantedAt: Date.now() };
+    saveGame(); renderGarden();
+    const crop = GARDEN_CROPS.find(c => c.id === cropId);
+    showToast((crop ? crop.name : cropId) + ' planted!');
+  }
+  function collectPlot(slotId) {
+    const plot = gardenPlots[slotId]; if (!plot || !plot.cropId) return;
+    const crop = GARDEN_CROPS.find(c => c.id === plot.cropId); if (!crop) return;
+    if (Date.now() - plot.plantedAt < crop.growTime) { showToast('Not ready yet!'); return; }
+    const qty = crop.yield.qty[0] + Math.floor(Math.random() * (crop.yield.qty[1] - crop.yield.qty[0] + 1));
+    backpack.materials[crop.yield.matKey] = (backpack.materials[crop.yield.matKey] || 0) + qty;
+    gardenPlots[slotId] = { slotId, cropId:null, plantedAt:null };
+    saveGame(); renderGarden();
+    showToast(qty + '× ' + crop.yield.item + ' collected!');
+  }
+
+  // ── CAMPFIRE (Homestead rest station) ────────────────────────────
+  function openCampfireUI() {
+    document.getElementById('campfire-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderCampfirePanel();
+  }
+  function closeCampfireUI() {
+    document.getElementById('campfire-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function renderCampfirePanel() {
+    const el = document.getElementById('campfire-content'); el.innerHTML = '';
+    const full = Math.ceil(player.hp) >= player.maxHp;
+    const hpSec = document.createElement('div'); hpSec.className = 'cf-section';
+    hpSec.innerHTML = '<div class="cf-section-title">HP Restore</div>'
+      + '<div style="font:13px monospace;color:#e44444">HP: ' + Math.ceil(player.hp) + ' / ' + player.maxHp + '</div>'
+      + '<div style="font:10px monospace;color:#555;margin-top:3px">Cost: Free in Homestead</div>'
+      + '<button class="cf-rest-btn" onclick="restPlayerHP()"'
+      + (full ? ' disabled style="opacity:0.4;cursor:default"' : '') + '>'
+      + (full ? 'HP is full' : 'REST — Restore Full HP') + '</button>';
+    const pots = backpack.items.filter(i => i.name === 'Health Potion');
+    if (pots.length) {
+      hpSec.innerHTML += '<div style="margin-top:10px;font:10px monospace;color:#888">Quick-use a Health Potion '
+        + '<button style="font:9px monospace;color:#44aaff;background:#0a0a1a;border:1px solid #44aaff;border-radius:3px;padding:3px 10px;cursor:pointer" onclick="useHPPotionCampfire()">Use Potion (' + pots.length + ' left)</button></div>';
+    }
+    el.appendChild(hpSec);
+    const restedActive = player.activeBuffs.find(b => b.id === 'rested');
+    const restSec = document.createElement('div'); restSec.className = 'cf-section';
+    restSec.innerHTML = '<div class="cf-section-title">Rested Bonus</div>';
+    if (restedActive) {
+      const rem = Math.max(0, Math.ceil((restedActive.expiresAt - Date.now()) / 1000));
+      const rm = Math.floor(rem/60), rs = rem % 60;
+      restSec.innerHTML += '<div style="color:#44aaff;font:11px monospace">Rested — ' + rm + 'm ' + rs.toString().padStart(2,'0') + 's remaining</div>';
+    } else if (restedBonusClaimed) {
+      restSec.innerHTML += '<div style="color:#444;font:11px monospace">Already claimed this visit — return to claim again</div>';
+    } else {
+      restSec.innerHTML += '<div style="color:#888;font:10px monospace;margin-bottom:4px">+10% XP gain for 10 minutes</div>'
+        + '<button class="cf-rested-btn" onclick="claimRestedBonus()">Claim Rest Bonus</button>';
+    }
+    el.appendChild(restSec);
+    const buffSec = document.createElement('div'); buffSec.className = 'cf-section';
+    buffSec.innerHTML = '<div class="cf-section-title">Active Buffs</div>';
+    if (!player.activeBuffs.length) {
+      buffSec.innerHTML += '<div style="color:#444;font:11px monospace">(none)</div>';
+    } else {
+      player.activeBuffs.forEach(b => {
+        const rem = Math.max(0, Math.ceil((b.expiresAt - Date.now()) / 1000));
+        const rm = Math.floor(rem/60), rs = rem % 60;
+        buffSec.innerHTML += '<div class="cf-buff-row">'
+          + '<span style="color:' + buffColor(b.id) + '">' + b.name + '</span>'
+          + '<span style="color:#555"> — ' + rm + 'm ' + rs.toString().padStart(2,'0') + 's</span></div>';
+      });
+    }
+    el.appendChild(buffSec);
+  }
+  function restPlayerHP() {
+    if (Math.ceil(player.hp) >= player.maxHp) return;
+    player.hp = player.maxHp;
+    showHitSplat(toWorldX(player.x), toWorldZ(player.y), '+' + player.maxHp + ' HP', '#44cc44');
+    showToast('You feel fully restored.');
+    saveGame(); renderCampfirePanel();
+  }
+  function claimRestedBonus() {
+    if (restedBonusClaimed) return;
+    applyBuff(RESTED_BUFF);
+    restedBonusClaimed = true;
+    showToast('Rested Bonus active — +10% XP for 10 min!');
+    renderCampfirePanel();
+  }
+  function useHPPotionCampfire() {
+    const idx = backpack.items.findIndex(i => i.name === 'Health Potion');
+    if (idx === -1) { showToast('No Health Potions'); return; }
+    if (player.hp >= player.maxHp) { showToast('Already at full HP'); return; }
+    player.hp = Math.min(player.maxHp, player.hp + 40);
+    backpack.items.splice(idx, 1);
+    showHitSplat(toWorldX(player.x), toWorldZ(player.y), '+40 HP', '#44cc44');
+    saveGame(); renderCampfirePanel();
+  }
+
   function buffColor(id) {
     const C = { blood_pact:'#cc4444',stone_skin:'#4488cc',swift_step:'#44cc88',
-                hunters_eye:'#cccc44',runic_surge:'#aa44cc',vitality_rite:'#44ccaa' };
+                hunters_eye:'#cccc44',runic_surge:'#aa44cc',vitality_rite:'#44ccaa',
+                rested:'#44aaff' };
     return C[id] || '#888888';
   }
   function openShrineUI() {
