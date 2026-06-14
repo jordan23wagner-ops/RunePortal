@@ -230,6 +230,14 @@
   .bp-item:hover { border-color:#e8c97a; }
   .bp-item.common{color:#ccc;border-color:#555;} .bp-item.uncommon{color:#44cc44;border-color:#44cc44;} .bp-item.rare{color:#4a90d9;border-color:#4a90d9;}
   .bp-item.epic{color:#9b59b6;border-color:#9b59b6;} .bp-item.legendary{color:#ff8f00;border-color:#ff8f00;}
+  @keyframes glow-mythic  { 0%,100%{box-shadow:0 0 3px #cc44ff;} 50%{box-shadow:0 0 10px #cc44ff,0 0 18px #cc44ff44;} }
+  @keyframes glow-ancient { 0%,100%{box-shadow:0 0 3px #ff4444;} 50%{box-shadow:0 0 10px #ff4444,0 0 18px #ff444444;} }
+  @keyframes glow-eternal { 0%,100%{box-shadow:0 0 4px #ffffff;} 50%{box-shadow:0 0 12px #ffffff,0 0 20px #ffffff33;} }
+  @keyframes glow-set     { 0%,100%{box-shadow:0 0 3px #00ffcc;} 50%{box-shadow:0 0 10px #00ffcc,0 0 18px #00ffcc44;} }
+  .bp-item.mythic  {color:#cc44ff;border-color:#cc44ff;animation:glow-mythic  2.0s ease-in-out infinite;}
+  .bp-item.ancient {color:#ff4444;border-color:#ff4444;animation:glow-ancient 2.0s ease-in-out infinite;}
+  .bp-item.eternal {color:#ffffff;border-color:#ffffff;animation:glow-eternal 1.5s ease-in-out infinite;}
+  .bp-item.set     {color:#00ffcc;border-color:#00ffcc;animation:glow-set     2.0s ease-in-out infinite;}
   .bp-item.food{color:#fa8;border-color:#c85;}
   .bp-item-name{font-size:11px;} .bp-item-type{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
   .bp-sell{margin-top:6px;width:100%;min-height:32px;font:10px monospace;color:#111;background:#e8c97a;border:none;border-radius:3px;cursor:pointer;}
@@ -239,7 +247,12 @@
   .bp-slot.filled{border-color:#e8c97a55;}
   .bp-slot.locked{border-color:#33333388;opacity:0.45;}
   .bp-slot-label{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
-  .bp-slot-item{font-size:12px;color:#e8c97a;margin-bottom:8px;} .bp-slot-item.empty{color:#444;}
+  .bp-slot-item{font-size:12px;margin-bottom:8px;} .bp-slot-item.empty{color:#444;}
+  .bp-slot-item.common{color:#cccccc;} .bp-slot-item.uncommon{color:#44cc44;}
+  .bp-slot-item.rare{color:#4a90d9;} .bp-slot-item.epic{color:#9b59b6;}
+  .bp-slot-item.legendary{color:#ff8f00;} .bp-slot-item.mythic{color:#cc44ff;}
+  .bp-slot-item.ancient{color:#ff4444;} .bp-slot-item.eternal{color:#ffffff;}
+  .bp-slot-item.set{color:#00ffcc;}
   .bp-uneq{min-height:32px;padding:5px 12px;font:10px monospace;color:#fff;background:#555;border:none;border-radius:3px;cursor:pointer;}
   .bp-bonus{margin-top:16px;color:#4a90d9;font-size:13px;letter-spacing:1px;}
   #dev-json{background:#0a0a14;border:1px solid #333;border-radius:5px;padding:10px;font:11px monospace;color:#9fd;white-space:pre-wrap;max-height:60vh;overflow:auto;}
@@ -2344,9 +2357,36 @@
   //  equipment / dev / portal labels. No Three.js scene changes.
   // ═══════════════════════════════════════════════════════════
   const STAT_KEYS = [['dexterity','DEX'],['strength','STR'],['vigor','VIG'],['intelligence','INT']];
-  const RARITY_DOT = { common:'#888888', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
-  const RARITY_TEXT = { common:'#cccccc', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
-  const SELL_VALUE = { common:10, uncommon:35, rare:120, epic:300, legendary:500 };
+  const RARITY_DOT  = { common:'#888888', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00',
+    mythic:'#cc44ff', ancient:'#ff4444', eternal:'#ffffff', set:'#00ffcc' };
+  const RARITY_TEXT = { common:'#cccccc', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00',
+    mythic:'#cc44ff', ancient:'#ff4444', eternal:'#ffffff', set:'#00ffcc' };
+  const SELL_VALUE  = { common:10, uncommon:35, rare:120, epic:300, legendary:500,
+    mythic:1200, ancient:3000, eternal:8000, set:2500 };
+
+  const RARITY_TIERS = {
+    common:    { color:'#cccccc', affixCount:[0,0], affixCapMult:1.0,  dropWeight:55,   label:'Common',    glowColor:null },
+    uncommon:  { color:'#44cc44', affixCount:[1,1], affixCapMult:1.3,  dropWeight:28,   label:'Uncommon',  glowColor:null },
+    rare:      { color:'#4a90d9', affixCount:[2,3], affixCapMult:1.8,  dropWeight:12,   label:'Rare',      glowColor:null },
+    epic:      { color:'#9b59b6', affixCount:[2,3], affixCapMult:2.2,  dropWeight:4,    label:'Epic',      glowColor:null },
+    legendary: { color:'#ff8f00', affixCount:[3,4], affixCapMult:2.8,  dropWeight:1,    label:'Legendary', glowColor:null },
+    mythic:    { color:'#cc44ff', affixCount:[4,5], affixCapMult:3.5,  dropWeight:0.4,  label:'Mythic',    glowColor:'#cc44ff' },
+    ancient:   { color:'#ff4444', affixCount:[5,6], affixCapMult:4.5,  dropWeight:0.08, label:'Ancient',   glowColor:'#ff4444' },
+    eternal:   { color:'#ffffff', affixCount:[6,7], affixCapMult:6.0,  dropWeight:0.02, label:'Eternal',   glowColor:'#ffffff',
+                 bonus:'all stats +10% on top of affixes' },
+    set:       { color:'#00ffcc', affixCount:[3,4], affixCapMult:2.5,  dropWeight:0.02, label:'Set',       glowColor:'#00ffcc' },
+  };
+
+  const AFFIX_CAPS = {
+    common:    { stat:[1,3],   pct:[0.01,0.03] },
+    uncommon:  { stat:[2,5],   pct:[0.02,0.05] },
+    rare:      { stat:[4,8],   pct:[0.04,0.08] },
+    legendary: { stat:[7,14],  pct:[0.07,0.14] },
+    mythic:    { stat:[12,20], pct:[0.10,0.18] },
+    ancient:   { stat:[18,30], pct:[0.15,0.25] },
+    eternal:   { stat:[25,40], pct:[0.20,0.35] },
+    set:       { stat:[10,18], pct:[0.08,0.16] },
+  };
   const SELL_TYPE = { weapon:1.5, chest:1.2, helmet:1.2, legs:1.2, boots:1.2, armor:1.2,
     hands:1.1, back:1.1, neck:1.4, ring:1.4, offhand:1.2 };
   function getSellValue(item) {
@@ -2597,6 +2637,44 @@
   }
 
   // ── SHRINE ─────────────────────────────────────────────────────
+  // ── SET SYSTEM ──────────────────────────────────────────────────
+  const SET_DEFINITIONS = [
+    {
+      id:'ashwalker_set', name:"Ashwalker's Set",
+      pieces:['Ashwalker Hood','Ashwalker Coat','Ashwalker Greaves'],
+      bonuses:[
+        { piecesNeeded:2, bonus:'+15% movement speed' },
+        { piecesNeeded:3, bonus:'+25% DEX, immune to slow effects' },
+      ]
+    },
+    {
+      id:'void_sentinel_set', name:'Void Sentinel Set',
+      pieces:['Void Helm','Void Plate','Void Gauntlets','Void Boots'],
+      bonuses:[
+        { piecesNeeded:2, bonus:'+20% damage reduction' },
+        { piecesNeeded:4, bonus:'+40 max HP, +30% STR' },
+      ]
+    },
+    {
+      id:'arcane_focus_set', name:'Arcane Focus Set',
+      pieces:["Seer's Crown","Seer's Robe",'Void Codex'],
+      bonuses:[
+        { piecesNeeded:2, bonus:'+20% magic damage' },
+        { piecesNeeded:3, bonus:'Spells pierce armor, +15 INT' },
+      ]
+    },
+  ];
+  function getActiveSetBonuses(equippedItems) {
+    const results = [];
+    for (const set of SET_DEFINITIONS) {
+      const count = equippedItems.filter(i => set.pieces.includes(i.name)).length;
+      for (const b of set.bonuses) {
+        if (count >= b.piecesNeeded) results.push({ setName: set.name, bonus: b.bonus });
+      }
+    }
+    return results;
+  }
+
   // ── GARDEN ──────────────────────────────────────────────────────
   function openGardenUI() {
     document.getElementById('garden-panel').classList.add('open');
