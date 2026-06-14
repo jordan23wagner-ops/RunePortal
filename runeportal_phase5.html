@@ -185,7 +185,7 @@
   .bp-empty { color:#555; grid-column:1/-1; text-align:center; padding:18px; }
   .bp-item { background:#15152a; border:1px solid #333; border-radius:5px; padding:8px 6px; text-align:center; cursor:pointer; }
   .bp-item:hover { border-color:#e8c97a; }
-  .bp-item.common{color:#ccc;border-color:#555;} .bp-item.rare{color:#4a90d9;border-color:#4a90d9;}
+  .bp-item.common{color:#ccc;border-color:#555;} .bp-item.uncommon{color:#44cc44;border-color:#44cc44;} .bp-item.rare{color:#4a90d9;border-color:#4a90d9;}
   .bp-item.epic{color:#9b59b6;border-color:#9b59b6;} .bp-item.legendary{color:#ff8f00;border-color:#ff8f00;}
   .bp-item.food{color:#fa8;border-color:#c85;}
   .bp-item-name{font-size:11px;} .bp-item-type{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
@@ -437,11 +437,11 @@
       tierName: 'Ashfields', recommendedLevel: '1-5', portalColor: '#e8a05a',
       enemyColor: '#c0392b', bossColor: '#8B0000', auraColor: null, lootMult: 1,
       enemyTypes: [
-        { name:'Ashwalker Scavenger', hp:25,  damage:3,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
-        { name:'Raider Brute',        hp:45,  damage:5,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
-        { name:'Bone Collector',      hp:32,  damage:3,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
+        { name:'Ashwalker Scavenger', hp:15,  damage:3,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
+        { name:'Raider Brute',        hp:27,  damage:5,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
+        { name:'Bone Collector',      hp:19,  damage:3,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
       ],
-      boss: { name:'The Warden', hp:560, damage:21, speed:1.0, attackSpeed:1.0, xp:200 },
+      boss: { name:'The Warden', hp:392, damage:21, speed:1.0, attackSpeed:1.0, xp:200 },
       dropTable: { rarities:['rare'], legendaryChance:0 }, isHome: true, campfirePos: { x:70, y:60 },
       exits: { south: 'homestead', east: 'bleakwood', north: 'rot_flats' }
     },
@@ -648,7 +648,68 @@
   // Visual no-ops this session (combat logic still calls them) ──────────────
   function spawnParticles() {}
   function addScreenShake() {}
-  function spawnAttackVisual() {}
+  function spawnAttackVisual(style, px, py, tx, ty) {
+    const wx = toWorldX(px), wz = toWorldZ(py);
+    const angle = Math.atan2(toWorldZ(ty) - wz, toWorldX(tx) - wx);
+    if (style === 'melee') {
+      const grp = new THREE.Group();
+      const segs = 5, radius = 2.0, spread = Math.PI / 2;
+      for (let i = 0; i < segs; i++) {
+        const a = angle - spread / 2 + (i / (segs - 1)) * spread;
+        const mat = new THREE.MeshLambertMaterial({ color: 0xaaddff, transparent: true, opacity: 0.65, depthWrite: false });
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(radius, 0.05, 0.14), mat);
+        mesh.position.set(wx + Math.cos(a) * radius / 2, 0.3, wz + Math.sin(a) * radius / 2);
+        mesh.rotation.y = -a;
+        grp.add(mesh);
+      }
+      scene.add(grp);
+      projectiles.push({ type: 'melee', mesh: grp, timer: 0, duration: 0.25 });
+    } else if (style === 'ranged') {
+      const mat = new THREE.MeshLambertMaterial({ color: 0xc8902a });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.75), mat);
+      mesh.position.set(wx, 0.85, wz);
+      mesh.rotation.y = -angle;
+      scene.add(mesh);
+      projectiles.push({ type: 'ranged', mesh, timer: 0, vx: Math.cos(angle) * 25, vz: Math.sin(angle) * 25, distTrav: 0, maxDist: 15 });
+    } else {
+      const mat = new THREE.MeshLambertMaterial({ color: 0x9944ff, emissive: new THREE.Color(0x6622cc), emissiveIntensity: 0.9 });
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mat);
+      mesh.position.set(wx, 1.05, wz);
+      const mLight = new THREE.PointLight(0x9944ff, 1.8, 6);
+      mesh.add(mLight);
+      scene.add(mesh);
+      projectiles.push({ type: 'magic', mesh, timer: 0, vx: Math.cos(angle) * 18, vz: Math.sin(angle) * 18, distTrav: 0, maxDist: 20 });
+    }
+  }
+
+  function updateProjectiles(dt) {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i]; p.timer += dt;
+      if (p.type === 'melee') {
+        const fade = Math.max(0, 0.65 * (1 - p.timer / p.duration));
+        p.mesh.traverse(o => { if (o.isMesh) o.material.opacity = fade; });
+        if (p.timer >= p.duration) {
+          scene.remove(p.mesh);
+          p.mesh.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+          projectiles.splice(i, 1);
+        }
+      } else {
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.distTrav += Math.hypot(p.vx, p.vz) * dt;
+        if (p.type === 'magic') {
+          const s = 1 + Math.sin(p.timer * 22) * 0.18;
+          p.mesh.scale.setScalar(s);
+        }
+        if (p.distTrav >= p.maxDist) {
+          if (p.type === 'magic') p.mesh.scale.setScalar(2.5);
+          scene.remove(p.mesh);
+          p.mesh.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+          projectiles.splice(i, 1);
+        }
+      }
+    }
+  }
   function checkCraftQueue() {}
 
   // ═══════════════════════════════════════════════════════════
@@ -687,7 +748,7 @@
   function recalcMaxHp() {
     let vig = getStat('vigor');
     if (!Number.isFinite(vig)) vig = 10;
-    const base = 50 + vig * 5;
+    const base = 50 + vig * 10;
     player.maxHp = player.deathSickness > 0 ? Math.floor(base * 0.5) : base;
     if (!Number.isFinite(player.hp)) player.hp = player.maxHp;
     if (player.hp > player.maxHp) player.hp = player.maxHp;
@@ -1714,7 +1775,10 @@
       const dist = Math.hypot(player.x - e.x, player.y - e.y);
       if (dist < combatRange) {
         if (tick % atkInterval === 0) {
-          const dmg = Math.max(1, Math.floor(combatStat / 5));
+          const _sd = getStat('dexterity'), _ss = getStat('strength'), _si = getStat('intelligence');
+          const dmg = weaponStyle === 'magic'  ? Math.max(1, 1 + Math.floor(_si * 1.0))
+                    : weaponStyle === 'ranged' ? Math.max(1, 1 + Math.floor(_sd * 0.8))
+                    :                            Math.max(1, 1 + Math.floor(_sd * 0.8) + Math.floor(_ss * 0.4));
           e.hp -= dmg; e.flashTimer = 0.12;
           showHitSplat(toWorldX(e.x), toWorldZ(e.y), String(dmg), '#ff5533');
           spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
@@ -1845,8 +1909,8 @@
   //  equipment / dev / portal labels. No Three.js scene changes.
   // ═══════════════════════════════════════════════════════════
   const STAT_KEYS = [['dexterity','DEX'],['strength','STR'],['vigor','VIG'],['intelligence','INT']];
-  const RARITY_DOT = { common:'#888888', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
-  const RARITY_TEXT = { common:'#cccccc', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
+  const RARITY_DOT = { common:'#888888', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
+  const RARITY_TEXT = { common:'#cccccc', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
   const SELL_VALUE = { common:10, rare:50, epic:150, legendary:500 };
   function getSellValue(item) { return SELL_VALUE[item.rarity] || 10; }
 
@@ -1962,9 +2026,11 @@
     for (const slot of ['weapon','helmet','chest','legs','boots']) {
       const it = player.equipped[slot];
       const div = document.createElement('div'); div.className = 'bp-slot' + (it ? ' filled' : '');
+      const _stats = it ? Object.entries(it.statBonus || {}).filter(([,v]) => v > 0).map(([k,v]) => k.slice(0,3).toUpperCase()+' +'+v).join(' · ') : '';
       div.innerHTML = `<div class="bp-slot-label">${slot}</div>`
         + (it ? `<div class="bp-slot-item" style="color:${rarText(it.rarity)}">${it.name}</div>`
-                + `<button class="bp-uneq" onclick="unequipSlot('${slot}')">UNEQUIP</button>`
+              + `<div style="font:9px monospace;margin:3px 0 5px;color:#777">${_stats || '<i style=\'color:#444\'>No affixes</i>'}</div>`
+              + `<button class="bp-uneq" onclick="unequipSlot('${slot}')">UNEQUIP</button>`
               : `<div class="bp-slot-item empty">Empty</div>`);
       slotsEl.appendChild(div);
     }
@@ -2062,6 +2128,7 @@
     update(dt);
     updateCamera();
     syncRender();
+    updateProjectiles(dt);
     updateHUD();
     updateBuildingLabel();
     updateCampfireLabel();
