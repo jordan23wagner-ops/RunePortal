@@ -84,6 +84,30 @@
     display: none; font: 12px monospace; color: #b06ad0; text-shadow: 0 1px 2px #000;
     background: rgba(20,0,30,0.6); padding: 4px 10px; border: 1px solid #5a2a7a; border-radius: 4px;
   }
+  /* ── DANGER BAR ── */
+  #danger-bar {
+    position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; align-items: center; gap: 5px; pointer-events: none;
+  }
+  #db-label {
+    font: 9px/1 monospace; letter-spacing: 2px; color: #7a5a3a;
+    text-shadow: 0 1px 2px #000; text-transform: uppercase;
+  }
+  #db-skull { font-size: 14px; color: #cc2222; text-shadow: 0 1px 3px #000; }
+  #db-outer {
+    position: relative; width: 120px; height: 7px;
+    background: #1e1e1e; border: 1px solid #333; border-radius: 2px;
+  }
+  #db-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: #553300; border-radius: 2px;
+    transition: width 0.4s ease, background 0.4s ease;
+  }
+  #db-pips {
+    position: absolute; inset: 0;
+    display: flex; justify-content: space-around; pointer-events: none;
+  }
+  #db-pips i { width: 1px; background: rgba(0,0,0,0.55); display: block; }
   #death-screen {
     position: fixed; inset: 0; z-index: 40; display: none;
     background: rgba(20, 0, 0, 0.78); color: #e44444; text-align: center;
@@ -177,6 +201,14 @@
 
   <div id="joystick"><div id="joystick-knob"></div></div>
   <div id="hud-zone"></div>
+  <div id="danger-bar">
+    <span id="db-label">DANGER</span>
+    <span id="db-skull">&#9760;</span>
+    <div id="db-outer">
+      <div id="db-fill"></div>
+      <div id="db-pips"><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
   <div id="ui-stats"></div>
   <div id="ui-minimap-wrap"><div id="ui-minimap-label"></div><canvas id="ui-minimap" width="120" height="120"></canvas></div>
   <div id="ui-buttons">
@@ -1540,6 +1572,23 @@
     camera.lookAt(px, 0, pz);
     sun.target.position.set(px, 0, pz); sun.target.updateMatrixWorld();
   }
+  function calcDangerLevel() {
+    var zone = ZONES[currentZoneId];
+    if (!zone || zone.isSafe || !zone.recommendedLevel) return 0;
+    // Zone base danger (floor per zone difficulty tier)
+    var base = currentZoneId === 'ashfields' ? 20 : currentZoneId === 'bleakwood' ? 50 : currentZoneId === 'ironbone' ? 80 : 0;
+    // Depth bonus: distance from zone spawn center adds up to +20
+    var spawnX = GRID / 2, spawnY = GRID / 2;
+    var dist = Math.hypot(player.x - spawnX, player.y - spawnY);
+    var bonus = Math.min(20, (dist / (GRID * 0.7)) * 20);
+    return Math.min(100, Math.round(base + bonus));
+  }
+  function updateDangerBar(level) {
+    var fill = document.getElementById('db-fill');
+    if (!fill) return;
+    fill.style.width = level + '%';
+    fill.style.background = level < 34 ? '#aa4400' : level < 67 ? '#cc5500' : '#dd2200';
+  }
   function updateHUD() {
     const zone = ZONES[currentZoneId];
     document.getElementById('hud-zone').innerHTML = zone.name + (zone.recommendedLevel ? `<small>Recommended Level ${zone.recommendedLevel}</small>` : '<small>Sanctuary</small>');
@@ -1548,6 +1597,7 @@
     document.getElementById('hud-hp-fill').style.width = (hpFrac * 100) + '%';
     updateStatsPanel();
     drawMinimap();
+    updateDangerBar(calcDangerLevel());
     updatePortalLabel();
   }
 
