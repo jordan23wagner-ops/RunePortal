@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>RunePortal — Phase 5 (Three.js scaffold)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  #scene-canvas { display: block; width: 100vw; height: 100vh; }
+
+  /* ── VIRTUAL JOYSTICK (mobile) — bottom-left, touch-safe ──────────────── */
+  #joystick {
+    position: fixed;
+    left: 24px;
+    bottom: 24px;
+    width: 120px;            /* base — well above the 44px min tap target */
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    touch-action: none;      /* stop the browser from scrolling/zooming on drag */
+    z-index: 10;
+    user-select: none;
+  }
+  #joystick-knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    border-radius: 50%;
+    background: rgba(232, 201, 122, 0.55);
+    border: 2px solid rgba(232, 201, 122, 0.9);
+    pointer-events: none;    /* drags are handled on the base */
+  }
+
+  #hud {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    z-index: 10;
+    font: 12px/1.4 monospace;
+    color: #e8c97a;
+    text-shadow: 0 1px 2px #000;
+    pointer-events: none;
+  }
+
+  /* ── PHASE 5B HUD / OVERLAYS (HTML, projected over the WebGL canvas) ──── */
+  #hud-zone {
+    position: fixed; top: 8px; left: 0; right: 0; text-align: center; z-index: 10;
+    font: 15px/1.3 monospace; color: #e8c97a; text-shadow: 0 1px 3px #000;
+    pointer-events: none; letter-spacing: 1px;
+  }
+  #hud-zone small { display:block; font-size: 11px; color: #b9a16a; letter-spacing: 2px; }
+  #hud-stats {
+    position: fixed; top: 10px; left: 12px; z-index: 10; font: 13px/1.5 monospace;
+    color: #e8c97a; text-shadow: 0 1px 2px #000; pointer-events: none;
+  }
+  #hud-stats .gold { color: #e8c97a; }
+  /* ── PLAYER HP BAR (bottom-left, above the joystick) — phase4 style ── */
+  #hud-hpbar { position: fixed; left: 24px; bottom: 150px; z-index: 10; pointer-events: none;
+    font: 13px/1.4 monospace; color: #e44444; text-shadow: 0 1px 2px #000; }
+  #hud-hp-text { margin-bottom: 3px; }
+  #hud-hp-track { width: 140px; height: 10px; background: #333333; border: 1px solid #000; }
+  #hud-hp-fill { height: 100%; width: 100%; background: #e44444; }
+  #enemy-hpbars { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+  .ehp { position: absolute; width: 34px; height: 5px; background: #222; border: 1px solid #000;
+         transform: translate(-50%, -50%); }
+  .ehp > i { display: block; height: 100%; background: #44aa44; }
+
+  #zone-banner {
+    position: fixed; top: 38%; left: 0; right: 0; text-align: center; z-index: 11;
+    font: 26px/1.3 monospace; color: #e8c97a; text-shadow: 0 2px 6px #000;
+    display: none; pointer-events: none; letter-spacing: 2px;
+  }
+  #zone-fade {
+    position: fixed; inset: 0; background: #000; opacity: 0; z-index: 30;
+    transition: opacity 0.25s linear; pointer-events: none;
+  }
+  #sickness-bar {
+    position: fixed; bottom: 160px; left: 50%; transform: translateX(-50%); z-index: 12;
+    display: none; font: 12px monospace; color: #b06ad0; text-shadow: 0 1px 2px #000;
+    background: rgba(20,0,30,0.6); padding: 4px 10px; border: 1px solid #5a2a7a; border-radius: 4px;
+  }
+  #death-screen {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20, 0, 0, 0.78); color: #e44444; text-align: center;
+    flex-direction: column; align-items: center; justify-content: center; font-family: monospace;
+  }
+  #death-screen.show { display: flex; }
+  #death-screen h1 { font-size: 52px; letter-spacing: 8px; margin-bottom: 14px; text-shadow: 0 3px 10px #000; }
+  #death-msg { color: #d8b070; font-size: 15px; margin-bottom: 26px; }
+  #respawn-btn {
+    min-width: 200px; min-height: 48px; font: 18px monospace; letter-spacing: 4px;
+    color: #e8c97a; background: #2a1414; border: 2px solid #e8c97a; border-radius: 6px;
+    cursor: pointer; padding: 10px 28px;
+  }
+  #respawn-btn:active { background: #3a1c1c; }
+
+  /* ════ PHASE 5C — PLAYER UI LAYER (HTML overlays, phase4 palette) ════ */
+  #ui-stats { position: fixed; top: 10px; left: 10px; z-index: 10; font: 11px monospace; pointer-events: none; }
+  #ui-stats .stat-row { margin-bottom: 4px; }
+  #ui-stats .stat-name { color: #e8c97a; font-weight: bold; text-shadow: 0 1px 2px #000; display:block; }
+  #ui-stats .stat-xp { width: 80px; height: 5px; background: #333; margin-top: 1px; }
+  #ui-stats .stat-xp > i { display:block; height:100%; width:0%; background:#e8c97a; }
+
+  #ui-minimap-wrap { position: fixed; top: 10px; right: 10px; z-index: 10; text-align:center; pointer-events:none; }
+  #ui-minimap-label { color:#e8c97a; font:10px monospace; margin-bottom:3px; text-shadow:0 1px 2px #000; letter-spacing:1px; }
+  #ui-minimap { background:#111; border:1px solid #e8c97a; display:block; }
+
+  #ui-buttons { position: fixed; right: 10px; top: 145px; z-index: 11; display:flex; flex-direction:column; gap:6px; }
+  .ui-btn { width:60px; min-height:44px; font:11px monospace; letter-spacing:1px; color:#e8c97a;
+    background:#1a1a1a; border:1px solid #e8c97a; border-radius:3px; cursor:pointer; }
+  .ui-btn:active { background:#2a2a2a; }
+  .ui-btn.wide { width:auto; padding:10px 16px; }
+  .ui-btn.danger { color:#ff7b7b; border-color:#ff7b7b; }
+
+  #portal-label { display:none; position:fixed; bottom:200px; left:50%; transform:translateX(-50%); z-index:14;
+    background:rgba(10,10,10,0.85); color:#e8c97a; border:1px solid #e8c97a; border-radius:8px;
+    padding:10px 20px; font:14px monospace; letter-spacing:1px; cursor:pointer; min-height:44px; }
+
+  /* Backpack + Dev full-screen overlays */
+  #backpack-overlay, #dev-overlay {
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(26,26,46,0.97); color:#ccc; font-family:'Courier New',monospace;
+    flex-direction:column; padding:14px; overflow-y:auto;
+  }
+  #backpack-overlay.open, #dev-overlay.open { display:flex; }
+  .bp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .bp-gold { color:#e8c97a; font-size:15px; letter-spacing:1px; }
+  .bp-close { background:#333; color:#e8c97a; border:1px solid #e8c97a; border-radius:4px;
+    min-width:44px; min-height:44px; font-size:18px; cursor:pointer; }
+  .bp-tabs { display:flex; gap:6px; border-bottom:1px solid #333; padding-bottom:8px; margin-bottom:12px; }
+  .bp-tab { padding:10px 18px; min-height:44px; cursor:pointer; font-size:12px; letter-spacing:1px;
+    color:#666; border:1px solid #333; border-radius:3px; background:#111; }
+  .bp-tab.active { color:#e8c97a; border-color:#e8c97a; background:#1f1f33; }
+  .bp-section-title { color:#888; font-size:11px; letter-spacing:1px; margin:14px 0 6px; text-transform:uppercase; }
+  .bp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+  .bp-empty { color:#555; grid-column:1/-1; text-align:center; padding:18px; }
+  .bp-item { background:#15152a; border:1px solid #333; border-radius:5px; padding:8px 6px; text-align:center; cursor:pointer; }
+  .bp-item:hover { border-color:#e8c97a; }
+  .bp-item.common{color:#ccc;border-color:#555;} .bp-item.rare{color:#4a90d9;border-color:#4a90d9;}
+  .bp-item.epic{color:#9b59b6;border-color:#9b59b6;} .bp-item.legendary{color:#ff8f00;border-color:#ff8f00;}
+  .bp-item.food{color:#fa8;border-color:#c85;}
+  .bp-item-name{font-size:11px;} .bp-item-type{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+  .bp-sell{margin-top:6px;width:100%;min-height:32px;font:10px monospace;color:#111;background:#e8c97a;border:none;border-radius:3px;cursor:pointer;}
+  .bp-mat{font-size:12px;padding:2px 0;}
+  .bp-slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+  .bp-slot{background:#111;border:1px solid #2a2a2a;border-radius:6px;padding:12px 8px;text-align:center;min-height:96px;}
+  .bp-slot.filled{border-color:#e8c97a55;}
+  .bp-slot-label{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .bp-slot-item{font-size:12px;color:#e8c97a;margin-bottom:8px;} .bp-slot-item.empty{color:#444;}
+  .bp-uneq{min-height:32px;padding:5px 12px;font:10px monospace;color:#fff;background:#555;border:none;border-radius:3px;cursor:pointer;}
+  .bp-bonus{margin-top:16px;color:#4a90d9;font-size:13px;letter-spacing:1px;}
+  #dev-json{background:#0a0a14;border:1px solid #333;border-radius:5px;padding:10px;font:11px monospace;color:#9fd;white-space:pre-wrap;max-height:60vh;overflow:auto;}
+  .dev-actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+  <canvas id="scene-canvas"></canvas>
+
+  <div id="joystick"><div id="joystick-knob"></div></div>
+  <div id="hud-zone"></div>
+  <div id="ui-stats"></div>
+  <div id="ui-minimap-wrap"><div id="ui-minimap-label"></div><canvas id="ui-minimap" width="120" height="120"></canvas></div>
+  <div id="ui-buttons">
+    <button class="ui-btn" id="btn-bag" onclick="toggleBag()">BAG</button>
+    <button class="ui-btn" id="btn-home" onclick="goHome()">HOME</button>
+    <button class="ui-btn" id="btn-dev" onclick="toggleDev()">DEV</button>
+  </div>
+  <div id="portal-label" onclick="tryEnterPortal()"></div>
+  <div id="hud-hpbar"><div id="hud-hp-text">HP: 100 / 100</div><div id="hud-hp-track"><div id="hud-hp-fill"></div></div></div>
+  <div id="enemy-hpbars"></div>
+  <div id="zone-banner"></div>
+  <div id="sickness-bar">Death Sickness <span id="sickness-timer">0:00</span></div>
+  <div id="zone-fade"></div>
+  <div id="death-screen">
+    <h1>YOU DIED</h1>
+    <div id="death-msg"></div>
+    <button id="respawn-btn" onclick="respawnPlayer()">RESPAWN</button>
+  </div>
+
+  <!-- Three.js r128 (approved CDN import — only new external this session) -->
+  <div id="backpack-overlay">
+    <div class="bp-header">
+      <div class="bp-gold" id="bp-gold">&#9679; Gold: 0</div>
+      <button class="bp-close" onclick="closeBag()">&#10005;</button>
+    </div>
+    <div class="bp-tabs">
+      <div class="bp-tab active" id="bptab-items" onclick="switchTab('items')">BACKPACK</div>
+      <div class="bp-tab" id="bptab-equip" onclick="switchTab('equipment')">EQUIPMENT</div>
+    </div>
+    <div id="bp-items-view">
+      <div id="bp-item-grid" class="bp-grid"></div>
+      <div class="bp-section-title">Food</div>
+      <div id="bp-food-grid" class="bp-grid"></div>
+      <div class="bp-section-title">Materials</div>
+      <div id="bp-materials"></div>
+    </div>
+    <div id="bp-equip-view" style="display:none">
+      <div id="bp-slots" class="bp-slots"></div>
+      <div class="bp-bonus" id="bp-bonus"></div>
+    </div>
+  </div>
+  <div id="dev-overlay">
+    <div class="bp-header">
+      <div class="bp-gold">DEV PANEL</div>
+      <button class="bp-close" onclick="toggleDev()">&#10005;</button>
+    </div>
+    <pre id="dev-json"></pre>
+    <div class="dev-actions">
+      <button class="ui-btn wide" id="dev-inv" onclick="devToggleInvincible()">Invincible: OFF</button>
+      <button class="ui-btn wide danger" onclick="devClearSave()">Clear Save &amp; Reload</button>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  /*
+  === CHANGELOG ===
+  [2026-06-13] — HOMESTEAD 3D: buildHomestead() adds 9 buildings (campfire,
+    forge, shrine, garden, watchtower, merchant, warriors/rangers/mages guilds);
+    homestead FogExp2(0x0f0a04, 0.03); campfire flame flicker; proximity labels.
+  [2026-06-13] — PHASE 5C PLAYER UI LAYER (HTML overlays only — no Three.js scene
+    changes): top-left STATS panel (DEX/STR/VIG/INT level + XP bars); top-right 120px
+    canvas MINIMAP (zone bounds, rarity-colored enemy dots, white player dot, cyan
+    portal dots, zone label); BAG/HOME/DEV buttons (44px touch-safe per Rule 20);
+    full-screen BACKPACK overlay (phase4 slate palette) with BACKPACK/EQUIPMENT tabs —
+    item grid (rarity colors + SELL buttons), food, materials; 5 equipment slots with
+    UNEQUIP + equippedBonuses summary. Equip = click item (removes from backpack.items,
+    swaps prior back, recalcEquippedBonuses + recalcMaxHp + saveGame); sell adds
+    rarity value (10/50/150/500g). Top-left Gold REMOVED — now only in the bag header
+    (coin prefix). Portal proximity label within 3 units + E key / tap to enter. DEV
+    panel shows player/backpack JSON + invincible toggle + clear-save. Death screen
+    already present from 5B. ⚠️ NO save-schema change (loads phase4 saves); no new CDN;
+    single requestAnimationFrame unchanged.
+  [2026-06-13] — PHASE 5B CORE LOGIC PORT (phase4 → Three.js r128):
+    Ported phase4 game logic onto the Phase 5 scaffold. Logic stays in phase4 TILE
+    space (player.x/y are tile coords 0..GRID-1); rendering maps tile→world as
+    world = tile - GRID/2 (1 tile = 1 Three.js unit), so all distances/combat
+    ranges/AI are byte-for-byte phase4. NO game logic changed.
+    PORTED VERBATIM — constants (TILE_W/H, GRID, ZONES, RARITY_MULT, GEAR_DB,
+      FOOD_DB, MATERIAL_DB, RARITY_RANK), full player object + backpack schema
+      (⚠️ unchanged — loads phase4 runeportal_save), saveGame/loadGame (same key,
+      same fields, try/catch), stat helpers (getStat/getCombatRange/getCombatStat/
+      recalcMaxHp/recalcEquippedBonuses), spawnEnemies/spawnOneEnemy/spawnBoss,
+      pickEnemyType, rollZoneGear/dropLootFromEnemy, triggerDeath/respawnPlayer,
+      getPortals/travelToZone/transitionToZone, and the update(dt) core
+      (movement, wander AI, auto-combat, XP split 40/40/20+vigor, loot, level-ups,
+      10s autosave).
+    THREE.JS RENDER LAYER (new, replaces all PixiJS) — upgraded low-poly player
+      mesh + equipped-gear overlay meshes (RARITY_COLORS tint); makeEnemyMesh for
+      humanoid / quad (Hollow Hunter) / wraith (Wraith Stalker) / boxy (Iron
+      Construct) per ENEMY_SHAPE_DEFS; rarity point lights (rare blue / epic purple
+      / legendary orange); white emissive hit-flash; per-zone ground color + fog;
+      3-ring emissive portals; ground-loot spheres (rarity emissive, Y-spin);
+      HTML enemy HP bars projected 3D→screen each frame; minimal HTML HUD
+      (zone name, HP, gold, death screen, sickness, fade).
+    NOT THIS SESSION — backpack/equipment UI, guild/crafting/homestead panels,
+      particles/floating-text/projectile rendering (logic stubs kept).
+    THIS SESSION — Homestead 3D buildings (buildHomestead); zone FogExp2 on entry.
+    LOOP — single requestAnimationFrame (NO PIXI ticker). localStorage key
+      runeportal_save unchanged. Only new CDN import remains Three.js r128.
+  */
+
+  // ═══════════════════════════════════════════════════════════
+  //  THREE.JS SETUP
+  // ═══════════════════════════════════════════════════════════
+  const canvas = document.getElementById('scene-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x3a7d44, 22, 56);
+
+  const CAM_OFFSET = new THREE.Vector3(0, 18, 12);
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.copy(CAM_OFFSET);
+  camera.lookAt(0, 0, 0);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+  sun.position.set(10, 20, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 80;
+  sun.shadow.camera.left = -35; sun.shadow.camera.right = 35;
+  sun.shadow.camera.top = 35; sun.shadow.camera.bottom = -35;
+  scene.add(sun); scene.add(sun.target);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshLambertMaterial({ color: 0x3a7d44 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ═══════════════════════════════════════════════════════════
+  //  CONSTANTS & CONFIG  (verbatim from phase4)
+  // ═══════════════════════════════════════════════════════════
+  const TILE_W = 64;   // kept for verbatim combat-range math (85/TILE_W, etc.)
+  const TILE_H = 32;
+  const GRID   = 30;
+  const HALF   = GRID / 2;                 // tile→world offset (1 tile = 1 unit)
+  const toWorldX = tx => tx - HALF;
+  const toWorldZ = ty => ty - HALF;
+
+  const RARITY_COLORS = { common:0x888888, rare:0x4fc3f7, epic:0xab47bc, legendary:0xff8f00 };
+  const SLOT_BASE_COLORS = { helmet:0x555555, chest:0x333366, legs:0x336633, boots:0x663333, weapon:0xaaaaaa };
+  const RARITY_RANK = { common:0, rare:1, epic:2, legendary:3 };
+
+  // Per-zone ground/fog colors (Three.js port)
+  const ZONE_GROUND = { homestead:0x1a1208, ashfields:0x6b4c2a, bleakwood:0x1a2e1a, ironbone:0x3a3535 };
+
+  // Enemy shape table — kept for reference; drives mesh selection + base color
+  const ENEMY_SHAPE_DEFS = {
+    'Ashwalker Scavenger': { color:'#8b6914' },
+    'Raider Brute':        { color:'#5c3317' },
+    'Bone Collector':      { color:'#d4c9a8' },
+    'Hollow Hunter':       { color:'#3d2b1f', quad:true },
+    'Wraith Stalker':      { color:'#6a5acd', wraith:true },
+    'Iron Construct':      { color:'#4a4a4a', boxy:true },
+    'Revenant':            { color:'#7a7a8a' },
+    '__boss':              { color:'#ffffff' },
+  };
+
+  const ZONES = {
+    ashfields: {
+      name: 'The Ashfields', subtitle: 'Crumbling ruins of the old civilization',
+      tierName: 'Ashfields', recommendedLevel: '1-5', portalColor: '#e8a05a',
+      enemyColor: '#c0392b', bossColor: '#8B0000', auraColor: null, lootMult: 1,
+      enemyTypes: [
+        { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
+        { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
+        { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
+      ],
+      boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
+      dropTable: { rarities:['rare'], legendaryChance:0 }, isHome: true
+    },
+    bleakwood: {
+      name: 'Bleakwood Hollow', subtitle: 'No light reaches the floor',
+      tierName: 'Bleakwood', recommendedLevel: '5-10', portalColor: '#00ff88',
+      enemyColor: '#6b8e23', bossColor: '#1a3a1a', auraColor: '#00ff88', lootMult: 2,
+      enemyTypes: [
+        { name:'Hollow Hunter',  hp:100, damage:7.5, speed:1.8, attackSpeed:1.4, xp:25, weight:0.6, color:'#7a9a3a', sizeScale:1.1 },
+        { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing', sizeScale:1.2 },
+      ],
+      boss: { name:'The Nightmother', hp:1600, damage:45, speed:1.3, attackSpeed:1.2, xp:500 },
+      dropTable: { rarities:['rare','epic'], legendaryChance:0 }, isHome: false
+    },
+    ironbone: {
+      name: 'Ironbone Flats', subtitle: 'A battlefield frozen in time',
+      tierName: 'Ironbone', recommendedLevel: '10-20', portalColor: '#9aa0aa',
+      enemyColor: '#8a8a92', bossColor: '#3a3a4a', auraColor: null, lootMult: 4,
+      enemyTypes: [
+        { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa', sizeScale:1.15 },
+        { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal', sizeScale:1.0 },
+      ],
+      boss: { name:'General Mourne', hp:3200, damage:75, speed:1.1, attackSpeed:1.1, xp:1200 },
+      dropTable: { rarities:['rare','epic'], legendaryChance:0.05 }, isHome: false
+    },
+    homestead: {
+      name: 'Homestead', subtitle: 'Your sanctuary', tierName: 'Homestead',
+      recommendedLevel: null, portalColor: '#88dd66', auraColor: null, lootMult: 0,
+      enemyTypes: [], boss: null, dropTable: { rarities:['rare'], legendaryChance:0 },
+      isHome: true, isSafe: true
+    }
+  };
+
+  const RARITY_MULT = {
+    common: { hp:1, dmg:1,   xp:1,   gold:1 },
+    rare:   { hp:2, dmg:1.5, xp:1.5, gold:2 },
+    epic:   { hp:4, dmg:2,   xp:2,   gold:4 },
+  };
+
+  const GEAR_DB = [
+    { name:'Rusty Sword',    type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'melee',  statBonus:{dexterity:0,strength:2,vigor:0,intelligence:0} },
+    { name:'Short Bow',      type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'ranged', statBonus:{dexterity:2,strength:0,vigor:0,intelligence:0} },
+    { name:'Gnarled Staff',  type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:2} },
+    { name:'Iron Helm',      type:'helmet', slot:'helmet', rarity:'common', statBonus:{dexterity:0,strength:0,vigor:2,intelligence:0} },
+    { name:'Leather Chest',  type:'chest',  slot:'chest',  rarity:'common', statBonus:{dexterity:0,strength:0,vigor:3,intelligence:0} },
+    { name:'Cloth Legs',     type:'legs',   slot:'legs',   rarity:'common', statBonus:{dexterity:1,strength:0,vigor:1,intelligence:0} },
+    { name:'Worn Boots',     type:'boots',  slot:'boots',  rarity:'common', statBonus:{dexterity:1,strength:0,vigor:0,intelligence:0} },
+    { name:'Steel Sword',    type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'melee',  statBonus:{dexterity:0,strength:7,vigor:0,intelligence:0} },
+    { name:'Hunter Bow',     type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'ranged', statBonus:{dexterity:7,strength:0,vigor:0,intelligence:0} },
+    { name:'Bog Staff',      type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:7} },
+    { name:'Golden Helm',    type:'helmet', slot:'helmet', rarity:'rare',   statBonus:{dexterity:0,strength:0,vigor:5,intelligence:1} },
+    { name:'Plate Chest',    type:'chest',  slot:'chest',  rarity:'rare',   statBonus:{dexterity:0,strength:2,vigor:6,intelligence:0} },
+    { name:'Chainmail Legs', type:'legs',   slot:'legs',   rarity:'rare',   statBonus:{dexterity:2,strength:1,vigor:3,intelligence:0} },
+    { name:'Iron Boots',     type:'boots',  slot:'boots',  rarity:'rare',   statBonus:{dexterity:2,strength:0,vigor:2,intelligence:0} },
+    { name:'Dragon Sword',   type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'melee',  statBonus:{dexterity:0,strength:15,vigor:0,intelligence:0} },
+    { name:'Void Bow',       type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'ranged', statBonus:{dexterity:15,strength:0,vigor:0,intelligence:0} },
+    { name:'Abyss Staff',    type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:15} },
+    { name:'Mythril Helm',   type:'helmet', slot:'helmet', rarity:'epic',   statBonus:{dexterity:0,strength:0,vigor:10,intelligence:3} },
+    { name:'Mythril Chest',  type:'chest',  slot:'chest',  rarity:'epic',   statBonus:{dexterity:0,strength:4,vigor:12,intelligence:0} },
+    { name:'Shadow Legs',    type:'legs',   slot:'legs',   rarity:'epic',   statBonus:{dexterity:4,strength:2,vigor:6,intelligence:0} },
+    { name:'Void Boots',     type:'boots',  slot:'boots',  rarity:'epic',   statBonus:{dexterity:4,strength:0,vigor:4,intelligence:2} },
+  ];
+  const FOOD_DB = [
+    { name:'Bread', healAmt:15, rarity:'common' },
+    { name:'Cooked Fish', healAmt:30, rarity:'rare' },
+    { name:'Steak', healAmt:50, rarity:'epic' },
+  ];
+  const MATERIAL_DB = [
+    { id:'iron_ore', name:'Iron Ore', rarity:'common', dropFrom:['ashfields'] },
+    { id:'bog_root', name:'Bog Root', rarity:'rare', dropFrom:['bleakwood'] },
+    { id:'void_shard', name:'Void Shard', rarity:'epic', dropFrom:['ironbone'] },
+    { id:'iron_bar', name:'Iron Bar', rarity:'common', dropFrom:[] },
+    { id:'bog_ingot', name:'Bog Ingot', rarity:'rare', dropFrom:[] },
+    { id:'void_crystal', name:'Void Crystal', rarity:'epic', dropFrom:[] },
+  ];
+
+  // ═══════════════════════════════════════════════════════════
+  //  GAME STATE  (player schema verbatim — ⚠️ no changes; loads phase4 saves)
+  // ═══════════════════════════════════════════════════════════
+  let currentZoneId = 'ashfields';
+  let zoneFading = false;
+
+  const player = {
+    x: GRID / 2, y: GRID / 2,
+    hp: 100, maxHp: 100,
+    speed: 2,
+    isDead: false,
+    uiLocked: false,
+    currentZone: 'ashfields',
+    deathSickness: 0,
+    skills: {
+      xp:    { dexterity:0, strength:0, vigor:0, intelligence:0 },
+      level: { dexterity:1, strength:1, vigor:1, intelligence:1 }
+    },
+    baseStats: { dexterity:10, strength:10, vigor:10, intelligence:10 },
+    equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
+    equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null },
+    untradableArmor: { equipped: false, broken: false }
+  };
+  const backpack = {
+    items: [], food: [],
+    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0 },
+    gold: 0
+  };
+  // Minimal homestead/guild state (levels stay 0 this session — no panels to raise them)
+  const homestead = {
+    forge:{level:0,maxLevel:5}, shrine:{level:0,maxLevel:5}, garden:{level:0,maxLevel:5},
+    campfire:{level:0,maxLevel:5}, watchtower:{level:0,maxLevel:5}, merchant:{level:0,maxLevel:5},
+  };
+  const guilds = {
+    str_guild:{level:0,maxLevel:5,claimed:[]}, rng_guild:{level:0,maxLevel:5,claimed:[]},
+    mge_guild:{level:0,maxLevel:5,claimed:[]},
+  };
+  let craftQueue = [];
+  let gardenPlot = { growing:false, herb:null, startTime:0, duration:120 };
+  let shrineBuff = { active:false, endTime:0, label:'' };
+
+  let enemies = [];
+  let lootPiles = [];
+  let floatingTexts = [];   // logic kept; not rendered this session
+  let particles = [];
+  let projectiles = [];
+  let tick = 0;
+  let lastSave = 0;
+  let forgeTimer = 0, gardenTimer = 0;
+  let anyPanelOpen = false;
+  let devInvincible = false;
+
+  // Visual no-ops this session (combat logic still calls them) ──────────────
+  function spawnParticles() {}
+  function addScreenShake() {}
+  function spawnAttackVisual() {}
+  function checkCraftQueue() {}
+
+  // ═══════════════════════════════════════════════════════════
+  //  STAT HELPERS  (verbatim)
+  // ═══════════════════════════════════════════════════════════
+  function getStat(stat) {
+    return player.baseStats[stat] + player.equippedBonuses[stat] + getHomesteadBonus(stat);
+  }
+  function getHomesteadBonus(stat) {
+    let bonus = 0;
+    if (stat === 'dexterity') bonus += homestead.shrine.level * 3 * 0.1;
+    if (stat === 'strength')  bonus += homestead.shrine.level * 2 * 0.1;
+    return bonus;
+  }
+  function getGoldBonus() { return 1 + homestead.merchant.level * 0.15; }
+
+  function getWeaponStyle() {
+    const w = player.equipped.weapon;
+    return w ? (w.weaponStyle || 'melee') : 'melee';
+  }
+  function getCombatRange() {
+    const style = getWeaponStyle();
+    if (style === 'ranged') return 210 / TILE_W;
+    if (style === 'magic')  return 170 / TILE_W;
+    return 85 / TILE_W;
+  }
+  function getCombatStat() {
+    const style = getWeaponStyle();
+    if (style === 'ranged') return getStat('dexterity');
+    if (style === 'magic')  return getStat('intelligence');
+    return getStat('strength');
+  }
+  function getDeathSicknessDuration() {
+    return Math.max(60, 600 - homestead.campfire.level * 120);
+  }
+  function recalcMaxHp() {
+    let vig = getStat('vigor');
+    if (!Number.isFinite(vig)) vig = 10;
+    const base = 50 + vig * 5;
+    player.maxHp = player.deathSickness > 0 ? Math.floor(base * 0.5) : base;
+    if (!Number.isFinite(player.hp)) player.hp = player.maxHp;
+    if (player.hp > player.maxHp) player.hp = player.maxHp;
+  }
+  function recalcEquippedBonuses() {
+    player.equippedBonuses = { dexterity:0, strength:0, vigor:0, intelligence:0 };
+    for (const slot in player.equipped) {
+      const item = player.equipped[slot];
+      if (item && item.statBonus) {
+        for (const stat in item.statBonus) {
+          player.equippedBonuses[stat] = (player.equippedBonuses[stat] || 0) + item.statBonus[stat];
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  ENEMY SPAWNING  (verbatim)
+  // ═══════════════════════════════════════════════════════════
+  function spawnEnemies() {
+    enemies = [];
+    const zone = ZONES[currentZoneId];
+    if (zone.isSafe || !zone.enemyTypes || zone.enemyTypes.length === 0) return;
+    for (let i = 0; i < 12; i++) spawnOneEnemy(zone);
+    spawnBoss(zone);
+  }
+  function pickEnemyType(zone) {
+    const r = Math.random(); let acc = 0;
+    for (const t of zone.enemyTypes) { acc += t.weight; if (r <= acc) return t; }
+    return zone.enemyTypes[zone.enemyTypes.length - 1];
+  }
+  function spawnOneEnemy(zone, isRespawn) {
+    const type = pickEnemyType(zone);
+    const r = Math.random();
+    const rarity = r < 0.6 ? 'common' : r < 0.9 ? 'rare' : 'epic';
+    const m = RARITY_MULT[rarity];
+    const e = {
+      x: 2 + Math.random() * (GRID - 4), y: 2 + Math.random() * (GRID - 4),
+      name: type.name, behavior: type.behavior || null, color: type.color,
+      hp: type.hp * m.hp, maxHp: type.hp * m.hp, damage: type.damage * m.dmg,
+      speed: type.speed, attackSpeed: type.attackSpeed, xpReward: type.xp * m.xp,
+      goldMult: m.gold, rarity, direction: Math.random() * Math.PI * 2,
+      dirTimer: 0, healTimer: 0, isBoss: false, phase: 1, flashTimer: 0
+    };
+    if (!isRespawn) enemies.push(e);
+    return e;
+  }
+  function spawnBoss(zone) {
+    if (!zone.boss) return;
+    const b = zone.boss;
+    enemies.push({
+      x: GRID/2 + (Math.random()-0.5)*10, y: GRID/2 + (Math.random()-0.5)*10,
+      name: b.name, behavior: null, color: null,
+      hp: b.hp, maxHp: b.hp, damage: b.damage, speed: b.speed, attackSpeed: b.attackSpeed,
+      xpReward: b.xp, goldMult: RARITY_MULT.epic.gold, rarity: 'epic',
+      direction: 0, dirTimer: 0, healTimer: 0, isBoss: true, phase: 1, flashTimer: 0
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  LOOT  (verbatim)
+  // ═══════════════════════════════════════════════════════════
+  function rollZoneGear(zone, isBoss) {
+    const dt = zone.dropTable || { rarities:['rare'], legendaryChance:0 };
+    let rarity;
+    if (Math.random() < (dt.legendaryChance || 0)) rarity = 'legendary';
+    else if (isBoss) rarity = dt.rarities[dt.rarities.length - 1];
+    else rarity = dt.rarities[Math.floor(Math.random() * dt.rarities.length)];
+    const poolRarity = rarity === 'legendary' ? 'epic' : rarity;
+    const pool = GEAR_DB.filter(g => g.rarity === poolRarity && !g.untradeable);
+    if (pool.length === 0) return null;
+    const base = pool[Math.floor(Math.random() * pool.length)];
+    const item = { ...base, statBonus: { ...base.statBonus }, name: `${zone.tierName} ${base.name}` };
+    if (rarity === 'legendary') {
+      item.rarity = 'legendary';
+      for (const k in item.statBonus) item.statBonus[k] = Math.ceil(item.statBonus[k] * 2);
+    }
+    return item;
+  }
+  function dropLootFromEnemy(enemy) {
+    const zone = ZONES[currentZoneId];
+    const pile = { x: enemy.x, y: enemy.y, items: [], gold: 0, isDeathPile: false };
+    const baseGold = Math.floor(Math.random() * 10) + 1;
+    pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus() * (enemy.goldMult || 1));
+    const gearChance = enemy.rarity === 'epic' ? 0.7 : enemy.rarity === 'rare' ? 0.5 : 0.3;
+    if (Math.random() < gearChance) { const item = rollZoneGear(zone, enemy.isBoss); if (item) pile.items.push(item); }
+    const matChance = enemy.rarity === 'epic' ? 0.6 : enemy.rarity === 'rare' ? 0.35 : 0.15;
+    if (Math.random() < matChance) {
+      const zoneMats = MATERIAL_DB.filter(m => m.dropFrom.includes(currentZoneId));
+      if (zoneMats.length) pile.materialDrop = zoneMats[Math.floor(Math.random() * zoneMats.length)].id;
+    }
+    if (Math.random() < 0.08) pile.foodDrop = {...FOOD_DB[Math.min(Math.floor(zone.lootMult - 1), FOOD_DB.length - 1)]};
+    lootPiles.push(pile);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  DEATH & RESPAWN  (verbatim logic; DOM hooks preserved)
+  // ═══════════════════════════════════════════════════════════
+  const DEATH_PILE_DESPAWN_MS = 5 * 60 * 1000;
+  function triggerDeath() {
+    if (player.isDead) return;
+    player.isDead = true;
+    const dropped = [];
+    for (const slot in player.equipped) {
+      const item = player.equipped[slot];
+      if (!item || item.untradeable) continue;
+      dropped.push(item); player.equipped[slot] = null;
+      const bi = backpack.items.indexOf(item); if (bi !== -1) backpack.items.splice(bi, 1);
+    }
+    const goldLost = Math.floor(backpack.gold / 2);
+    backpack.gold -= goldLost;
+    if (dropped.length > 0) {
+      lootPiles.push({ x: player.x, y: player.y, items: dropped, gold: 0, isDeathPile: true,
+        zoneId: currentZoneId, expiresAt: Date.now() + DEATH_PILE_DESPAWN_MS });
+    }
+    recalcEquippedBonuses(); recalcMaxHp();
+    const gearList = dropped.length > 0 ? dropped.map(i => i.name).join(', ') : 'none';
+    document.getElementById('death-msg').textContent = `Gold lost: ${goldLost}g — Gear dropped: ${gearList}`;
+    document.getElementById('death-screen').classList.add('show');
+    saveGame();
+  }
+  function respawnPlayer() {
+    player.isDead = false;
+    if (currentZoneId !== 'homestead') transitionToZone('homestead', { x: GRID/2, y: GRID/2 });
+    else { player.x = GRID/2; player.y = GRID/2; }
+    player.deathSickness = getDeathSicknessDuration();
+    recalcMaxHp(); player.hp = player.maxHp;
+    document.getElementById('death-screen').classList.remove('show');
+    document.getElementById('sickness-bar').style.display = 'block';
+    saveGame();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  ZONES  (logic verbatim; visuals are the Three.js port)
+  // ═══════════════════════════════════════════════════════════
+  function getPortals() {
+    const p = [];
+    if (currentZoneId === 'ashfields') {
+      p.push({ x: GRID-2, y: GRID/2, target: 'bleakwood', label: '→ Bleakwood Hollow' });
+    } else if (currentZoneId === 'bleakwood') {
+      p.push({ x: 1, y: GRID/2, target: 'ashfields', label: '← The Ashfields' });
+      p.push({ x: GRID-2, y: GRID/2, target: 'ironbone', label: '→ Ironbone Flats' });
+    } else if (currentZoneId === 'ironbone') {
+      p.push({ x: 1, y: GRID/2, target: 'bleakwood', label: '← Bleakwood Hollow' });
+    } else if (currentZoneId === 'homestead') {
+      p.push({ x: GRID/2, y: GRID-2, target: 'ashfields', label: '← The Ashfields' });
+    }
+    return p;
+  }
+  function getHomesteadPortal() {
+    if (currentZoneId !== 'ashfields') return null;
+    return { x: GRID/2, y: 2 };
+  }
+  function travelToZone(zoneId, arrivalPos) {
+    currentZoneId = zoneId; player.currentZone = zoneId;
+    const zone = ZONES[zoneId];
+    if (!zone.isSafe) spawnEnemies(); else enemies = [];
+    lootPiles = [];
+    if (arrivalPos) { player.x = arrivalPos.x; player.y = arrivalPos.y; }
+    else if (zoneId === 'homestead') { player.x = 14; player.y = 27; }
+    else { player.x = GRID/2; player.y = GRID/2; }
+    setZoneVisuals(zoneId);     // ground color + fog + portals (Three.js port)
+    showBanner(`${zone.name}\n${zone.subtitle}`);
+    saveGame();
+  }
+  function transitionToZone(zoneId, arrivalPos) {
+    if (zoneFading || zoneId === currentZoneId || !ZONES[zoneId]) return;
+    zoneFading = true;
+    const fade = document.getElementById('zone-fade');
+    fade.style.opacity = '1';
+    setTimeout(() => {
+      try { travelToZone(zoneId, arrivalPos); }
+      finally { fade.style.opacity = '0'; setTimeout(() => { zoneFading = false; }, 250); }
+    }, 250);
+  }
+  let bannerTimeout = null;
+  function showBanner(text) {
+    const el = document.getElementById('zone-banner');
+    const parts = text.split('\n');
+    el.innerHTML = parts[0] + (parts[1] ? `<br><span style="font-size:13px;color:#aaa;letter-spacing:2px">${parts[1]}</span>` : '');
+    el.style.display = 'block';
+    if (bannerTimeout) clearTimeout(bannerTimeout);
+    bannerTimeout = setTimeout(() => { el.style.display = 'none'; }, 3000);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  SAVE / LOAD  (verbatim — runeportal_save, same fields)
+  // ═══════════════════════════════════════════════════════════
+  let storageAvailable = false;
+  try { localStorage.setItem('_test','1'); localStorage.removeItem('_test'); storageAvailable = true; } catch(e) {}
+
+  function saveGame() {
+    if (!storageAvailable) return;
+    try {
+      localStorage.setItem('runeportal_save', JSON.stringify({
+        skills: player.skills, hp: player.hp, baseStats: player.baseStats,
+        equippedBonuses: player.equippedBonuses, equipped: player.equipped,
+        isDead: player.isDead, untradableArmor: player.untradableArmor,
+        deathSickness: player.deathSickness, gold: backpack.gold, items: backpack.items,
+        food: backpack.food, materials: backpack.materials, homestead: homestead,
+        guilds: guilds, craftQueue: craftQueue, gardenPlot: gardenPlot,
+        shrineBuff: shrineBuff, currentZone: currentZoneId,
+      }));
+    } catch(e) { storageAvailable = false; }
+  }
+  function loadGame() {
+    if (!storageAvailable) return;
+    try {
+      const raw = localStorage.getItem('runeportal_save');
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.skills)          Object.assign(player.skills, d.skills);
+      if (Number.isFinite(d.hp)) player.hp = d.hp;
+      if (d.baseStats)       Object.assign(player.baseStats, d.baseStats);
+      if (d.equippedBonuses) Object.assign(player.equippedBonuses, d.equippedBonuses);
+      if (d.equipped)        Object.assign(player.equipped, d.equipped);
+      if (d.untradableArmor) Object.assign(player.untradableArmor, d.untradableArmor);
+      if (d.isDead) {
+        player.isDead = true;
+        document.getElementById('death-msg').textContent = 'You died. Press RESPAWN to continue.';
+        document.getElementById('death-screen').classList.add('show');
+      }
+      if (d.deathSickness) {
+        player.deathSickness = d.deathSickness;
+        if (player.deathSickness > 0) document.getElementById('sickness-bar').style.display = 'block';
+      }
+      if (d.gold !== undefined) backpack.gold = d.gold;
+      if (d.items)     backpack.items = d.items;
+      if (d.food)      backpack.food = d.food;
+      if (d.materials) Object.assign(backpack.materials, d.materials);
+      if (d.homestead) Object.keys(homestead).forEach(k => { if (d.homestead[k]) Object.assign(homestead[k], d.homestead[k]); });
+      if (d.guilds)    Object.keys(guilds).forEach(k => { if (d.guilds[k]) Object.assign(guilds[k], d.guilds[k]); });
+      if (d.craftQueue) craftQueue = d.craftQueue;
+      if (d.gardenPlot) Object.assign(gardenPlot, d.gardenPlot);
+      if (d.shrineBuff) Object.assign(shrineBuff, d.shrineBuff);
+      if (d.currentZone && ZONES[d.currentZone]) { currentZoneId = d.currentZone; player.currentZone = d.currentZone; }
+    } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  THREE.JS RENDER LAYER  (replaces all PixiJS rendering)
+  // ═══════════════════════════════════════════════════════════
+  // ── PLAYER MESH (upgraded low-poly figure) ──
+  let playerGear = {}; // slot -> overlay mesh
+  function buildPlayer() {
+    const g = new THREE.Group();
+    const skin = new THREE.MeshLambertMaterial({ color: 0xc8a882, flatShading: true });
+    const hair = new THREE.MeshLambertMaterial({ color: 0x1a1a1a, flatShading: true });
+    const cloth = new THREE.MeshLambertMaterial({ color: 0x3a3530, flatShading: true });
+    const legMat = new THREE.MeshLambertMaterial({ color: 0x2a2520, flatShading: true });
+    const footMat = new THREE.MeshLambertMaterial({ color: 0x1a1510, flatShading: true });
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    add(new THREE.CylinderGeometry(0.1, 0.09, 0.6, 6), legMat, -0.13, 0.3, 0);
+    add(new THREE.CylinderGeometry(0.1, 0.09, 0.6, 6), legMat,  0.13, 0.3, 0);
+    add(new THREE.BoxGeometry(0.15, 0.1, 0.25), footMat, -0.13, 0.05, 0.05);
+    add(new THREE.BoxGeometry(0.15, 0.1, 0.25), footMat,  0.13, 0.05, 0.05);
+    add(new THREE.BoxGeometry(0.5, 0.65, 0.35), cloth, 0, 0.92, 0);
+    add(new THREE.CylinderGeometry(0.09, 0.08, 0.55, 6), cloth, -0.32, 0.92, 0);
+    add(new THREE.CylinderGeometry(0.09, 0.08, 0.55, 6), cloth,  0.32, 0.92, 0);
+    add(new THREE.SphereGeometry(0.3, 7, 6), skin, 0, 1.45, 0);
+    const h = add(new THREE.SphereGeometry(0.31, 6, 4), hair, 0, 1.5, 0);
+    h.scale.y = 0.6;
+
+    // Gear overlay meshes — hidden until the matching slot is equipped, tinted by rarity
+    const gearMat = () => new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, transparent: true, opacity: 0.92 });
+    const mkGear = (geo, x, y, z) => { const m = new THREE.Mesh(geo, gearMat()); m.position.set(x,y,z); m.visible = false; m.castShadow = true; g.add(m); return m; };
+    playerGear = {
+      helmet: mkGear(new THREE.BoxGeometry(0.42, 0.34, 0.42), 0, 1.5, 0),
+      chest:  mkGear(new THREE.BoxGeometry(0.56, 0.6, 0.4), 0, 0.95, 0),
+      legs:   mkGear(new THREE.BoxGeometry(0.34, 0.4, 0.26), 0, 0.35, 0),
+      boots:  mkGear(new THREE.BoxGeometry(0.4, 0.16, 0.34), 0, 0.08, 0.04),
+      weapon: mkGear(new THREE.BoxGeometry(0.08, 0.7, 0.08), 0.42, 0.95, 0),
+    };
+    return g;
+  }
+  const playerMesh = buildPlayer();
+  scene.add(playerMesh);
+
+  // ── ENEMY MESHES ──
+  function emat(color, store, opts) {
+    const m = new THREE.MeshLambertMaterial(Object.assign({ color, flatShading: true }, opts || {}));
+    m.userData.baseEmissive = (opts && opts.emissive) ? opts.emissive : 0x000000;
+    store.push(m); return m;
+  }
+  function makeEnemyMesh(e) {
+    const def = ENEMY_SHAPE_DEFS[e.isBoss ? '__boss' : e.name] || {};
+    const g = new THREE.Group();
+    e.mats = [];
+    const baseColor = e.isBoss ? (ZONES[currentZoneId].bossColor || '#8B0000') : (def.color || '#888888');
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z); m.castShadow = true; g.add(m); return m; };
+
+    if (def.quad) {                         // Hollow Hunter — skeletal werewolf quadruped
+      const c = emat(0x3d2b1f, e.mats);
+      const body = add(new THREE.SphereGeometry(0.45, 6, 4), c, 0, 0.5, 0);
+      body.scale.set(1.6, 0.7, 1);
+      const legGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.5, 4);
+      for (const [lx, lz] of [[-0.4,0.3],[0.4,0.3],[-0.4,-0.3],[0.4,-0.3]]) add(legGeo, c, lx, 0.25, lz);
+      add(new THREE.SphereGeometry(0.22, 5, 4), c, 0, 0.45, 0.65);
+    } else if (def.wraith) {                // Wraith Stalker — spectral, no legs
+      const c = emat(0x6a5acd, e.mats, { transparent: true, opacity: 0.75 });
+      const body = add(new THREE.ConeGeometry(0.3, 0.9, 6), c, 0, 0.6, 0);
+      body.rotation.x = Math.PI;            // point down
+      const armGeo = new THREE.CylinderGeometry(0.05, 0.03, 0.7, 4);
+      const al = add(armGeo, c, -0.28, 0.75, 0); al.rotation.z =  0.5;
+      const ar = add(armGeo, c,  0.28, 0.75, 0); ar.rotation.z = -0.5;
+      const hc = emat(0x9a8ce0, e.mats, { transparent: true, opacity: 0.8, wireframe: true });
+      add(new THREE.SphereGeometry(0.22, 5, 4), hc, 0, 1.15, 0);
+    } else if (def.boxy) {                   // Iron Construct — mechanical
+      const c = emat(0x4a4a4a, e.mats);
+      add(new THREE.BoxGeometry(0.55, 0.65, 0.45), c, 0, 0.78, 0);
+      add(new THREE.BoxGeometry(0.38, 0.35, 0.35), c, 0, 1.28, 0);
+      add(new THREE.BoxGeometry(0.18, 0.55, 0.18), c, -0.38, 0.78, 0);
+      add(new THREE.BoxGeometry(0.18, 0.55, 0.18), c,  0.38, 0.78, 0);
+      add(new THREE.BoxGeometry(0.2, 0.5, 0.2), c, -0.16, 0.28, 0);
+      add(new THREE.BoxGeometry(0.2, 0.5, 0.2), c,  0.16, 0.28, 0);
+      const eye = emat(0x330600, e.mats, { emissive: 0xff2200 });
+      add(new THREE.BoxGeometry(0.08, 0.04, 0.06), eye, -0.09, 1.3, 0.18);
+      add(new THREE.BoxGeometry(0.08, 0.04, 0.06), eye,  0.09, 1.3, 0.18);
+    } else {                                 // Humanoid (Ashwalker / Brute / Bone Collector / Revenant / boss)
+      const c = emat(new THREE.Color(baseColor).getHex(), e.mats);
+      add(new THREE.CylinderGeometry(0.08, 0.07, 0.5, 5), c, -0.12, 0.3, 0);
+      add(new THREE.CylinderGeometry(0.08, 0.07, 0.5, 5), c,  0.12, 0.3, 0);
+      add(new THREE.BoxGeometry(0.4, 0.55, 0.3), c, 0, 0.83, 0);
+      add(new THREE.CylinderGeometry(0.07, 0.07, 0.45, 5), c, -0.28, 0.83, 0);
+      add(new THREE.CylinderGeometry(0.07, 0.07, 0.45, 5), c,  0.28, 0.83, 0);
+      add(new THREE.SphereGeometry(0.25, 6, 5), c, 0, 1.33, 0);
+    }
+
+    // Rarity point light
+    const cfg = { rare:[0x4a90ff,0.6,2], epic:[0xab47bc,0.8,2.5], legendary:[0xff8f00,1.0,3] }[e.rarity];
+    if (cfg) { const pl = new THREE.PointLight(cfg[0], cfg[1], cfg[2]); pl.position.set(0, 1, 0); g.add(pl); }
+
+    // Size scaling — phase4 per-type sizeScale; bosses larger
+    const typeDef = (ZONES[currentZoneId].enemyTypes || []).find(t => t.name === e.name);
+    const s = e.isBoss ? 1.8 : (typeDef && typeDef.sizeScale ? typeDef.sizeScale : 1);
+    g.scale.setScalar(s);
+    e.meshTopY = 1.7 * s;        // for HP bar projection
+    return g;
+  }
+
+  // ── LOOT MESH ──
+  function makeLootMesh(pile) {
+    const rarity = pile.items.length ? pile.items[0].rarity : null;
+    const color = rarity ? (RARITY_COLORS[rarity] || 0x888888) : 0xe8c97a;
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 5, 4),
+      new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.6, flatShading: true })
+    );
+    m.castShadow = true;
+    return m;
+  }
+
+  // ── PORTAL MESHES + ZONE VISUALS ──
+  // ── HOMESTEAD 3D ENVIRONMENT ─────────────────────────────
+  let homesteadGroup = null;
+  let hsFlame = null;
+  let hsFireLight = null;
+
+  const HS_BUILDINGS = [
+    { key:'campfire',   tx:13.5, ty: 5.5, label:'Campfire',        color:'#ff8800', prompt:'Press E — Rest & Recover' },
+    { key:'forge',      tx:20.0, ty: 5.5, label:'Forge',           color:'#ff6600', prompt:'Press E — Smith & Craft' },
+    { key:'shrine',     tx: 7.0, ty:10.0, label:'Shrine',          color:'#cc88ff', prompt:'Press E — Receive Blessing' },
+    { key:'garden',     tx:15.0, ty:13.0, label:'Garden',          color:'#44cc44', prompt:'Press E — Tend Plants' },
+    { key:'watchtower', tx: 3.0, ty:17.0, label:'Watchtower',      color:'#aaaaaa', prompt:'Press E — Survey the Land' },
+    { key:'merchant',   tx:19.0, ty:15.0, label:'Merchant',        color:'#e8c97a', prompt:'Press E — Browse Wares' },
+    { key:'str_guild',  tx: 7.0, ty:20.0, label:"Warriors' Guild", color:'#cc4444', prompt:"Press E — Train & Upgrade" },
+    { key:'rng_guild',  tx:15.0, ty:22.0, label:"Rangers' Guild",  color:'#44aacc', prompt:"Press E — Train & Upgrade" },
+    { key:'mge_guild',  tx:23.0, ty:20.0, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
+  ];
+
+  const hsBuildingEl = (function() {
+    const el = document.createElement('div');
+    Object.assign(el.style, {
+      display:'none', position:'fixed', bottom:'250px', left:'50%',
+      transform:'translateX(-50%)', zIndex:'14',
+      background:'rgba(10,10,10,0.88)', color:'#e8c97a',
+      border:'1px solid #e8c97a', borderRadius:'8px',
+      padding:'10px 22px', font:'14px monospace',
+      letterSpacing:'1px', textAlign:'center', pointerEvents:'none',
+      whiteSpace:'nowrap'
+    });
+    document.body.appendChild(el);
+    return el;
+  })();
+
+  function updateBuildingLabel() {
+    if (currentZoneId !== 'homestead' || player.isDead || anyPanelOpen) {
+      hsBuildingEl.style.display = 'none'; return;
+    }
+    let best = null, bd = 2.5;
+    for (const b of HS_BUILDINGS) {
+      const d = Math.hypot(player.x - b.tx, player.y - b.ty);
+      if (d < bd) { bd = d; best = b; }
+    }
+    if (best) {
+      hsBuildingEl.innerHTML = '<span style="color:' + best.color + '">' + best.label + '</span>'
+        + '<br><span style="font-size:11px;color:#bbb">' + best.prompt + '</span>';
+      hsBuildingEl.style.display = 'block';
+    } else {
+      hsBuildingEl.style.display = 'none';
+    }
+  }
+
+  function buildHomestead() {
+    if (homesteadGroup) {
+      scene.remove(homesteadGroup);
+      homesteadGroup.traverse(function(o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material && o.material.dispose) o.material.dispose();
+      });
+    }
+    homesteadGroup = new THREE.Group();
+    scene.add(homesteadGroup);
+    hsFlame = null; hsFireLight = null;
+
+    function lm(hex, emHex, emI) {
+      const opt = { color: hex, flatShading: true };
+      if (emHex != null) {
+        opt.emissive = new THREE.Color(emHex);
+        opt.emissiveIntensity = (emI != null ? emI : 1.0);
+      }
+      return new THREE.MeshLambertMaterial(opt);
+    }
+    function addMesh(geo, mat, px, py, pz) {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = true; m.receiveShadow = true;
+      m.position.set(px, py, pz);
+      homesteadGroup.add(m);
+      return m;
+    }
+    function addPL(col, intensity, dist, px, py, pz) {
+      const l = new THREE.PointLight(col, intensity, dist);
+      l.position.set(px, py, pz);
+      homesteadGroup.add(l);
+    }
+
+    // ── 1. CAMPFIRE (-1.5, 0, -9.5) ──
+    addMesh(new THREE.CylinderGeometry(1.0, 1.2, 0.25, 10), lm(0x888880), -1.5, 0.125, -9.5);
+    const logMat = lm(0x4a2e10);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const lg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, 0.12), logMat);
+      lg.castShadow = true; lg.receiveShadow = true;
+      lg.position.set(-1.5 + Math.sin(a) * 0.35, 0.35, -9.5 + Math.cos(a) * 0.35);
+      lg.rotation.set(Math.cos(a) * 0.5, a, -Math.sin(a) * 0.5);
+      homesteadGroup.add(lg);
+    }
+    hsFlame = addMesh(new THREE.ConeGeometry(0.28, 0.75, 7),
+      lm(0xff6600, 0xff3300, 1.0), -1.5, 0.75, -9.5);
+    hsFireLight = new THREE.PointLight(0xff4400, 2.0, 7);
+    hsFireLight.position.set(-1.5, 1.2, -9.5);
+    homesteadGroup.add(hsFireLight);
+
+    // ── 2. FORGE (5, 0, -9.5) ──
+    addMesh(new THREE.BoxGeometry(2.2, 1.0, 1.8),    lm(0x777768), 5.0,  0.5,  -9.5);
+    addMesh(new THREE.BoxGeometry(0.9, 1.2, 0.7),    lm(0x444440), 5.0,  1.1,  -9.15);
+    addMesh(new THREE.CylinderGeometry(0.18, 0.24, 2.2, 8), lm(0x333330), 5.0, 2.0, -9.8);
+    addMesh(new THREE.BoxGeometry(0.7, 0.35, 0.5),   lm(0x888888), 6.2,  0.55, -9.5);
+    addMesh(new THREE.BoxGeometry(0.2, 0.15, 0.45),  lm(0x888888), 6.55, 0.43, -9.5);
+    addPL(0xff6600, 1.5, 6, 5.0, 1.2, -9.15);
+
+    // ── 3. SHRINE (-8, 0, -5) ──
+    addMesh(new THREE.BoxGeometry(2.6, 0.2, 2.6),    lm(0x888870), -8.0, 0.1,  -5.0);
+    addMesh(new THREE.CylinderGeometry(0.75, 0.95, 0.9, 8), lm(0x888870), -8.0, 0.6, -5.0);
+    addMesh(new THREE.BoxGeometry(1.3, 0.2, 1.0),    lm(0xbbbbaa), -8.0, 1.15, -5.0);
+    const pilMat = lm(0x999980);
+    addMesh(new THREE.CylinderGeometry(0.1, 0.1, 2.2, 8), pilMat, -8.55, 1.1, -5.0);
+    addMesh(new THREE.CylinderGeometry(0.1, 0.1, 2.2, 8), pilMat, -7.45, 1.1, -5.0);
+    addMesh(new THREE.SphereGeometry(0.28, 8, 8), lm(0xcc88ff, 0x9933ff, 1.5), -8.0, 2.4, -5.0);
+    addPL(0x9933ff, 1.5, 6, -8.0, 2.4, -5.0);
+
+    // ── 4. GARDEN (0, 0, -2) ──
+    const soilMat = lm(0x5a3010);
+    addMesh(new THREE.BoxGeometry(1.0, 0.2, 2.8), soilMat, -1.0, 0.1, -2.0);
+    addMesh(new THREE.BoxGeometry(1.0, 0.2, 2.8), soilMat,  1.0, 0.1, -2.0);
+    const fnMat = lm(0x8b5a20);
+    addMesh(new THREE.BoxGeometry(0.07, 0.55, 3.4), fnMat, -1.65, 0.28, -2.0);
+    addMesh(new THREE.BoxGeometry(0.07, 0.55, 3.4), fnMat,  1.65, 0.28, -2.0);
+    addMesh(new THREE.BoxGeometry(3.4, 0.55, 0.07), fnMat,  0.0,  0.28, -3.6);
+    addMesh(new THREE.BoxGeometry(3.4, 0.55, 0.07), fnMat,  0.0,  0.28, -0.4);
+    const pltMat = lm(0x336600);
+    const pltPos = [[-1.0,-3.2],[-1.0,-2.0],[-1.0,-0.8],[1.0,-3.2],[1.0,-2.0],[1.0,-0.8]];
+    for (const [bx, bz] of pltPos) addMesh(new THREE.SphereGeometry(0.2, 6, 5), pltMat, bx, 0.45, bz);
+
+    // ── 5. WATCHTOWER (-12, 0, 2) ──
+    addMesh(new THREE.CylinderGeometry(0.75, 0.95, 5.0, 8),  lm(0x665a44), -12.0, 2.5,  2.0);
+    addMesh(new THREE.CylinderGeometry(1.05, 1.05, 0.35, 8), lm(0x554a38), -12.0, 5.18, 2.0);
+    const merlMat = lm(0x554a38);
+    for (let k = 0; k < 4; k++) {
+      const ba = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      addMesh(new THREE.BoxGeometry(0.3, 0.55, 0.3), merlMat,
+        -12.0 + Math.cos(ba) * 0.85, 5.62, 2.0 + Math.sin(ba) * 0.85);
+    }
+    addMesh(new THREE.BoxGeometry(0.05, 4.5, 0.05), lm(0x6b4010), -11.2, 2.25, 2.3);
+
+    // ── 6. MERCHANT (4, 0, 0) ──
+    addMesh(new THREE.BoxGeometry(3.2, 0.12, 2.5), lm(0x8b6914), 4.0, 0.06,  0.0);
+    addMesh(new THREE.BoxGeometry(2.8, 0.9,  0.35), lm(0xc8a050), 4.0, 0.57, -0.9);
+    addMesh(new THREE.BoxGeometry(2.8, 1.8,  0.12), lm(0x9a7020), 4.0, 0.9,  -1.6);
+    const postMat = lm(0x6b4010);
+    addMesh(new THREE.CylinderGeometry(0.07, 0.07, 2.8, 6), postMat, 2.65, 1.4, -0.9);
+    addMesh(new THREE.CylinderGeometry(0.07, 0.07, 2.8, 6), postMat, 5.35, 1.4, -0.9);
+    const awning = addMesh(new THREE.BoxGeometry(3.0, 0.07, 1.4), lm(0xcc8822), 4.0, 2.7, -0.3);
+    awning.rotation.x = -0.18;
+
+    // ── 7. STR_GUILD (-8, 0, 5) ──
+    addMesh(new THREE.BoxGeometry(4.2, 2.8, 3.8), lm(0x6b4c2a), -8.0, 1.4,  5.0);
+    addMesh(new THREE.BoxGeometry(4.6, 0.3,  4.2), lm(0x4a3020), -8.0, 2.95, 5.0);
+    addMesh(new THREE.BoxGeometry(0.85, 1.8, 0.15), lm(0x3a2010), -8.0, 0.9, 3.1);
+    const swMat = lm(0xaaaaaa);
+    const sw1 = addMesh(new THREE.BoxGeometry(0.06, 1.2, 0.06), swMat, -8.0, 2.2, 3.02);
+    sw1.rotation.z = Math.PI / 5;
+    const sw2 = addMesh(new THREE.BoxGeometry(0.06, 1.2, 0.06), swMat, -8.0, 2.2, 3.02);
+    sw2.rotation.z = -Math.PI / 5;
+
+    // ── 8. RNG_GUILD (0, 0, 7) ──
+    addMesh(new THREE.BoxGeometry(4.0, 2.2, 3.2),   lm(0x3a5a3a), 0.0, 1.1,  7.0);
+    addMesh(new THREE.BoxGeometry(4.4, 0.28, 3.6),  lm(0x2a4a2a), 0.0, 2.34, 7.0);
+    addMesh(new THREE.BoxGeometry(0.8, 1.6,  0.12), lm(0x2a3a2a), 0.0, 0.8, 5.44);
+    addMesh(new THREE.TorusGeometry(0.45, 0.07, 8, 20), lm(0x222222), 0.0, 1.2, 4.8);
+    addMesh(new THREE.TorusGeometry(0.28, 0.07, 8, 20), lm(0xcc3322), 0.0, 1.2, 4.8);
+    addMesh(new THREE.SphereGeometry(0.1, 7, 6),    lm(0xffcc00),  0.0, 1.2, 4.78);
+    addMesh(new THREE.BoxGeometry(0.04, 0.04, 0.55), lm(0x8b6914), 0.15, 1.35, 4.72);
+
+    // ── 9. MGE_GUILD (8, 0, 5) ──
+    addMesh(new THREE.CylinderGeometry(0.95, 1.2, 4.2, 8), lm(0x2a1a4a), 8.0, 2.1, 5.0);
+    addMesh(new THREE.ConeGeometry(1.55, 2.0, 8),          lm(0x1a0a3a), 8.0, 5.2, 5.0);
+    const winMat = lm(0xaa44cc, 0x7722aa, 0.8);
+    for (let w = 0; w < 3; w++) {
+      const wa = (w / 3) * Math.PI * 2 + Math.PI;
+      addMesh(new THREE.BoxGeometry(0.2, 0.3, 0.1), winMat,
+        8.0 + Math.cos(wa) * 0.98, 1.0 + w * 1.2, 5.0 + Math.sin(wa) * 0.98);
+    }
+    addMesh(new THREE.SphereGeometry(0.25, 8, 8), lm(0xcc66ff, 0xaa44cc, 2.0), 8.0, 6.3, 5.0);
+    addPL(0xaa44cc, 1.8, 7, 8.0, 5.5, 5.0);
+  }
+
+  let portalGroup = null;
+  function buildPortals() {
+    if (portalGroup) { scene.remove(portalGroup); portalGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    portalGroup = new THREE.Group();
+    const portals = getPortals();
+    const hs = getHomesteadPortal();
+    if (hs) portals.push({ x: hs.x, y: hs.y, target: 'homestead' });
+    for (const p of portals) {
+      const col = ZONES[p.target] ? ZONES[p.target].portalColor : '#ffffff';
+      const ringMat = new THREE.MeshLambertMaterial({ color: col, emissive: new THREE.Color(col), emissiveIntensity: 0.8 });
+      const grp = new THREE.Group();
+      [0.25, 0.6, 0.95].forEach(yy => {
+        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.06, 18, 1, true), ringMat);
+        ring.position.y = yy; grp.add(ring);
+      });
+      grp.position.set(toWorldX(p.x), 0, toWorldZ(p.y));
+      portalGroup.add(grp);
+    }
+    scene.add(portalGroup);
+  }
+  function setZoneVisuals(zoneId) {
+    const col = ZONE_GROUND[zoneId] != null ? ZONE_GROUND[zoneId] : 0x3a7d44;
+    ground.material.color.setHex(col);
+    renderer.setClearColor(col, 1);
+    if (zoneId === 'homestead') {
+      scene.fog = new THREE.FogExp2(0x0f0a04, 0.02);
+    } else {
+      scene.fog = new THREE.Fog(col, 22, 56);
+    }
+    if (homesteadGroup) {
+      scene.remove(homesteadGroup);
+      homesteadGroup.traverse(function(o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material && o.material.dispose) o.material.dispose();
+      });
+      homesteadGroup = null; hsFlame = null; hsFireLight = null;
+    }
+    if (zoneId === 'homestead') buildHomestead();
+    buildPortals();
+  }
+
+  // ── 3D → screen projection for HP bars ──
+  const _proj = new THREE.Vector3();
+  function projectToScreen(x, y, z) {
+    _proj.set(x, y, z).project(camera);
+    return { x: (_proj.x * 0.5 + 0.5) * window.innerWidth, y: (-_proj.y * 0.5 + 0.5) * window.innerHeight, visible: _proj.z < 1 };
+  }
+  const hpbarLayer = document.getElementById('enemy-hpbars');
+
+  // ── Render sync: create/move/remove meshes to match the logic arrays ──
+  const liveEnemies = new Set();
+  const liveLoot = new Set();
+  function syncRender() {
+    // Enemies
+    for (const e of enemies) {
+      if (!e.mesh) { e.mesh = makeEnemyMesh(e); scene.add(e.mesh);
+        e.hpEl = document.createElement('div'); e.hpEl.className = 'ehp';
+        e.hpEl.innerHTML = '<i></i>'; hpbarLayer.appendChild(e.hpEl); }
+      e.mesh.position.set(toWorldX(e.x), 0, toWorldZ(e.y));
+      e.mesh.rotation.y = -e.direction;
+      const flash = e.flashTimer > 0;
+      for (const m of e.mats) m.emissive.setHex(flash ? 0xffffff : m.userData.baseEmissive);
+      liveEnemies.add(e);
+    }
+    for (const e of liveEnemies) {
+      if (enemies.indexOf(e) === -1) {
+        if (e.mesh) scene.remove(e.mesh);
+        if (e.hpEl) e.hpEl.remove();
+        e.mesh = null; e.hpEl = null; liveEnemies.delete(e);
+      }
+    }
+    // HP bars (projected)
+    for (const e of enemies) {
+      if (!e.hpEl) continue;
+      const top = projectToScreen(toWorldX(e.x), e.meshTopY || 1.6, toWorldZ(e.y));
+      if (!top.visible) { e.hpEl.style.display = 'none'; continue; }
+      e.hpEl.style.display = 'block';
+      e.hpEl.style.left = top.x + 'px'; e.hpEl.style.top = top.y + 'px';
+      const frac = Math.max(0, e.hp / e.maxHp);
+      const bar = e.hpEl.firstChild;
+      bar.style.width = (frac * 100) + '%';
+      bar.style.background = frac > 0.5 ? '#44aa44' : frac > 0.25 ? '#aaaa44' : '#aa4444';
+    }
+    // Loot
+    for (const pile of lootPiles) {
+      if (!pile.mesh) { pile.mesh = makeLootMesh(pile); scene.add(pile.mesh); }
+      pile.mesh.position.set(toWorldX(pile.x), 0.35, toWorldZ(pile.y));
+      pile.mesh.rotation.y += 0.03;
+      liveLoot.add(pile);
+    }
+    for (const pile of liveLoot) {
+      if (lootPiles.indexOf(pile) === -1) {
+        if (pile.mesh) scene.remove(pile.mesh);
+        pile.mesh = null; liveLoot.delete(pile);
+      }
+    }
+    // Player + equipped gear overlays
+    playerMesh.position.set(toWorldX(player.x), 0, toWorldZ(player.y));
+    playerMesh.visible = !player.isDead;
+    for (const slot of ['helmet','chest','legs','boots','weapon']) {
+      const item = player.equipped[slot];
+      const gm = playerGear[slot];
+      gm.visible = !!item;
+      if (item) {
+        const tint = (item.rarity && item.rarity !== 'common')
+          ? (RARITY_COLORS[item.rarity] || SLOT_BASE_COLORS[slot]) : SLOT_BASE_COLORS[slot];
+        gm.material.color.setHex(tint);
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  INPUT — keyboard + virtual joystick
+  // ═══════════════════════════════════════════════════════════
+  const keys = { up:false, down:false, left:false, right:false };
+  const MOVE_KEYS = { KeyW:'up', ArrowUp:'up', KeyS:'down', ArrowDown:'down', KeyA:'left', ArrowLeft:'left', KeyD:'right', ArrowRight:'right' };
+  window.addEventListener('keydown', e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = true; e.preventDefault(); } });
+  window.addEventListener('keyup',   e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = false; e.preventDefault(); } });
+  window.addEventListener('keydown', e => {
+    if (e.code === 'KeyE') { if (!anyPanelOpen) tryEnterPortal(); }
+    else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
+    else if (e.code === 'Escape') {
+      document.getElementById('backpack-overlay').classList.remove('open');
+      document.getElementById('dev-overlay').classList.remove('open');
+      syncPanelState();
+    }
+  });
+
+  const joy = { x: 0, z: 0, active: false };
+  (function initJoystick() {
+    const base = document.getElementById('joystick');
+    const knob = document.getElementById('joystick-knob');
+    const maxR = 40; let id = null;
+    const setKnob = (dx, dy) => { knob.style.transform = `translate(${dx}px, ${dy}px)`; };
+    const reset = () => { joy.x = 0; joy.z = 0; joy.active = false; setKnob(0, 0); id = null; };
+    const move = (cx, cy) => {
+      const r = base.getBoundingClientRect();
+      let dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
+      const len = Math.hypot(dx, dy);
+      if (len > maxR) { dx = dx/len*maxR; dy = dy/len*maxR; }
+      setKnob(dx, dy); joy.x = dx/maxR; joy.z = dy/maxR; joy.active = (Math.abs(joy.x) + Math.abs(joy.z)) > 0.05;
+    };
+    base.addEventListener('pointerdown', e => { id = e.pointerId; base.setPointerCapture(e.pointerId); move(e.clientX, e.clientY); e.preventDefault(); });
+    base.addEventListener('pointermove', e => { if (e.pointerId === id) { move(e.clientX, e.clientY); e.preventDefault(); } });
+    const end = e => { if (e.pointerId === id) reset(); };
+    base.addEventListener('pointerup', end); base.addEventListener('pointercancel', end);
+  })();
+
+  // ═══════════════════════════════════════════════════════════
+  //  MAIN UPDATE  (verbatim phase4 logic — tile space)
+  // ═══════════════════════════════════════════════════════════
+  function update(dt) {
+    if (player.isDead) return;
+    if (zoneFading) return;
+    tick++;
+
+    if (player.deathSickness > 0) {
+      player.deathSickness -= dt;
+      if (player.deathSickness <= 0) { player.deathSickness = 0; document.getElementById('sickness-bar').style.display = 'none'; }
+      recalcMaxHp();
+      const mins = Math.floor(player.deathSickness / 60), secs = Math.floor(player.deathSickness % 60);
+      document.getElementById('sickness-timer').textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+    }
+
+    // Movement — keyboard 0.08/frame, joystick speed*dt (phase4 verbatim feel)
+    if (!player.uiLocked) {
+      const spd = 0.08;
+      if (keys.up)    player.y -= spd;
+      if (keys.down)  player.y += spd;
+      if (keys.left)  player.x -= spd;
+      if (keys.right) player.x += spd;
+      if (joy.active) {
+        const angle = Math.atan2(joy.z, joy.x);
+        player.x += Math.cos(angle) * player.speed * dt;
+        player.y += Math.sin(angle) * player.speed * dt;
+      }
+    }
+    player.x = Math.max(0, Math.min(player.x, GRID - 1));
+    player.y = Math.max(0, Math.min(player.y, GRID - 1));
+
+    // Portal check
+    for (const portal of getPortals()) {
+      if (Math.hypot(player.x - portal.x, player.y - portal.y) < 1.2) { transitionToZone(portal.target); return; }
+    }
+    const hsPortal = getHomesteadPortal();
+    if (hsPortal && Math.hypot(player.x - hsPortal.x, player.y - hsPortal.y) < 1.2) { transitionToZone('homestead'); return; }
+
+    if (anyPanelOpen) return;
+
+    // Enemy AI + combat
+    const weaponStyle = getWeaponStyle();
+    const combatStat  = getCombatStat();
+    const combatRange = getCombatRange();
+    const atkInterval = Math.max(20, Math.floor((1 / (combatStat / 10)) * 60));
+
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (e.flashTimer > 0) e.flashTimer -= dt;
+
+      if (e.behavior === 'selfheal') {
+        e.healTimer += dt;
+        if (e.healTimer >= 5) { e.healTimer = 0; if (e.hp > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + Math.ceil(e.maxHp * 0.05)); }
+      }
+      if (e.isBoss && e.phase === 1 && e.hp < e.maxHp * 0.5) {
+        e.phase = 2; e.damage *= 1.5; e.speed *= 1.4; addScreenShake(12);
+      }
+      e.dirTimer += dt;
+      const dirChange = e.isBoss ? (e.phase === 2 ? 0.8 : 1.5) : (2 + Math.random());
+      if (e.dirTimer > dirChange) {
+        if (e.isBoss && e.phase === 2) e.direction = Math.atan2(player.y - e.y, player.x - e.x);
+        else e.direction = Math.random() * Math.PI * 2;
+        e.dirTimer = 0;
+      }
+      e.x += Math.cos(e.direction) * e.speed * dt;
+      e.y += Math.sin(e.direction) * e.speed * dt;
+      e.x = Math.max(0, Math.min(e.x, GRID - 1));
+      e.y = Math.max(0, Math.min(e.y, GRID - 1));
+
+      const dist = Math.hypot(player.x - e.x, player.y - e.y);
+      if (dist < combatRange) {
+        if (tick % atkInterval === 0) {
+          const dmg = Math.max(1, Math.floor(combatStat / 5));
+          e.hp -= dmg; e.flashTimer = 0.12;
+          spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
+          if (e.hp <= 0) {
+            const zone = ZONES[currentZoneId];
+            spawnParticles(e.x * TILE_W, e.y * TILE_H, zone.enemyColor, e.isBoss ? 25 : 12);
+            addScreenShake(e.isBoss ? 16 : 6);
+            const xpGain = e.xpReward;
+            if (weaponStyle === 'melee')  player.skills.xp.strength     += xpGain;
+            if (weaponStyle === 'ranged') player.skills.xp.dexterity    += xpGain;
+            if (weaponStyle === 'magic')  player.skills.xp.intelligence += xpGain;
+            player.skills.xp.vigor += xpGain * 0.5;
+            dropLootFromEnemy(e);
+            enemies.splice(i, 1);
+            if (!e.isBoss) {
+              const spawnZoneId = currentZoneId;
+              setTimeout(() => {
+                if (currentZoneId !== spawnZoneId) return;
+                enemies.push(spawnOneEnemy(ZONES[currentZoneId], true));
+              }, e.rarity === 'epic' ? 12000 : e.rarity === 'rare' ? 7000 : 4000);
+            }
+            continue;
+          }
+        }
+        const eAtkInterval = Math.max(20, Math.floor((1 / e.attackSpeed) * 60));
+        if (tick % eAtkInterval === 0) {
+          if (devInvincible) continue;
+          player.hp -= e.damage;
+          addScreenShake(e.isBoss ? 10 : 4);
+          if (player.hp <= 0) { player.hp = 0; triggerDeath(); return; }
+        }
+      }
+    }
+
+    // Loot pickup (verbatim distance 60/TILE_W)
+    for (let i = lootPiles.length - 1; i >= 0; i--) {
+      const pile = lootPiles[i];
+      if (pile.expiresAt && Date.now() > pile.expiresAt) { lootPiles.splice(i, 1); continue; }
+      if (Math.hypot(player.x - pile.x, player.y - pile.y) < 60 / TILE_W) {
+        if (pile.gold > 0) backpack.gold += pile.gold;
+        for (const item of pile.items) backpack.items.push(item);
+        if (pile.materialDrop) backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1;
+        if (pile.foodDrop) backpack.food.push(pile.foodDrop);
+        lootPiles.splice(i, 1);
+      }
+    }
+
+    // Floating-text decay kept (not rendered)
+    for (let i = floatingTexts.length - 1; i >= 0; i--) { floatingTexts[i].timer += dt; if (floatingTexts[i].timer > 1.2) floatingTexts.splice(i, 1); }
+
+    // XP level-up
+    for (const skill of ['dexterity','strength','vigor','intelligence']) {
+      const threshold = 100 * player.skills.level[skill];
+      if (player.skills.xp[skill] >= threshold) {
+        player.skills.level[skill]++; player.skills.xp[skill] -= threshold; player.baseStats[skill]++;
+      }
+    }
+
+    recalcMaxHp();
+    if (player.hp > player.maxHp) player.hp = player.maxHp;
+
+    lastSave += dt;
+    if (lastSave >= 10) { saveGame(); lastSave = 0; }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  HUD + CAMERA
+  // ═══════════════════════════════════════════════════════════
+  function updateCamera() {
+    const px = toWorldX(player.x), pz = toWorldZ(player.y);
+    camera.position.set(px + CAM_OFFSET.x, CAM_OFFSET.y, pz + CAM_OFFSET.z);
+    camera.lookAt(px, 0, pz);
+    sun.target.position.set(px, 0, pz); sun.target.updateMatrixWorld();
+  }
+  function updateHUD() {
+    const zone = ZONES[currentZoneId];
+    document.getElementById('hud-zone').innerHTML = zone.name + (zone.recommendedLevel ? `<small>Recommended Level ${zone.recommendedLevel}</small>` : '<small>Sanctuary</small>');
+    const hpFrac = player.maxHp > 0 ? Math.max(0, Math.min(1, player.hp / player.maxHp)) : 0;
+    document.getElementById('hud-hp-text').textContent = `HP: ${Math.ceil(player.hp)} / ${player.maxHp}`;
+    document.getElementById('hud-hp-fill').style.width = (hpFrac * 100) + '%';
+    updateStatsPanel();
+    drawMinimap();
+    updatePortalLabel();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  PLAYER UI LAYER (HTML overlay) — stats / minimap / backpack /
+  //  equipment / dev / portal labels. No Three.js scene changes.
+  // ═══════════════════════════════════════════════════════════
+  const STAT_KEYS = [['dexterity','DEX'],['strength','STR'],['vigor','VIG'],['intelligence','INT']];
+  const RARITY_DOT = { common:'#888888', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
+  const RARITY_TEXT = { common:'#cccccc', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
+  const SELL_VALUE = { common:10, rare:50, epic:150, legendary:500 };
+  function getSellValue(item) { return SELL_VALUE[item.rarity] || 10; }
+
+  // ── STATS PANEL (top-left) ──
+  let statsBuilt = false;
+  function buildStatsPanel() {
+    const el = document.getElementById('ui-stats'); el.innerHTML = '';
+    for (const [key, ab] of STAT_KEYS) {
+      const row = document.createElement('div'); row.className = 'stat-row';
+      row.innerHTML = `<span class="stat-name" id="st-${key}">${ab}: 1</span><div class="stat-xp"><i id="stx-${key}"></i></div>`;
+      el.appendChild(row);
+    }
+    statsBuilt = true;
+  }
+  function updateStatsPanel() {
+    if (!statsBuilt) buildStatsPanel();
+    for (const [key, ab] of STAT_KEYS) {
+      const lv = player.skills.level[key], xp = player.skills.xp[key], need = 100 * lv;
+      document.getElementById('st-' + key).textContent = `${ab}: ${lv}`;
+      document.getElementById('stx-' + key).style.width = Math.max(0, Math.min(1, xp / need)) * 100 + '%';
+    }
+  }
+
+  // ── MINIMAP (top-right) ──
+  const mmCanvas = document.getElementById('ui-minimap');
+  const mmCtx = mmCanvas.getContext('2d');
+  function allPortals() {
+    const ps = getPortals().map(p => ({ x:p.x, y:p.y, target:p.target }));
+    const hp = getHomesteadPortal(); if (hp) ps.push({ x:hp.x, y:hp.y, target:'homestead' });
+    return ps;
+  }
+  function drawMinimap() {
+    const W = 120, H = 120, s = W / GRID;
+    mmCtx.clearRect(0, 0, W, H);
+    mmCtx.fillStyle = '#111'; mmCtx.fillRect(0, 0, W, H);
+    mmCtx.strokeStyle = '#e8c97a'; mmCtx.lineWidth = 1; mmCtx.strokeRect(0.5, 0.5, W - 1, H - 1);
+    // portals (cyan)
+    mmCtx.fillStyle = '#39d6ff';
+    for (const p of allPortals()) mmCtx.fillRect(p.x * s - 1.5, p.y * s - 1.5, 3, 3);
+    // enemies (rarity colored)
+    for (const e of enemies) { mmCtx.fillStyle = RARITY_DOT[e.rarity] || '#888888'; mmCtx.fillRect(e.x * s - 1, e.y * s - 1, 2, 2); }
+    // player (white)
+    mmCtx.fillStyle = '#ffffff'; mmCtx.fillRect(player.x * s - 2, player.y * s - 2, 4, 4);
+    document.getElementById('ui-minimap-label').textContent = ZONES[currentZoneId].name;
+  }
+
+  // ── PANEL OPEN/CLOSE STATE ──
+  function syncPanelState() {
+    const open = document.getElementById('backpack-overlay').classList.contains('open')
+              || document.getElementById('dev-overlay').classList.contains('open');
+    anyPanelOpen = open;
+    player.uiLocked = open;
+  }
+  function toggleBag() {
+    const o = document.getElementById('backpack-overlay');
+    if (o.classList.contains('open')) closeBag(); else openBag();
+  }
+  function openBag() {
+    document.getElementById('dev-overlay').classList.remove('open');
+    document.getElementById('backpack-overlay').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderBackpack();
+  }
+  function closeBag() { document.getElementById('backpack-overlay').classList.remove('open'); syncPanelState(); }
+
+  // ── BAG TABS ──
+  let activeTab = 'items';
+  function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('bptab-items').classList.toggle('active', tab === 'items');
+    document.getElementById('bptab-equip').classList.toggle('active', tab === 'equipment');
+    document.getElementById('bp-items-view').style.display = tab === 'items' ? 'block' : 'none';
+    document.getElementById('bp-equip-view').style.display = tab === 'equipment' ? 'block' : 'none';
+    renderBackpack();
+  }
+
+  // ── BAG RENDER ──
+  function rarText(r) { return RARITY_TEXT[r] || '#cccccc'; }
+  function renderBackpack() {
+    document.getElementById('bp-gold').innerHTML = '&#9679; Gold: ' + backpack.gold;
+
+    // Items
+    const grid = document.getElementById('bp-item-grid'); grid.innerHTML = '';
+    if (!backpack.items.length) grid.innerHTML = '<div class="bp-empty">Empty</div>';
+    else backpack.items.forEach((item, idx) => {
+      const d = document.createElement('div');
+      d.className = 'bp-item ' + (item.rarity || 'common');
+      d.innerHTML = `<div class="bp-item-name">${item.name}</div><div class="bp-item-type">${item.type || item.slot}</div>`
+        + `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>`;
+      d.onclick = () => equipFromBag(idx);
+      grid.appendChild(d);
+    });
+
+    // Food
+    const fg = document.getElementById('bp-food-grid'); fg.innerHTML = '';
+    if (!backpack.food.length) fg.innerHTML = '<div class="bp-empty">No food</div>';
+    else backpack.food.forEach((f, idx) => {
+      const d = document.createElement('div'); d.className = 'bp-item food';
+      d.innerHTML = `<div class="bp-item-name">${f.name}</div><div class="bp-item-type">+${f.healAmt} HP</div>`;
+      d.onclick = () => eatFromBag(idx);
+      fg.appendChild(d);
+    });
+
+    // Materials
+    const ml = document.getElementById('bp-materials'); ml.innerHTML = '';
+    MATERIAL_DB.forEach(m => { const cnt = backpack.materials[m.id] || 0;
+      ml.innerHTML += `<div class="bp-mat" style="color:${cnt > 0 ? '#7d5' : '#444'}">${m.name}: <b>${cnt}</b></div>`; });
+
+    // Equipment slots
+    const slotsEl = document.getElementById('bp-slots'); slotsEl.innerHTML = '';
+    for (const slot of ['weapon','helmet','chest','legs','boots']) {
+      const it = player.equipped[slot];
+      const div = document.createElement('div'); div.className = 'bp-slot' + (it ? ' filled' : '');
+      div.innerHTML = `<div class="bp-slot-label">${slot}</div>`
+        + (it ? `<div class="bp-slot-item" style="color:${rarText(it.rarity)}">${it.name}</div>`
+                + `<button class="bp-uneq" onclick="unequipSlot('${slot}')">UNEQUIP</button>`
+              : `<div class="bp-slot-item empty">Empty</div>`);
+      slotsEl.appendChild(div);
+    }
+    // Stat bonus summary
+    const b = player.equippedBonuses;
+    document.getElementById('bp-bonus').textContent = `DEX +${b.dexterity}   STR +${b.strength}   VIG +${b.vigor}   INT +${b.intelligence}`;
+  }
+
+  // ── EQUIP / UNEQUIP / SELL / EAT (logic ported from phase4) ──
+  function equipFromBag(idx) {
+    const item = backpack.items[idx]; if (!item) return;
+    const slot = item.slot; if (!slot || !(slot in player.equipped)) return;
+    const cur = player.equipped[slot];
+    backpack.items.splice(idx, 1);          // task spec: remove from backpack
+    if (cur) backpack.items.push(cur);       // swap the previously-equipped back in
+    player.equipped[slot] = item;
+    recalcEquippedBonuses(); recalcMaxHp(); saveGame(); renderBackpack();
+  }
+  function unequipSlot(slot) {
+    const item = player.equipped[slot]; if (!item) return;
+    player.equipped[slot] = null; backpack.items.push(item);
+    recalcEquippedBonuses(); recalcMaxHp(); saveGame(); renderBackpack();
+  }
+  function sellFromBag(idx) {
+    const item = backpack.items[idx]; if (!item) return;
+    if (item.untradeable) return;
+    backpack.gold += getSellValue(item);
+    backpack.items.splice(idx, 1);
+    saveGame(); renderBackpack();
+  }
+  function eatFromBag(idx) {
+    const f = backpack.food[idx]; if (!f) return;
+    player.hp = Math.min(player.maxHp, player.hp + f.healAmt);
+    backpack.food.splice(idx, 1);
+    saveGame(); renderBackpack();
+  }
+
+  // ── HOME button — teleport to Homestead if not in combat ──
+  function goHome() {
+    if (currentZoneId === 'homestead' || zoneFading) return;
+    const inCombat = enemies.some(e => Math.hypot(player.x - e.x, player.y - e.y) < 3);
+    if (inCombat) { showBanner('Cannot return\nwhile enemies are near'); return; }
+    transitionToZone('homestead');
+  }
+
+  // ── DEV panel ──
+  function toggleDev() {
+    const o = document.getElementById('dev-overlay');
+    if (o.classList.contains('open')) { o.classList.remove('open'); syncPanelState(); }
+    else {
+      document.getElementById('backpack-overlay').classList.remove('open');
+      o.classList.add('open'); anyPanelOpen = true; player.uiLocked = true; renderDev();
+    }
+  }
+  function renderDev() {
+    document.getElementById('dev-json').textContent = JSON.stringify({ player, backpack, currentZoneId }, null, 2);
+    document.getElementById('dev-inv').textContent = 'Invincible: ' + (devInvincible ? 'ON' : 'OFF');
+  }
+  function devToggleInvincible() { devInvincible = !devInvincible; renderDev(); }
+  function devClearSave() { try { localStorage.removeItem('runeportal_save'); } catch(e) {} location.reload(); }
+
+  // ── PORTAL PROXIMITY LABEL (within 3 units) + E / tap to enter ──
+  let nearPortal = null;
+  function updatePortalLabel() {
+    const el = document.getElementById('portal-label');
+    if (player.isDead || anyPanelOpen) { el.style.display = 'none'; nearPortal = null; return; }
+    let best = null, bd = 3;
+    for (const p of allPortals()) { const d = Math.hypot(player.x - p.x, player.y - p.y); if (d < bd) { bd = d; best = p; } }
+    nearPortal = best;
+    if (best) {
+      const zn = ZONES[best.target] ? ZONES[best.target].name : best.target;
+      el.innerHTML = `${zn} &rarr; <b>Press E to enter</b>`;
+      el.style.display = 'block';
+    } else el.style.display = 'none';
+  }
+  function tryEnterPortal() { if (nearPortal && !zoneFading) transitionToZone(nearPortal.target); }
+
+  // ═══════════════════════════════════════════════════════════
+  //  GAME LOOP — single requestAnimationFrame (no PIXI ticker)
+  // ═══════════════════════════════════════════════════════════
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  let lastT = performance.now();
+  function animate() {
+    requestAnimationFrame(animate);
+    const now = performance.now();
+    const dt = Math.min((now - lastT) / 1000, 0.1);
+    lastT = now;
+    update(dt);
+    updateCamera();
+    syncRender();
+    updateHUD();
+    updateBuildingLabel();
+    if (hsFlame) {
+      const t = performance.now();
+      hsFlame.scale.y = 0.85 + Math.sin(t * 0.004) * 0.3;
+      if (hsFireLight) hsFireLight.intensity = 1.8 + Math.sin(t * 0.0053 + 0.8) * 0.5;
+    }
+    renderer.render(scene, camera);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  INIT
+  // ═══════════════════════════════════════════════════════════
+  loadGame();                 // may set currentZoneId, stats, isDead
+  recalcEquippedBonuses();
+  recalcMaxHp();
+  setZoneVisuals(currentZoneId);
+  spawnEnemies();
+  showBanner(`${ZONES[currentZoneId].name}\n${ZONES[currentZoneId].subtitle}`);
+  animate();
+
+  </script>
+</body>
+</html>
