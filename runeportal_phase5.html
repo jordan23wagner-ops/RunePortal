@@ -807,7 +807,7 @@
   ];
 
   const MAT_KEY = {
-    'Runic Dust':'runic_dust', 'Void Shard':'void_shard',
+    'Runic Dust':'runic_dust', 'Void Shard':'void_shard', 'Void Seed':'void_seed',
     'Iron Ingot':'iron_ingot', 'Leather Scraps':'leather_scraps',
     'Iron Ore':'iron_ore', 'Bog Root':'bog_root'
   };
@@ -1170,8 +1170,85 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  LOOT  (verbatim)
+  //  LOOT TABLES
   // ═══════════════════════════════════════════════════════════
+  const ZONE_TIER = {
+    homestead:0, ashfields:1, bleakwood:2, ironbone:3, rot_flats:3,
+    veilstone:4, cindermaw:4, ashen_crown:5
+  };
+  const LOOT_ROLLS = { standard:2, elite:3, boss:5 };
+  const ITEM_DROP_CHANCE = { standard:0.18, elite:0.45, boss:0.80 };
+  const MATERIAL_DROP_CHANCE = { 1:0.60, 2:0.50, 3:0.45, 4:0.35, 5:0.30 };
+
+  const ZONE_MATERIAL_TABLE = {
+    tier1: [
+      { id:'leather_scraps', name:'Leather Scraps', weight:60, qty:[1,3] },
+      { id:'iron_ingot',     name:'Iron Ingot',     weight:30, qty:[1,2] },
+      { id:'runic_dust',     name:'Runic Dust',     weight:8,  qty:[1,1] },
+      { id:'void_shard',     name:'Void Shard',     weight:2,  qty:[1,1] },
+    ],
+    tier2: [
+      { id:'leather_scraps', name:'Leather Scraps', weight:45, qty:[1,4] },
+      { id:'iron_ingot',     name:'Iron Ingot',     weight:35, qty:[1,3] },
+      { id:'runic_dust',     name:'Runic Dust',     weight:15, qty:[1,2] },
+      { id:'void_shard',     name:'Void Shard',     weight:5,  qty:[1,1] },
+    ],
+    tier3: [
+      { id:'iron_ingot',     name:'Iron Ingot',     weight:40, qty:[2,4] },
+      { id:'runic_dust',     name:'Runic Dust',     weight:35, qty:[1,3] },
+      { id:'void_shard',     name:'Void Shard',     weight:20, qty:[1,2] },
+      { id:'void_seed',      name:'Void Seed',      weight:5,  qty:[1,1] },
+    ],
+    tier4: [
+      { id:'runic_dust',     name:'Runic Dust',     weight:40, qty:[2,4] },
+      { id:'void_shard',     name:'Void Shard',     weight:35, qty:[1,3] },
+      { id:'void_seed',      name:'Void Seed',      weight:20, qty:[1,2] },
+      { id:'leather_scraps', name:'Leather Scraps', weight:5,  qty:[2,5] },
+    ],
+    tier5: [
+      { id:'void_shard',     name:'Void Shard',     weight:45, qty:[2,4] },
+      { id:'void_seed',      name:'Void Seed',      weight:35, qty:[1,3] },
+      { id:'runic_dust',     name:'Runic Dust',     weight:15, qty:[3,6] },
+      { id:'iron_ingot',     name:'Iron Ingot',     weight:5,  qty:[3,6] },
+    ],
+  };
+  const ELITE_BONUS_MATERIALS = {
+    tier1: { id:'runic_dust',  name:'Runic Dust',  qty:[1,2], chance:0.08 },
+    tier2: { id:'runic_dust',  name:'Runic Dust',  qty:[1,3], chance:0.10 },
+    tier3: { id:'void_shard',  name:'Void Shard',  qty:[1,2], chance:0.08 },
+    tier4: { id:'void_shard',  name:'Void Shard',  qty:[1,3], chance:0.10 },
+    tier5: { id:'void_seed',   name:'Void Seed',   qty:[1,2], chance:0.08 },
+  };
+  const BOSS_BONUS_MATERIALS = {
+    tier1: [{ id:'runic_dust',name:'Runic Dust',qty:[2,4] }, { id:'void_shard',name:'Void Shard',qty:[1,1],chance:0.15 }],
+    tier2: [{ id:'void_shard',name:'Void Shard',qty:[1,2] }, { id:'void_seed', name:'Void Seed', qty:[1,1],chance:0.10 }],
+    tier3: [{ id:'void_shard',name:'Void Shard',qty:[2,4] }, { id:'void_seed', name:'Void Seed', qty:[1,2],chance:0.20 }],
+    tier4: [{ id:'void_seed', name:'Void Seed', qty:[1,3] }, { id:'void_shard',name:'Void Shard',qty:[2,4] }],
+    tier5: [{ id:'void_seed', name:'Void Seed', qty:[2,4] }, { id:'void_shard',name:'Void Shard',qty:[3,6] }],
+  };
+
+  function randRange(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+  function matDropColor(id) {
+    if (id === 'void_seed')  return '#00ffcc';
+    if (id === 'void_shard') return '#9944ff';
+    if (id === 'runic_dust') return '#cc88ff';
+    return '#aabbaa';
+  }
+  function rollGold(zoneTier, lootType) {
+    const BASE = { standard:[5,20], elite:[25,80], boss:[150,400] };
+    const MULT = { 1:1.0, 2:1.5, 3:2.2, 4:3.5, 5:5.0 };
+    const [mn,mx] = BASE[lootType] || BASE.standard;
+    return Math.floor(randRange(mn, mx) * (MULT[zoneTier] || 1.0) * getGoldBonus());
+  }
+  function rollMaterial(zoneTier) {
+    const table = ZONE_MATERIAL_TABLE['tier' + zoneTier];
+    if (!table || !table.length) return null;
+    const total = table.reduce((a,m) => a + m.weight, 0);
+    let r = Math.random() * total;
+    for (const m of table) { r -= m.weight; if (r <= 0) return { id:m.id, qty:randRange(m.qty[0],m.qty[1]), name:m.name }; }
+    const last = table[table.length-1];
+    return { id:last.id, qty:last.qty[0], name:last.name };
+  }
   function rollZoneGear(zone, isBoss) {
     const dt = zone.dropTable || { rarities:['rare'], legendaryChance:0 };
     let rarity;
@@ -1191,29 +1268,47 @@
   }
   function dropLootFromEnemy(enemy) {
     const zone = ZONES[currentZoneId];
-    const pile = { x: enemy.x, y: enemy.y, items: [], gold: 0, isDeathPile: false };
-    const baseGold = Math.floor(Math.random() * 10) + 1;
-    pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus() * (enemy.goldMult || 1));
+    const zoneTier = ZONE_TIER[currentZoneId] || 1;
+    const lootType = enemy.isBoss ? 'boss' : (enemy.rarity === 'epic' ? 'elite' : 'standard');
+    const pile = { x:enemy.x, y:enemy.y, items:[], gold:0, materialDrops:[], isDeathPile:false };
+
+    // Gold (always)
+    pile.gold = rollGold(zoneTier, lootType);
     if (pile.gold > 0) showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + pile.gold + 'g', '#e8c97a');
-    const gearChance = enemy.rarity === 'epic' ? 0.7 : enemy.rarity === 'rare' ? 0.5 : 0.3;
-    if (Math.random() < gearChance) { const item = rollZoneGear(zone, enemy.isBoss); if (item) pile.items.push(item); }
-    const matChance = enemy.rarity === 'epic' ? 0.6 : enemy.rarity === 'rare' ? 0.35 : 0.15;
-    if (Math.random() < matChance) {
-      const zoneMats = MATERIAL_DB.filter(m => m.dropFrom.includes(currentZoneId));
-      if (zoneMats.length) pile.materialDrop = zoneMats[Math.floor(Math.random() * zoneMats.length)].id;
+
+    // Item rolls (roll 0 = gold; rolls 1..N = item/material)
+    const rolls = LOOT_ROLLS[lootType];
+    for (let i = 1; i < rolls; i++) {
+      if (Math.random() > ITEM_DROP_CHANCE[lootType]) continue;
+      if (Math.random() < (MATERIAL_DROP_CHANCE[zoneTier] || 0.5)) {
+        const mat = rollMaterial(zoneTier);
+        if (mat) pile.materialDrops.push(mat);
+      } else {
+        const item = rollZoneGear(zone, enemy.isBoss);
+        if (item) pile.items.push(item);
+      }
     }
+
+    // Elite bonus material
+    if (lootType === 'elite') {
+      const eb = ELITE_BONUS_MATERIALS['tier' + zoneTier];
+      if (eb && Math.random() < eb.chance) pile.materialDrops.push({ id:eb.id, qty:randRange(eb.qty[0],eb.qty[1]), name:eb.name });
+    }
+
+    // Boss guaranteed material + bonus rolls
+    if (lootType === 'boss') {
+      const baseMat = rollMaterial(zoneTier);
+      if (baseMat) pile.materialDrops.push(baseMat);
+      const bbList = BOSS_BONUS_MATERIALS['tier' + zoneTier] || [];
+      for (const bb of bbList) {
+        if (Math.random() < (bb.chance !== undefined ? bb.chance : 1.0))
+          pile.materialDrops.push({ id:bb.id, qty:randRange(bb.qty[0],bb.qty[1]), name:bb.name });
+      }
+    }
+
+    // Food (legacy)
     if (Math.random() < 0.08) pile.foodDrop = {...FOOD_DB[Math.min(Math.floor(zone.lootMult - 1), FOOD_DB.length - 1)]};
-    // Scroll ingredient drops (direct award, not walk-over)
-    const _zo = ['homestead','ashfields','bleakwood','ironbone','rot_flats','veilstone','cindermaw','ashen_crown'];
-    const _zi = _zo.indexOf(currentZoneId);
-    if (_zi >= 2 && !enemy.isBoss && (enemy.rarity === 'rare' || enemy.rarity === 'epic') && Math.random() < 0.08) {
-      backpack.materials.runic_dust = (backpack.materials.runic_dust || 0) + 1;
-      showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+Runic Dust', '#cc88ff');
-    }
-    if (enemy.isBoss && _zi >= 3 && Math.random() < 0.05) {
-      backpack.materials.void_shard = (backpack.materials.void_shard || 0) + 1;
-      showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+Void Shard', '#9944ff');
-    }
+
     lootPiles.push(pile);
   }
 
@@ -2256,6 +2351,7 @@
         if (pile.gold > 0) { backpack.gold += pile.gold; showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + pile.gold + 'g', '#f0c040'); }
         for (const item of pile.items) { backpack.items.push(item); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), item.name, rarText(item.rarity)); }
         if (pile.materialDrop) { backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1; const _mi = MATERIAL_DB.find(m => m.id === pile.materialDrop); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), _mi ? _mi.name : pile.materialDrop, '#7ddd55'); }
+        if (pile.materialDrops && pile.materialDrops.length) { for (const _md of pile.materialDrops) { backpack.materials[_md.id] = (backpack.materials[_md.id] || 0) + _md.qty; showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + _md.qty + ' ' + _md.name, matDropColor(_md.id)); } }
         if (pile.foodDrop) { backpack.food.push(pile.foodDrop); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), pile.foodDrop.name + ' +' + pile.foodDrop.healAmt + 'HP', '#ffaa44'); }
         lootPiles.splice(i, 1);
       }
