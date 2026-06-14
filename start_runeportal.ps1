@@ -1,57 +1,50 @@
-<<<<<<< HEAD
-﻿# RunePortal Dev Startup — syncs repo, runs studio
-
-$repoPath = "C:\Users\Jordon\OneDrive\Desktop"
-$studioScript = "C:\Users\Jordon\runeportal_studio.py"
-=======
-# RunePortal Dev Startup — syncs repo, runs studio + token tracker
+﻿# RunePortal Dev Startup — syncs repo, runs studio + token tracker
 $repoPath = "C:\Users\Jordon\OneDrive\Desktop"
 $studioScript = "$repoPath\runeportal_studio.py"
 $trackerScript = "C:\Users\Jordon\token_tracker.ps1"
->>>>>>> 58f9994e3c4d4448b9f68b72a55bf47ffdaceb11
 
 Set-Location $repoPath
 
-Write-Host "🔄 Syncing repo from GitHub..." -ForegroundColor Cyan
+Write-Host "Syncing repo from GitHub..." -ForegroundColor Cyan
 git pull origin main 2>$null
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Repo synced" -ForegroundColor Green
+    Write-Host "Repo synced" -ForegroundColor Green
 } else {
-    Write-Host "⚠️  Git pull failed — proceeding locally" -ForegroundColor Yellow
+    Write-Host "Git pull failed — proceeding locally" -ForegroundColor Yellow
 }
 
-Write-Host "`n📖 Reading SESSION_STATE (CONTEXT.md)..." -ForegroundColor Cyan
+Write-Host "`nReading SESSION_STATE (CONTEXT.md)..." -ForegroundColor Cyan
 if (Test-Path "CONTEXT.md") {
-    Write-Host "✅ CONTEXT loaded" -ForegroundColor Green
+    Write-Host "CONTEXT loaded" -ForegroundColor Green
 } else {
-    Write-Host "⚠️  CONTEXT.md not found" -ForegroundColor Yellow
+    Write-Host "CONTEXT.md not found" -ForegroundColor Yellow
 }
 
 # Start token tracker in separate window
-Write-Host "`n📊 Starting Token Tracker..." -ForegroundColor Cyan
+Write-Host "`nStarting Token Tracker..." -ForegroundColor Cyan
 $trackerJob = Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -NoExit -File `"$trackerScript`"" -PassThru
-Write-Host "✅ Tracker running (PID: $($trackerJob.Id))" -ForegroundColor Green
+Write-Host "Tracker running (PID: $($trackerJob.Id))" -ForegroundColor Green
 
-Write-Host "`n🤖 Starting RunePortal Studio (v4.0)..." -ForegroundColor Cyan
-Write-Host "────────────────────────────────────────" -ForegroundColor Gray
+Write-Host "`nStarting RunePortal Studio (v4.0)..." -ForegroundColor Cyan
+Write-Host "----------------------------------------" -ForegroundColor Gray
 
 python $studioScript
 
-Write-Host "`n────────────────────────────────────────" -ForegroundColor Gray
+Write-Host "`n----------------------------------------" -ForegroundColor Gray
 
 # Stop tracker when studio exits
-Write-Host "`n🛑 Stopping Token Tracker..." -ForegroundColor Cyan
+Write-Host "`nStopping Token Tracker..." -ForegroundColor Cyan
 Stop-Process -Id $trackerJob.Id -ErrorAction SilentlyContinue
-Write-Host "✅ Tracker stopped" -ForegroundColor Green
+Write-Host "Tracker stopped" -ForegroundColor Green
 
-Write-Host "`n💾 Syncing to GitHub..." -ForegroundColor Cyan
+Write-Host "`nSyncing to GitHub..." -ForegroundColor Cyan
 git add -A
 $msg = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm'))] Studio session end"
 git commit -m $msg 2>$null
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Changes committed" -ForegroundColor Green
+    Write-Host "Changes committed" -ForegroundColor Green
     git push origin main 2>$null
-    if ($LASTEXITCODE -eq 0) { Write-Host "✅ Pushed to GitHub" -ForegroundColor Green }
+    if ($LASTEXITCODE -eq 0) { Write-Host "Pushed to GitHub" -ForegroundColor Green }
 }
 
-Write-Host "`n✨ Repo synced. Session end." -ForegroundColor Green
+Write-Host "`nRepo synced. Session end." -ForegroundColor Green
