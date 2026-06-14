@@ -1,0 +1,26 @@
+﻿# Backups & old versions
+*_backup_*.html
+runeportal_phase3.html
+runeportal_phase4.html
+*.backup
+*.local
+
+# Build & logs
+node_modules/
+dist/
+build/
+*.log
+__pycache__/
+*.pyc
+
+# OS & IDE
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# Temp & cache
+temp/
+cache/
+*.tmp
+.env

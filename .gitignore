@@ -1,0 +1,20 @@
+﻿# Dependencies
+node_modules/
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local dev
+*.log
+temp/
+.env
+runeportal_*.backup
+runeportal_*.local
