@@ -668,9 +668,9 @@
       const mat = new THREE.MeshLambertMaterial({ color: 0xc8902a });
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.75), mat);
       mesh.position.set(wx, 0.85, wz);
-      mesh.rotation.y = -angle;
+      mesh.rotation.y = Math.PI / 2 - angle;
       scene.add(mesh);
-      projectiles.push({ type: 'ranged', mesh, timer: 0, vx: Math.cos(angle) * 25, vz: Math.sin(angle) * 25, distTrav: 0, maxDist: 15 });
+      projectiles.push({ type: 'ranged', mesh, timer: 0, vx: Math.cos(angle) * 25, vz: Math.sin(angle) * 25, distTrav: 0, maxDist: 22 });
     } else {
       const mat = new THREE.MeshLambertMaterial({ color: 0x9944ff, emissive: new THREE.Color(0x6622cc), emissiveIntensity: 0.9 });
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), mat);
@@ -1573,7 +1573,7 @@
         e.hpEl = document.createElement('div'); e.hpEl.className = 'ehp';
         e.hpEl.innerHTML = '<i></i>'; hpbarLayer.appendChild(e.hpEl); }
       e.mesh.position.set(toWorldX(e.x), 0, toWorldZ(e.y));
-      e.mesh.rotation.y = -e.facing;
+      e.mesh.rotation.y = Math.PI / 2 - e.facing;
       const flash = e.flashTimer > 0;
       for (const m of e.mats) m.emissive.setHex(flash ? 0xffffff : m.userData.baseEmissive);
       liveEnemies.add(e);
@@ -1612,7 +1612,7 @@
     }
     // Player + equipped gear overlays
     playerMesh.position.set(toWorldX(player.x), 0, toWorldZ(player.y));
-    playerMesh.rotation.y = -playerFacing;
+    playerMesh.rotation.y = Math.PI / 2 - playerFacing;
     playerMesh.visible = !player.isDead;
     for (const slot of ['helmet','chest','legs','boots','weapon']) {
       const item = player.equipped[slot];
