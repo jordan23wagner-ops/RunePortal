@@ -1,0 +1,2 @@
+git remote set-url origin https://jordan23wagner-ops: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@github.com/jordan23wagner-ops/ats-tailor.git
+git push

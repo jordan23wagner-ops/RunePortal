@@ -1,0 +1,15 @@
+=== MCP DIRECTORY SUBMISSION INFO ===
+Copy-paste this into each form below.
+
+Name: FlagCheck Job Analyzer
+Description: Analyzes job descriptions for ATS compatibility, red flags, salary benchmarks, and keyword optimization. Returns structured JSON scores per call.
+Endpoint: https://y-delta-lake.vercel.app/api/analyze
+GitHub: https://github.com/jordan23wagner-ops/ats-tailor
+Category: HR / Productivity / AI Tools
+Pricing: 0.01 USDC per call (x402)
+Author: Jordon Wagner / OpsCalé Digital
+Tags: job-search, ats, resume, hr, recruiting, salary
+
+=== EARNAPP NODE (save this too) ===
+EarnApp UUID: 28e4abbaffedc424e35fef9d4da0e923
+Claim link: https://earnapp.com/r/sdk-node-28e4abbaffedc424e35fef9d4da0e923

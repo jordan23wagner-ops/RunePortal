@@ -1,0 +1,23 @@
+{
+ "playerBase": {
+  "raw": "id: 54f95365-16f3-44f1-92c2-fe6e40196b0d\ndescription: dark fantasy humanoid adventurer, front view, neutral standing stance, no armor, simple cloth tunic, dark fantasy, gritty, detailed pixel art, transparent background\nsize: 48x64px\nview: side\nmode: basic\nstatus: processing (~30-90s)\n\nwarning: auto-deletes after 8 hours\nhint: get_map_object(object_id=\"54f95365-16f3-44f1-92c2-fe6e40196b0d\")"
+ },
+ "sword": {
+  "raw": "id: 56b5ceb8-1323-4d10-9030-23db3ba20725\ndescription: dark fantasy longsword, silver blade, gold crossguard, dark leather grip, vertical, dark fantasy, gritty, detailed pixel art, game item, transparent background\nsize: 48x64px\nview: side\nmode: basic\nstatus: processing (~30-90s)\n\nwarning: auto-deletes after 8 hours\nhint: get_map_object(object_id=\"56b5ceb8-1323-4d10-9030-23db3ba20725\")"
+ },
+ "bow": {
+  "raw": "id: faa729b9-afbb-4454-8cb0-d96f22000379\ndescription: dark fantasy shortbow, dark wood, taut bowstring, nocked arrow, dark fantasy, gritty, detailed pixel art, game item, transparent background\nsize: 48x64px\nview: side\nmode: basic\nstatus: processing (~30-90s)\n\nwarning: auto-deletes after 8 hours\nhint: get_map_object(object_id=\"faa729b9-afbb-4454-8cb0-d96f22000379\")"
+ },
+ "staff": {
+  "raw": "id: 4e13cabe-424a-4559-b947-b3e3c146d335\ndescription: dark fantasy mage staff, dark wood shaft, glowing purple crystal orb on top, vertical, dark fantasy, gritty, detailed pixel art, game item, transparent background\nsize: 48x64px\nview: side\nmode: basic\nstatus: processing (~30-90s)\n\nwarning: auto-deletes after 8 hours\nhint: get_map_object(object_id=\"4e13cabe-424a-4559-b947-b3e3c146d335\")"
+ },
+ "hollowHunter": {
+  "raw": "error: rate limit exceeded\n\nhint: wait ~15-30s for current jobs to complete"
+ },
+ "wraithStalker": {
+  "raw": "error: rate limit exceeded\n\nhint: wait ~15-30s for current jobs to complete"
+ },
+ "ironConstruct": {
+  "raw": "error: rate limit exceeded\n\nhint: wait ~15-30s for current jobs to complete"
+ }
+}

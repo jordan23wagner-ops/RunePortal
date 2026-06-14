@@ -1,0 +1,202 @@
+# ============================================================
+# ALICIA WAGNER — MASTER PROFILE
+# Job Agent Source of Truth
+# ============================================================
+
+personal:
+  name: "Alicia Wagner"
+  email: "aliciacwagner@icloud.com"
+  phone: "1-775-412-7446"
+  location: "Greater Houston, TX"
+  linkedin: "https://www.linkedin.com/in/aliciawagner/"
+  website: "https://www.ameliagrovecollective.com"
+  remote_only: true
+  open_to_hybrid: true
+  hybrid_max_days_in_office: 2
+
+search_criteria:
+  salary_minimum: 145000
+  salary_target: 170000
+  job_types:
+    - "Staff Program Manager"
+    - "Principal Program Manager"
+    - "Principal Technical Project Manager"
+    - "Senior Program Manager"
+    - "Senior Technical Program Manager"
+    - "Enterprise Program Manager"
+    - "IT Program Manager"
+  industries:
+    preferred:
+      - "Healthcare Technology"
+      - "Enterprise SaaS"
+      - "Cloud / Digital Transformation"
+      - "Health IT"
+      - "FinTech"
+    acceptable:
+      - "Manufacturing Technology"
+      - "Automotive Technology"
+      - "Insurtech"
+    avoid:
+      - "Staffing agencies"
+      - "Pure clinical/pharma"
+  target_companies:
+    - "Waystar"
+    - "Veradigm"
+    - "Optum"
+    - "Salesforce"
+    - "ServiceNow"
+    - "Workday"
+    - "Oracle Health"
+    - "Epic"
+    - "Innovaccer"
+    - "Cotiviti"
+    - "R1 RCM"
+    - "Netsmart"
+    - "Abridge"
+    - "Inovalon"
+
+summary: >
+  Senior IT Program & Project Manager with 15+ years delivering enterprise technology programs
+  across healthcare, cloud transformation, manufacturing, and automotive industries. PMP, CSM,
+  and Salesforce Certified Administrator with a BS in Computer Science. Known for building PMOs
+  from the ground up, managing $35M+ program portfolios, and turning complex cross-functional
+  chaos into structured, delivered results — on time and within budget.
+
+certifications:
+  - name: "PMP – Project Management Professional"
+    issuer: "PMI"
+    year: 2019
+  - name: "Certified ScrumMaster (CSM)"
+    issuer: "Scrum Alliance"
+    year: 2020
+  - name: "Salesforce Certified Administrator"
+    issuer: "Salesforce"
+    year: 2019
+  - name: "Lean Six Sigma Yellow Belt"
+    year: 2020
+
+skills:
+  project_management:
+    - "Program & Portfolio Management"
+    - "PMO buildout and governance"
+    - "Agile / Scrum / SAFe"
+    - "Waterfall"
+    - "RAID logs"
+    - "Risk & compliance governance"
+    - "Change management"
+    - "Vendor management"
+    - "Budgeting & forecasting"
+    - "SLA governance"
+    - "Disaster recovery planning"
+  tools:
+    - "JIRA"
+    - "Smartsheet"
+    - "Microsoft Project"
+    - "Azure DevOps"
+    - "Salesforce"
+    - "QuickBase"
+    - "MS Office Suite"
+    - "SharePoint"
+  domain:
+    - "Cloud & digital transformation"
+    - "Enterprise IT delivery"
+    - "Healthcare IT"
+    - "Manufacturing technology"
+    - "Stakeholder & executive alignment"
+    - "Cross-functional program delivery"
+    - "International program rollout"
+
+experience:
+  - title: "Owner / Fractional Program Manager"
+    company: "Amelia Grove Collective"
+    start: "July 2025"
+    end: "Present"
+    highlights:
+      - "Provide fractional PM consulting for enterprise cloud and digital transformation clients"
+      - "Deliver Agile ceremonies, project governance, and vendor alignment for C2C contracts"
+      - "Built scalable Smartsheet and QuickBase tooling for cross-functional team alignment"
+
+  - title: "Owner / Independent Program Manager"
+    company: "Alicia Consulting LLC"
+    start: "September 2022"
+    end: "July 2025"
+    highlights:
+      - "Managed remote enterprise projects across multiple industries simultaneously"
+      - "Delivered process improvement, stakeholder engagement, and risk tracking frameworks"
+      - "Commanded $120/hr C2C contract rates for enterprise clients including Weyerhaeuser"
+
+  - title: "Senior Program Manager"
+    company: "Ridgeline"
+    start: "July 2023"
+    end: "April 2025"
+    highlights:
+      - "Spearheaded concurrent programs accelerating product development and international rollout"
+      - "Managed Quality and Service portfolios including SLA governance and disaster recovery"
+      - "Developed full PMO toolkit: project plans, RAID logs, charters, burndown charts, status reports"
+      - "Partnered cross-functionally with engineering, product, design, infrastructure, and CS"
+
+  - title: "Senior Technical Project Manager / Dev IT PMO Manager"
+    company: "Lithia Motors"
+    start: "August 2021"
+    end: "September 2022"
+    highlights:
+      - "Promoted to manage IT PMO Development team and establish Agile delivery standards"
+      - "Directed Agile initiatives: planning, execution, monitoring, and closure"
+      - "Mentored PMs and created change management and stakeholder communication frameworks"
+
+  - title: "Project Manager"
+    company: "Renown Health"
+    start: "December 2020"
+    end: "August 2021"
+    highlights:
+      - "Led health plan process improvement projects with measurable cost savings and compliance gains"
+      - "Implemented PM governance structures and trained executives"
+      - "Managed RFPs for multimillion-dollar vendor contracts"
+
+  - title: "Program Manager"
+    company: "Panasonic Energy of North America"
+    start: "January 2020"
+    end: "December 2020"
+    highlights:
+      - "Delivered executive program governance managing $35M+ financial timelines"
+      - "Oversaw contract/vendor management across IT and manufacturing projects"
+      - "Mentored project managers across the organization"
+
+  - title: "Project Manager Consultant"
+    company: "Infosys BPM"
+    start: "July 2019"
+    end: "January 2020"
+    highlights:
+      - "Managed IT project plans for enterprise clients including Microsoft"
+      - "Conducted program reviews and eliminated delivery obstacles"
+
+  - title: "Project & Program Management / Analyst Roles"
+    company: "Intuit, Inc."
+    start: "July 2009"
+    end: "July 2019"
+    highlights:
+      - "Held PM, Program Manager, Business Analyst, and Quality Analyst roles over 10 years"
+      - "Delivered global IT/finance operations improvements impacting 1,500+ users"
+      - "Managed payroll tax compliance systems, vendor escalations, and process automation"
+      - "Built KPI dashboards and risk mitigation frameworks"
+
+education:
+  - institution: "Saint Martin's University"
+    degree: "B.S. Computer Science"
+    honors: "Cum Laude"
+
+# ATS form fill defaults
+form_defaults:
+  work_authorization: "US Citizen"
+  requires_sponsorship: false
+  willing_to_relocate: false
+  notice_period: "2 weeks"
+  preferred_salary: "150000"
+  years_experience: "15"
+  cover_letter_default: >
+    I am excited to apply for this role. As a PMP and CSM-certified program manager with 15 years
+    of enterprise delivery experience — spanning cloud transformation, healthcare IT, Salesforce
+    administration, and PMO buildout — I bring both strategic leadership and deep technical
+    fluency. I have built PMOs from scratch, managed $35M+ portfolios, and consistently delivered
+    complex cross-functional programs on time and within budget. I am specifically drawn to
+    [COMPANY] because of [FOCUS_AREA], and thrive in remote-first, high-accountability environments.

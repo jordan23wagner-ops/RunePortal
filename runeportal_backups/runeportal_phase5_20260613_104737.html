@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>RunePortal — Phase 5 (Three.js scaffold)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  #scene-canvas { display: block; width: 100vw; height: 100vh; }
+
+  /* ── VIRTUAL JOYSTICK (mobile) — bottom-left, touch-safe ──────────────── */
+  #joystick {
+    position: fixed;
+    left: 24px;
+    bottom: 24px;
+    width: 120px;            /* base — well above the 44px min tap target */
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    touch-action: none;      /* stop the browser from scrolling/zooming on drag */
+    z-index: 10;
+    user-select: none;
+  }
+  #joystick-knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 54px;
+    height: 54px;
+    margin: -27px 0 0 -27px;
+    border-radius: 50%;
+    background: rgba(232, 201, 122, 0.55);
+    border: 2px solid rgba(232, 201, 122, 0.9);
+    pointer-events: none;    /* drags are handled on the base */
+  }
+
+  #hud {
+    position: fixed;
+    top: 10px;
+    left: 12px;
+    z-index: 10;
+    font: 12px/1.4 monospace;
+    color: #e8c97a;
+    text-shadow: 0 1px 2px #000;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <canvas id="scene-canvas"></canvas>
+
+  <div id="joystick"><div id="joystick-knob"></div></div>
+  <div id="hud">RunePortal — Phase 5 · Three.js scaffold<br>WASD / Arrows / joystick to move</div>
+
+  <!-- Three.js r128 (approved CDN import — only new external this session) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  /*
+  === CHANGELOG ===
+  [2026-06-13] — PHASE 5 SCAFFOLD (Three.js renderer rewrite, Phase 1 only):
+    Brand-new single-file scaffold. NO game logic ported — movement + render only.
+    RENDERER — Three.js r128 (cdnjs CDN), WebGLRenderer, full viewport, black bg,
+      shadow maps enabled (PCFSoft). PerspectiveCamera 60° FOV at (0,18,12) looking
+      at origin (~70° top-down tilt, GDevelop reference style).
+    SCENE — 60x60 flat PlaneGeometry ground (MeshLambertMaterial #3a7d44,
+      receiveShadow), AmbientLight (#fff, 0.4), DirectionalLight (#fff, 0.8) at
+      (10,20,10) castShadow with a 2048x2048 shadow map.
+    PLAYER — procedural low-poly group (sphere head, box torso, 2 cylinder arms,
+      2 cylinder legs), MeshLambertMaterial #8a7560 flatShading, every part
+      castShadow, feet on the ground, spawns at world center (0,0,0).
+    MOVEMENT — WASD + arrow keys + mobile virtual joystick (bottom-left HTML
+      overlay) move the player across the XZ plane at 0.08 units/frame (Y fixed).
+      Camera follows: position = player + (0,18,12), lookAt(player) every frame.
+    LOOP — single requestAnimationFrame (NO PIXI ticker); renderer.render per frame.
+    CONSTRAINTS — one HTML file, no build step, Three.js is the only new CDN import,
+      localStorage UNTOUCHED this session.
+  */
+
+  // ── RENDERER ──────────────────────────────────────────────────────────────
+  const canvas = document.getElementById('scene-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 1);          // black background
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+
+  // ── CAMERA — 60° FOV, ~70° top-down tilt, follows the player ──────────────
+  const CAM_OFFSET = new THREE.Vector3(0, 18, 12);
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.copy(CAM_OFFSET);
+  camera.lookAt(0, 0, 0);
+
+  // ── LIGHTS ────────────────────────────────────────────────────────────────
+  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+  sun.position.set(10, 20, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 80;
+  sun.shadow.camera.left = -35;
+  sun.shadow.camera.right = 35;
+  sun.shadow.camera.top = 35;
+  sun.shadow.camera.bottom = -35;
+  scene.add(sun);
+  scene.add(sun.target); // target defaults to origin; kept in scene for clarity
+
+  // ── GROUND — 60x60 flat plane on the XZ plane ─────────────────────────────
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshLambertMaterial({ color: 0x3a7d44 })
+  );
+  ground.rotation.x = -Math.PI / 2;             // lay flat (XY plane → XZ plane)
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ── PLAYER — procedural low-poly figure, feet on the ground ───────────────
+  function buildPlayer() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ color: 0x8a7560, flatShading: true });
+    const part = (geo, x, y, z) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      group.add(m);
+      return m;
+    };
+
+    // Legs (height 0.7) — bottoms at y=0 so the figure stands on the ground
+    part(new THREE.CylinderGeometry(0.12, 0.1, 0.7, 5), -0.15, 0.35, 0);
+    part(new THREE.CylinderGeometry(0.12, 0.1, 0.7, 5),  0.15, 0.35, 0);
+    // Torso (height 0.8) — sits on the legs
+    part(new THREE.BoxGeometry(0.6, 0.8, 0.4), 0, 1.10, 0);
+    // Arms (height 0.6) — at the torso sides
+    part(new THREE.CylinderGeometry(0.1, 0.1, 0.6, 5), -0.40, 1.15, 0);
+    part(new THREE.CylinderGeometry(0.1, 0.1, 0.6, 5),  0.40, 1.15, 0);
+    // Head (sphere) — on top of the torso
+    part(new THREE.SphereGeometry(0.4, 6, 5), 0, 1.90, 0);
+
+    group.position.set(0, 0, 0);                // spawn at world center
+    return group;
+  }
+
+  const player = buildPlayer();
+  scene.add(player);
+
+  // ── INPUT — keyboard ──────────────────────────────────────────────────────
+  const SPEED = 0.08;            // units per frame
+  const keys = Object.create(null);
+  const MOVE_KEYS = {
+    KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down',
+    KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
+  };
+  window.addEventListener('keydown', e => {
+    if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = true; e.preventDefault(); }
+  });
+  window.addEventListener('keyup', e => {
+    if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = false; e.preventDefault(); }
+  });
+
+  // ── INPUT — virtual joystick (touch + mouse via pointer events) ───────────
+  const joy = { x: 0, z: 0 };            // normalized [-1..1] each axis
+  (function initJoystick() {
+    const base = document.getElementById('joystick');
+    const knob = document.getElementById('joystick-knob');
+    const maxR = 40;                     // knob travel radius (px)
+    let activeId = null;
+
+    const setKnob = (dx, dy) => { knob.style.transform = `translate(${dx}px, ${dy}px)`; };
+    const reset = () => { joy.x = 0; joy.z = 0; setKnob(0, 0); activeId = null; };
+
+    const move = (clientX, clientY) => {
+      const r = base.getBoundingClientRect();
+      let dx = clientX - (r.left + r.width / 2);
+      let dy = clientY - (r.top + r.height / 2);
+      const len = Math.hypot(dx, dy);
+      if (len > maxR) { dx = dx / len * maxR; dy = dy / len * maxR; }
+      setKnob(dx, dy);
+      joy.x = dx / maxR;                 // right = +x
+      joy.z = dy / maxR;                 // down on screen = +z (toward camera)
+    };
+
+    base.addEventListener('pointerdown', e => {
+      activeId = e.pointerId;
+      base.setPointerCapture(e.pointerId);
+      move(e.clientX, e.clientY);
+      e.preventDefault();
+    });
+    base.addEventListener('pointermove', e => {
+      if (e.pointerId !== activeId) return;
+      move(e.clientX, e.clientY);
+      e.preventDefault();
+    });
+    const end = e => { if (e.pointerId === activeId) reset(); };
+    base.addEventListener('pointerup', end);
+    base.addEventListener('pointercancel', end);
+  })();
+
+  // ── MOVEMENT — combine keyboard + joystick, move on XZ, keep on the plane ──
+  const HALF = 28;                       // soft bound inside the 60-unit ground
+  function updateMovement() {
+    let ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + joy.x;
+    let iz = (keys.down  ? 1 : 0) - (keys.up   ? 1 : 0) + joy.z;
+    const len = Math.hypot(ix, iz);
+    if (len > 1) { ix /= len; iz /= len; }   // normalize so diagonals aren't faster
+    if (len > 0.0001) {
+      player.position.x = Math.max(-HALF, Math.min(HALF, player.position.x + ix * SPEED));
+      player.position.z = Math.max(-HALF, Math.min(HALF, player.position.z + iz * SPEED));
+    }
+  }
+
+  // ── CAMERA FOLLOW — keep the player centered every frame ──────────────────
+  function updateCamera() {
+    camera.position.set(
+      player.position.x + CAM_OFFSET.x,
+      player.position.y + CAM_OFFSET.y,
+      player.position.z + CAM_OFFSET.z
+    );
+    camera.lookAt(player.position.x, player.position.y, player.position.z);
+    sun.target.position.copy(player.position);   // shadow frustum tracks the player
+    sun.target.updateMatrixWorld();
+  }
+
+  // ── RESIZE ────────────────────────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ── GAME LOOP — single requestAnimationFrame (no PIXI ticker) ─────────────
+  function animate() {
+    requestAnimationFrame(animate);
+    updateMovement();
+    updateCamera();
+    renderer.render(scene, camera);
+  }
+  animate();
+  </script>
+</body>
+</html>

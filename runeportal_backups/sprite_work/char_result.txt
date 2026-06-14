@@ -1,0 +1,22 @@
+status: completed
+id: a414fff8-ab27-4996-a330-493fbd2153a0
+name: Beginner Survivor
+directions: 4 (south, east, north, west)
+size: 92x92px
+view: low top-down
+style: basic shading, single color black outline, medium detail
+
+rotations:
+  south: https://backblaze.pixellab.ai/file/pixellab-characters/20d7e242-6c3b-4f89-a499-592273bc0cb0/a414fff8-ab27-4996-a330-493fbd2153a0/rotations/south.png
+  east: https://backblaze.pixellab.ai/file/pixellab-characters/20d7e242-6c3b-4f89-a499-592273bc0cb0/a414fff8-ab27-4996-a330-493fbd2153a0/rotations/east.png
+  north: https://backblaze.pixellab.ai/file/pixellab-characters/20d7e242-6c3b-4f89-a499-592273bc0cb0/a414fff8-ab27-4996-a330-493fbd2153a0/rotations/north.png
+  west: https://backblaze.pixellab.ai/file/pixellab-characters/20d7e242-6c3b-4f89-a499-592273bc0cb0/a414fff8-ab27-4996-a330-493fbd2153a0/rotations/west.png
+
+animations: none
+
+download: https://api.pixellab.ai/mcp/characters/a414fff8-ab27-4996-a330-493fbd2153a0/download
+
+available_animations: backflip, breathing-idle, cross-punch, crouched-walking, crouching, drinking, falling-back-death, fight-stance-idle-8-frames, fireball, flying-kick, front-flip, getting-up +37 more
+
+actions: animate_character(character_id="a414fff8-ab27-4996-a330-493fbd2153a0", ...) | create_character_state(character_id="a414fff8-ab27-4996-a330-493fbd2153a0", ...) | delete_character(character_id="a414fff8-ab27-4996-a330-493fbd2153a0")
+hint: animate_character(character_id="a414fff8-ab27-4996-a330-493fbd2153a0", template_animation_id="backflip")

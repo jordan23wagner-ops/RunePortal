@@ -1,0 +1,3228 @@
+
+/*
+=== CHANGELOG ===
+[2026-06-12] — SPRITE ART PASS (PixelLab pixel art, base64 data URIs embedded for the
+  single-file constraint): 7 sprites preloaded by loadSprites() (Image.decode →
+  PIXI.Texture.from) BEFORE initPixi(), into TEXTURES{}. PLAYER body layer
+  (buildPlayerContainer) is now a PIXI.Sprite (TEXTURES.playerBase, feet anchor 0.5/1,
+  bob on move); the Graphics stick-figure is kept as a fallback and its per-frame draws
+  in drawPlayerFigure() are guarded by `body instanceof PIXI.Graphics`. WEAPON: 3 static
+  sprites (sword/bow/staff) swapped by equipped weaponStyle, rarity-tinted (non-common),
+  riding the right hand; the old Graphics weapon is hidden (fallback if textures missing).
+  ENEMIES: Hollow Hunter / Wraith Stalker / Iron Construct render as sprites (rarity
+  light-cast tint via RARITY_LIGHT, feet at +H/2, wraith phasing alpha + hit/heal flash
+  applied to the sprite, construct stomp follows the container); Graphics silhouettes kept
+  as fallback. Armor overlays (helmet/chest/legs/boots), all humanoid enemies, and bosses
+  UNCHANGED (still PIXI.Graphics). Every sprite path falls back to Graphics on load failure.
+  NO player schema change, NO localStorage change, NO new requestAnimationFrame.
+[2026-06-12] — HP NaN FIX (Priority 1): audited every player.hp / player.maxHp
+  read-write — no coordinate from the feet-origin container move feeds any HP math
+  (renderer never writes hp). Real holes sealed: loadGame accepted null/non-numeric
+  hp (JSON serializes NaN → null, which passed the `!== undefined` guard) — now
+  Number.isFinite-gated; recalcMaxHp now sanitizes a non-finite vigor stat AND a
+  non-finite player.hp every frame (self-healing if anything ever corrupts hp at
+  runtime). HUD + Bonfire panel display Math.ceil(hp) — fractional enemy damage
+  (e.g. Bleakwood 7.5) no longer shows decimals. Combat logic untouched.
+[2026-06-12] — AURA REWORK: cloud → subtle halo. Particles now ORBIT the torso
+  center (0,-20 in feet-origin coords) at ~13-17px radius, 3-4px circles
+  (scale 0.5-0.67 on the 6px texture), MAX 6 active (was 8-12 emitted PER FRAME),
+  slow drift + gentle fade, alpha ≤ 0.5 — visible glow that never covers the body.
+[2026-06-12] — EQUIPMENT TAB RARITY COLORS: added .slot .slot-item.<rarity> CSS —
+  rare #4fc3f7 / epic #ab47bc / legendary #ff8f00 + future tiers per GDD color
+  table (mythic #e53935, void #1a0030+glow, radanite #00e5ff, titanite #eceff1,
+  zionite #ffd700). renderBackpack already set the class; the rules were missing.
+  Empty slots stay muted gray (.slot-item.empty unchanged).
+[2026-06-12] — PLAYER ANIMATIONS (render-only, reads game state, never writes):
+  WALK — legs alternate via sin(Date.now()*0.008), ±12px, left phase 0 / right π,
+  arms counter-swing, head bobs ±2px. ATTACK — right arm rest (10,-16) → extended
+  (18,-26) over 0.15s, return 0.1s, phased off the existing tick % atkInterval
+  attack timer (same formula as combat, read-only). IDLE — torso breathing, length
+  ±2% via sin(Date.now()*0.002). Gear follows limbs: leg plates + boots redrawn to
+  the animated leg/foot joints each frame, helmet rides the head bob, chest scales
+  with the breath (anchored at the hip), weapon translates with the right hand.
+  body/legs/boots are per-frame redraws; tint logic untouched (tint persists
+  across Graphics.clear()).
+[2026-06-12] — ENEMY SHAPE SPLIT (creatures vs humanoids): Hollow Hunter →
+  skeletal-werewolf QUADRUPED (low wide body, 4 down-angled limbs from center
+  mass, large oval head + 2 ear triangles, #3d2b1f, wider than humanoids).
+  Wraith Stalker → spectral (NO legs — body tapers to a point, long drooping
+  2-segment arms, hollow OUTLINED head, 3 trailing wisps, #6a5acd; opacity
+  phasing kept). Iron Construct → mechanical (filled box torso #2a2a2a, 4 thick
+  RECT limbs from the box corners, square head with 2 eye slots, 4 rivets,
+  #4a4a4a) + stomp: ±2px y offset alternating every 20 frames (render-only).
+  Humanoids UNCHANGED: Ashwalker Scavenger, Raider Brute, Bone Collector,
+  Revenant, all bosses (__boss shape — The Warden / Nightmother / Gen. Mourne).
+  Hit-flash white overlays redraw the same new shapes (override path kept).
+  NO localStorage schema changes — existing saves load unchanged.
+[2026-06-11] — CHARACTER ART PASS (GDD §2, XP Hero style): player placeholder rects
+  replaced with shaped PIXI.Graphics — stick-figure body (#e8d5b0; head, torso, limbs;
+  container origin moved to FEET), helmet dome, chest trapezoid + center seam, leg
+  plates, boots with raised toes, sword (blade/guard/#4a3000 handle). Gear shapes still
+  drawn white + runtime rarity tint — tint logic untouched. Range ring re-anchored to
+  tile center, HP bar above head, aura emits around the torso.
+[2026-06-11] — CHARACTER ART PASS: enemies now per-type humanoid silhouettes via
+  ENEMY_SHAPE_DEFS + drawEnemyShape() — Ashwalker (lean, arm raised, #8b6914), Raider
+  Brute (wide/thick, #5c3317), Bone Collector (skeletal, eye sockets, fingers, #d4c9a8),
+  Hollow Hunter (hunched, oval head, claws, #3d2b1f), Wraith Stalker (wispy, arms to
+  ground, #6a5acd), Iron Construct (boxy, rivets, #4a4a4a), Revenant (+spectral chest
+  plate, #7a7a8a). Rarity now applies as a light cast (RARITY_LIGHT) over type colors;
+  hit flash = white silhouette overlay; heal flash / phasing / boss tints unchanged.
+  Type sizeScales updated to art-pass values (Brute 1.3, Wraith 1.2, Construct 1.15...).
+[2026-06-11] — BACKLOG FIXES (all 4): (1) minimap → top-right 8px inset; BAG/HOME/DEV
+  buttons + touch/click zones moved below it (y 100-166). (2) Joystick nudged up 40px
+  (center VH-110, zone VH-190; HUD HP/GOLD/bar shifted to match) — clears the death
+  sickness banner. (3) Respawn now fades to Homestead CENTER via the existing zone
+  transition (travelToZone/transitionToZone gained an optional arrivalPos override —
+  default arrivals unchanged). (4) Movement locked while ANY panel/shop UI is open:
+  transient player.uiLocked flag wired to all panel open/close paths; B/H/Escape
+  hotkeys still work while locked. uiLocked is NEVER saved — NO localStorage schema
+  change; existing saves load unchanged.
+[2026-06-11] — PIXIJS RENDERER MIGRATION (GDD §3): Canvas 2D fully replaced by PixiJS 8.x
+  (CDN UMD, WebGL, devicePixelRatio-aware, transparent bg, resizes with window). Stage
+  layers bottom→top: backgroundLayer (zone gradient — TILE GRID REMOVED), worldLayer
+  (buildings/portals, loot, enemies, player — camera-scrolled: worldLayer.pos = -camera),
+  particleLayer (kill bursts, projectiles, hit sparks), uiEffectsLayer (damage numbers +
+  HUD, fixed). Player is a layered container (body/legs/chest/helmet/boots/weapon +
+  auraContainer); gear layers toggle with equipped slots, tint by rarity (rare #4fc3f7 /
+  epic #ab47bc / legendary #ff8f00; common = slot base color). Aura particles (8-12 per
+  frame, rise + fade) colored by highest equipped rarity; none when nothing equipped.
+[2026-06-11] — PIXIJS RENDERER: enemies = container (body rect tinted by rarity, HP bar,
+  rarity glow circle; per-type sizeScale in ZONES config — brute/construct larger,
+  stalker smaller). Wraith Stalker opacity phasing kept; Revenant self-heal now flashes
+  body green; white sparks when player hits, red sparks when player is hit (HP-delta
+  driven — combat logic untouched); boss crown/name/enrage tint kept; Bleakwood biolum
+  glow kept. Loot: gold circle (#ffd700, radius scales with amount), rarity diamonds,
+  white name label. Portals: destination-zone colored ring + core; proximity label
+  radius 60px → 120px (BACKLOG fix). Homestead bgGradient → warm hearth #1a0e05→#0f0805.
+[2026-06-11] — PIXIJS RENDERER: HUD (stats, XP bars, BAG/HOME/DEV, zone name, HP/GOLD,
+  NEW 140px HP bar above HP text, joystick ring, minimap) rebuilt as Pixi objects at the
+  SAME screen coordinates — HUD was canvas-drawn (not HTML); coordinate-based canvas
+  touch/click handlers untouched, so BAG/HOME/DEV taps + joystick behave identically.
+  Minimap rare/epic dot colors aligned to new rarity palette. Game loop: PIXI app.ticker
+  drives update(dt) + renderPixi() — raw requestAnimationFrame loop removed (still
+  exactly ONE loop). All ctx.* calls removed; game logic / combat / zones / death /
+  save-load / joystick input handlers untouched. NO localStorage schema changes —
+  existing saves load unchanged. Floating-text colors remain logic-owned (enemy damage
+  #f88) — renderer displays them verbatim.
+[2026-06-11] — ZONE SYSTEM (GDD §9+§10): zones rebuilt as The Ashfields (Lv 1-5),
+  Bleakwood Hollow (Lv 5-10, HP 2x / dmg 1.5x), Ironbone Flats (Lv 10-20, HP 4x / dmg 2.5x)
+  + Homestead hub (unchanged). All enemy stats now live in ZONES[id].enemyTypes config —
+  Ashwalker Scavenger / Raider Brute / Bone Collector (ranged visual), Hollow Hunter /
+  Wraith Stalker (opacity phasing), Iron Construct / Revenant (self-heal 5% per 5s).
+  Named bosses per zone: The Warden, The Nightmother, General Mourne.
+[2026-06-11] — ZONE SYSTEM: enemy rarity multipliers (RARITY_MULT) — common 1x;
+  rare 2x HP / 1.5x dmg / 1.5x XP / 2x gold; epic 4x HP / 2x dmg / 2x XP / 4x gold.
+[2026-06-11] — ZONE SYSTEM: gear drops pull from zone dropTable (Ashfields: Rare only;
+  Bleakwood: Rare+Epic; Ironbone: Rare+Epic+5% Legendary). Legendary tier added (orange,
+  2x epic stat bonuses, 500g sell). Dropped items prefixed with zone tier name
+  (e.g. "Ironbone Dragon Sword"). Guild untradeables excluded from drop pool.
+[2026-06-11] — ZONE SYSTEM: portal transitions now fade to black 0.25s → swap zone →
+  fade in 0.25s (#zone-fade overlay, world frozen during fade). Portal labels show only
+  within 60px proximity. HUD shows zone name + "Recommended Level: X-X" (display only,
+  zones never locked). Pending enemy respawn timers cancelled on zone change.
+[2026-06-11] — SCHEMA: player.currentZone added (synced with currentZoneId), saved as
+  `currentZone` in runeportal_save (replaces `zoneId` key). Zone background gradients per
+  zone config. Bleakwood enemies get #00ff88 bioluminescent aura glow.
+⚠️ PLAYER SCHEMA CHANGED — clear localStorage before testing (localStorage.clear() then Ctrl+Shift+R).
+
+[2026-06-11] — DEATH & RESPAWN (GDD §15): triggerDeath() rewritten — drops ALL equipped
+  standard gear into a death pile at the death location (untradeable gear never drops);
+  pile despawns after 5 minutes; 50% gold death tax (round down), remainder kept by player;
+  death summary shows gold lost + list of gear dropped.
+[2026-06-11] — DEATH & RESPAWN: respawnPlayer() respawns at map center of the current zone
+  (was: travel to The Vale). Death sickness mechanic unchanged.
+[2026-06-11] — SCHEMA: player.dead renamed to player.isDead, now persisted in the save and
+  cleared on respawn. Added stub player.untradableArmor = { equipped:false, broken:false }
+  — NEVER drops on death, no other functionality yet.
+⚠️ PLAYER SCHEMA CHANGED — clear localStorage before testing (localStorage.clear() then Ctrl+Shift+R).
+*/
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTS & CONFIG
+// ═══════════════════════════════════════════════════════════
+// ── SPRITE ART (2026-06-12) ──────────────────────────────────────────────────
+// 7 pixel art sprites generated via PixelLab (create_map_object). Base64 embedded to
+// honor the single-file constraint. TEXTURES{} is populated at init by loadSprites();
+// any key left undefined → that layer falls back to PIXI.Graphics (no error).
+const SPRITES = {
+  playerBase:    'data:image/png;base64,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',
+  sword:         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAC3UlEQVR4nO2aXUhTYRjHf8fcZn40xI8igoJCCfpeoaIwseWNiaRgtItAqKuky6KLCJQVlKAoERXRRRnhzShYUo1qpEk5IZZBoigjg0UTo5qpJz1d2Eajso/tSQ6c3+055/9//zzn2fvs5YCBgYEYjhKb5iixaUu9jn+i0VmsTU5MapdctaIhUqSELWaFlLcBOt0jUhaAYACAkUAvFaW5khayHN3fpJVsKxPtAdEKDA73Mz2jSlrIBmg5Xcqh+nxJC1kqdlRr2zcW6fcVcpRWScoDwgG8vR7SLCZJC9kAgP6b+EC1VdKCVEnxtrYQw6EpSQsUCVH7zi0awOyXFQCYUz8A4PMHku6XNMGzxyq1UMjK4eOnGOo5w566xrjrnRfPoc6qjAbDvBlXuOl9khTvpIg0Oou15o5ubrQfpMsTZHNBOpHPc2QsXxa7x2JW8A9GqK9aS021g5Ou61x19yfsn3ATN+zbpTV3dNPeVEeXJ4jPH1Bejak0OO2xexz29fgHI/j8AaXLE+TKtVs0OO3sLU98zE5KEz/1nOBBbzj2jnv7BpS082itrlqe9T2n9fKL2DWfP6CYTDatyPYpGdaJB3gdmqflQv8PDToxn80R12OKC9OZUOM3M2/fgAIkZcRIOMC3xfyUDauLSbOuIzfPDQz88XN/g/hOvLuygpnZiJi+eAAAVZUbJ8QCRBddUJglZQEIBjCZZKfQKOIVkMaowK/QfQUAcvJzJOUB4QBlZeWS8oDRA0vPfwkgWQ3RACtXLRzs6nKU+B7dViCKLiugqipms8ihRxyiFcjMlC+wmMP0VHL+8/4OsQBZ1mwp6TiMjWwxxkbfS8oDRgWWHiPAYuTlLxyv63qUCAan9TlKRLlz+64+K6CqKo/uPwTAYs6QshH+1ODlkKQ8IDwLfZyLcK/HTfjduJSN/n9GRSl31Gibtsp+ciZegdy8NaL6ogFmwhOYzTOSFgYGBgZLzFcieOlhR5/O5AAAAABJRU5ErkJggg==',
+  bow:           'data:image/png;base64,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',
+  staff:         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAEJklEQVR4nO2aXWhbZRjHf/loGs+SdbS1Z91aTWYsusLAaev82mp1Dr8nZV4MLxzDL1S87I0I4q6E4o0whEEVhggb6LDDMaNuUkXWrdjR1q6kTVlrR2q/0qUnX02OFzGJWbWCeZ+yQP43yXvOc54n/zzP857/+54DZZRRFCxSjj26z/z7eCIUEIllV+2wsc5r2iw2ntVeJWGNABC3JDnHCTNlppicCSolopSAR/eZbe4D1Gyo5f2Ot6hcyLs/9FUUgPN1p0yVJJQ58ug+s2PzGxzxvoT1vTqmP5wmcj3GSmKlwO7Y1ElOz3crKymrCice3Wc+rD3DBy2vM7K8SPxcilsfr8b7wpZVtp3ew+xzHVzVI/8XSghUWDXebDzMwOh47pjjMSdWt2OV7ffTl3CkXSrCAgoIeHSf2a7tp7WpGWdl5gdXttmIfZkifSVfPl2Bo9gddhxJJw9o97Lb8aKSLBTdxCkzRTSxwoXRIQCclQ6GO0dX2XVuf5uPRz5jj3NPsSELoKSEAFqbmvn09xP/ev6nyYGCcdpuKIlbNAGbxUbabpB2m3z0aCddgaMA2B323OfxmR5+MfqIW5KcjfuLDVkAJSUEcPHSMK1NzXTv7+KVr99d85pERazYsDkUnYHJmaCl1+jBWekgGUszOBjgHe/LvLbl4JrX9Ro9Su4Fynrg2NRJAO7W7wDgk+nP/9Ful9aCP/ytqrBqpMREKGA5Tbd5/fwy3fuOZEgEC22edz8JwJklv7J/HxSrUY/uM5+uPoQ1VkH7pl0F584s+bliHWAsfFmpoFMucbNqtM19gHQ8777PdpZodFG5rFYup6urGpgPT/Hd0herzrm0GtXh1Gbgzvod5tatt9P+4HO4tY2c8h8HIDR7LWejOgsiJaTXbmNn8324NmwCoH/wZ0Kz14gYczf3giaL0Ow4/UP5cTKZIGLMSYSSIQAZEusBkYW2R/eZT+zuyI1Hg8OMXR1UXj6g8E58I37o/YZILEL/0EUmJn+TCiO3rdJY5zUho1ZBbltFLANZVG2sF/UvSqC6qkHSPbAOGYD8mkEC4gTmw1O5PpCAOAHpMhIlEF7KaKCSLSHpGQjWqYklIaaFABLJqJiIy0I0AxFjjkfuf6q0Z6Ghkcui/ku+B0QJ6LXbJN0DZSnx3yhpKbFshEtbStzWkOmBki2hZt89ku4BYQI/XvCXdg9kUbIlFJodp7qqoZyBtSBKwKXVsFmvF82AqJx2VNzC8GifZAjhafSuHZLuAcG9UcgsKY1IGIBk2hDZnRN5PnDjsWwP3PQvPGWxvamFh3buzY1Hgr8yt/CHSD8oJ/DXP2zGY5k3tBbCi0BGlUpsr4vNQmNXBwvGUlOp+IpMelUmQiBbKi5NI5lMACX6fCBb/5IQ64HJmaDFZrGZ2e9Sccooo0j8CYIlgFAYs9bAAAAAAElFTkSuQmCC',
+  hollowHunter:  'data:image/png;base64,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',
+  wraithStalker: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAABACAYAAABcIPRGAAAGXklEQVR4nO2ZW2wbVRrHf06OnTq1W7vCSWpaN5eGpoFySVATKkEF5SLtlkrbrgJ9QypCWiT2BdHHReKxEjzuw0r7uPCyWiFaCSi0EWxXNOVS0oud4tRpJq4TbGO7cRon4ymzD8MMntSN2pmTKg/5P818mZzv+5/vdr5jWMMaXMGzkosPvfGODlBVF7m1qPHJR3+Xrm/FCLz17jF9U1sLAOkJhdzUDDdKJb769EOpOhtkLmbiwOE3LeNffHk/u3Y/yfb+R9gYCvGn1/6qy9S1IgQAyjfnCUda+PbsObq6Ojj06hDbHmqXrkdIXxH45tRptvc/wtHDR/Ct8/L2sfdITyikr04ycnpYqq4V88DEpTGOffRPAN4/+jcARk4P4/X6pOqRnsQDew/q6oLKzdkbPP70IDd+KfC/k18Q6+xGSSWZKyurO4nVBRWATHqS4Y+P0+Rr4pW/vC5bjQWpuzGw96C+bUcXydEEyfgFS27uPrD6PZAcTQCG0QBCCDLKBAB+fzNPDOyXWkal7cbQG+/owVAQgEI2z5XzlwGsnff7m6lU5gGItEWZSJ6VolvKIgN7D+of/OsfXIpf5tS/T1jy5GiCxYUKmqqSSU8CEN4UoTxbpFRMSdEtLYROHj/BmeMnjfgfTdDU5KP7sZ1oqkp25jpgGF8s5GSpBCQ1skYhKMxkUcYnWFyosHV7O5fOjQIw8PwzjHz5NVWtan2vaZoMtYAkD3T1dnPq48/5/swZlFSSbPpnuh/bCcClc6P0PL4LgNxMhuCGEELIOwBIIbC4aNT+8KaIJUuOJmjZ0krLllYufvcDYCRvebYkQ6UFKVuRHE2wvXcHX3/2mU2eTf9MMn7BVoFAbghJ8+VUSjEWFIL0xDiVyjxCCCJtUTS1SmBjCE2tSk9i1yG0Z9+Q3rd3N8n4Bas0VirzRNqihB8wZoJiIUduJmMZL4Rg67Z+KQ3NFYEjR9/TX/jzHyhk85asVEx5hBCGwfksuZkMgC15/c0BhM9LR/egaxKuQ+jsl/8l/t2PNpmmaUTaovib1wNGNzaT97ezkF6eLdmS3ilcEUhfNbprebZoHdJ83s16pC0KQG76OtWqauVBsZAjEIzpc2XFEwjGdBn54CqESvkiP124bKsqD7Zvs56f2vccHQ/1WvFfu+NzZcXj9zfz1rvHXIWRKw8o4+OUZ0u3HZF3PdnHePwK4/ErlEslolsMUuZ5qBYnPvyPGxOce+DA4Tf1p//4kk0WaenRN8di5LN5djzxMJFoK8VCjkx60mZ8IBjTAXLZMc/1a5Ps2Tfk2AuOPTD240WEz2fbfeH10bq1DYBriRQbNm3g0d2DTCsKXuGt64GH+/qpzM3fJr9bOCZQ1apk0pNEWnr0XHbMs2ffkD6tKGQm0gC07+zkWiJlm8zAfiINhTv18yMnPJGWHscecBRCLx06ohfzWebKiqdaNc5B04rRiRuFIJWIW0QAHt09WHcds/EJFzcVjgiMnB5m4LlnbTKzYU2NX7Vk+Znpu1pPCK8TMwCHBLxeH6V8EcA2WWmqcebv7e8z3mtmAOubOjI3cEQglx2rOw4Kn5diIYcyniKbyVjyfGZ5T0xNfu94vHRcRlujbdZzIBizuu/9hmMCtXf96kL9sKg3vKy6gSYU7tSDG8JW/NdDVXLc18L1PFAqpjzC56VjymcbVsyqBDB3o/T782q6mYu09OiBYExfmJ9nQSwARqNa6o2Okt+NmmXhmEAo3Kmb1UirqsSbfrnjt6WugO19VdxKlIopj3koCxVuWfKlobS50lT3DCQLrkLI3Mlp/6IUY5zAdRLfqYSa2PzrA4BB1kxgmb/SOCYQCMZ0TdMYvNV+V9/XTm136uRO4IiAGfsAP6y/bslDlcY7/s9yf3ODeyZQa3zfzQdv+3uqYcb2bhIMN6xMKXXkATOWG9f9vqvmDvuXNPdQpVF686qF4xyYKyuebxsVmyzaELqtIpk776fJqaplcc8EbDNwTUPyIzinnvfUymrjfr1Y79jI5XBPBELhTr3eM8C6BmOqMq8WTVxU4x6A4fkzKxJG90TANn39VhbnyopHCEFY2yjZtLuD4xwQQtgI1Sb0/YRjAku7aW2IeL3GfdHSirRqUNsL6r2b2OXrlfqjdj246gMmDq17qu53K1U6VwRLq9Ia1rCGNaxhDfcD/weQqqQuTKBP6gAAAABJRU5ErkJggg==',
+  ironConstruct: 'data:image/png;base64,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',
+};
+const TEXTURES = {}; // populated by loadSprites() before initPixi()
+const canvas = document.getElementById('canvas');
+// Renderer is PixiJS 8.x (WebGL) — app adopts this canvas in initPixi().
+// VW/VH are LOGICAL (CSS) pixels — input math and camera read them live.
+let VW = window.innerWidth;
+let VH = window.innerHeight;
+
+const TILE_W = 64;
+const TILE_H = 32;
+const GRID   = 30; // larger world
+
+// ── ZONE DEFINITIONS (GDD §9 + §10) ──
+// All enemy stats live here, not hardcoded. Rarity multipliers (RARITY_MULT)
+// apply on top of these base stats. dropTable governs gear drops per zone.
+const ZONES = {
+  ashfields: {
+    name: 'The Ashfields',
+    subtitle: 'Crumbling ruins of the old civilization',
+    tierName: 'Ashfields',
+    recommendedLevel: '1-5',
+    bgGradient: ['#2a1a0a', '#1a0f05'],
+    portalColor: '#e8a05a',
+    tilePrimary: '#33200d',
+    tileSecondary: '#241408',
+    enemyColor: '#c0392b',
+    bossColor: '#8B0000',
+    auraColor: null,
+    lootMult: 1,
+    enemyTypes: [
+      { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
+      { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
+      { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
+    ],
+    boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
+    dropTable: { rarities:['rare'], legendaryChance:0 },
+    isHome: true
+  },
+  bleakwood: {
+    name: 'Bleakwood Hollow',
+    subtitle: 'No light reaches the floor',
+    tierName: 'Bleakwood',
+    recommendedLevel: '5-10',
+    bgGradient: ['#0a0f0a', '#050a05'],
+    portalColor: '#00ff88',
+    tilePrimary: '#0d140d',
+    tileSecondary: '#081008',
+    enemyColor: '#6b8e23',
+    bossColor: '#1a3a1a',
+    auraColor: '#00ff88',
+    lootMult: 2,
+    // HP 2x Zone 1 base, damage 1.5x Zone 1 base
+    enemyTypes: [
+      { name:'Hollow Hunter',  hp:100, damage:7.5, speed:1.8, attackSpeed:1.4, xp:25, weight:0.6, color:'#7a9a3a', sizeScale:1.1 },
+      { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing', sizeScale:1.2 },
+    ],
+    boss: { name:'The Nightmother', hp:1600, damage:45, speed:1.3, attackSpeed:1.2, xp:500 },
+    dropTable: { rarities:['rare','epic'], legendaryChance:0 },
+    isHome: false
+  },
+  ironbone: {
+    name: 'Ironbone Flats',
+    subtitle: 'A battlefield frozen in time',
+    tierName: 'Ironbone',
+    recommendedLevel: '10-20',
+    bgGradient: ['#1a1a1a', '#0f0f0f'],
+    portalColor: '#9aa0aa',
+    tilePrimary: '#1e1e1e',
+    tileSecondary: '#141414',
+    enemyColor: '#8a8a92',
+    bossColor: '#3a3a4a',
+    auraColor: null,
+    lootMult: 4,
+    // HP 4x Zone 1 base, damage 2.5x Zone 1 base
+    enemyTypes: [
+      { name:'Iron Construct', hp:280, damage:14, speed:0.5, attackSpeed:0.6, xp:55, weight:0.5, color:'#9aa0aa', sizeScale:1.15 },
+      { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal', sizeScale:1.0 },
+    ],
+    boss: { name:'General Mourne', hp:3200, damage:75, speed:1.1, attackSpeed:1.1, xp:1200 },
+    dropTable: { rarities:['rare','epic'], legendaryChance:0.05 },
+    isHome: false
+  },
+  homestead: {
+    name: 'Homestead',
+    subtitle: 'Your sanctuary',
+    tierName: 'Homestead',
+    recommendedLevel: null,
+    bgGradient: ['#1a0e05', '#0f0805'], // warm hearth (PixiJS migration spec)
+    portalColor: '#88dd66',
+    tilePrimary: '#0d0d18',
+    tileSecondary: '#111122',
+    auraColor: null,
+    lootMult: 0,
+    enemyTypes: [],
+    boss: null,
+    dropTable: { rarities:['rare'], legendaryChance:0 },
+    isHome: true,
+    isSafe: true
+  }
+};
+
+// ── ENEMY RARITY MULTIPLIERS (applied on top of zone base stats) ──
+const RARITY_MULT = {
+  common: { hp:1, dmg:1,   xp:1,   gold:1 },
+  rare:   { hp:2, dmg:1.5, xp:1.5, gold:2 },
+  epic:   { hp:4, dmg:2,   xp:2,   gold:4 },
+};
+
+// ── GEAR DATABASE ──
+// weaponStyle: 'melee' | 'ranged' | 'magic'
+// melee → trains Strength, ranged → trains Dexterity, magic → trains Intelligence
+const GEAR_DB = [
+  // ── Common ──
+  { name:'Rusty Sword',    type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'melee',  statBonus:{dexterity:0,strength:2,vigor:0,intelligence:0} },
+  { name:'Short Bow',      type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'ranged', statBonus:{dexterity:2,strength:0,vigor:0,intelligence:0} },
+  { name:'Gnarled Staff',  type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:2} },
+  { name:'Iron Helm',      type:'helmet', slot:'helmet', rarity:'common', statBonus:{dexterity:0,strength:0,vigor:2,intelligence:0} },
+  { name:'Leather Chest',  type:'chest',  slot:'chest',  rarity:'common', statBonus:{dexterity:0,strength:0,vigor:3,intelligence:0} },
+  { name:'Cloth Legs',     type:'legs',   slot:'legs',   rarity:'common', statBonus:{dexterity:1,strength:0,vigor:1,intelligence:0} },
+  { name:'Worn Boots',     type:'boots',  slot:'boots',  rarity:'common', statBonus:{dexterity:1,strength:0,vigor:0,intelligence:0} },
+  // ── Rare ──
+  { name:'Steel Sword',    type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'melee',  statBonus:{dexterity:0,strength:7,vigor:0,intelligence:0} },
+  { name:'Hunter Bow',     type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'ranged', statBonus:{dexterity:7,strength:0,vigor:0,intelligence:0} },
+  { name:'Bog Staff',      type:'weapon', slot:'weapon', rarity:'rare',   weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:7} },
+  { name:'Golden Helm',    type:'helmet', slot:'helmet', rarity:'rare',   statBonus:{dexterity:0,strength:0,vigor:5,intelligence:1} },
+  { name:'Plate Chest',    type:'chest',  slot:'chest',  rarity:'rare',   statBonus:{dexterity:0,strength:2,vigor:6,intelligence:0} },
+  { name:'Chainmail Legs', type:'legs',   slot:'legs',   rarity:'rare',   statBonus:{dexterity:2,strength:1,vigor:3,intelligence:0} },
+  { name:'Iron Boots',     type:'boots',  slot:'boots',  rarity:'rare',   statBonus:{dexterity:2,strength:0,vigor:2,intelligence:0} },
+  // ── Epic ──
+  { name:'Dragon Sword',   type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'melee',  statBonus:{dexterity:0,strength:15,vigor:0,intelligence:0} },
+  { name:'Void Bow',       type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'ranged', statBonus:{dexterity:15,strength:0,vigor:0,intelligence:0} },
+  { name:'Abyss Staff',    type:'weapon', slot:'weapon', rarity:'epic',   weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:0,intelligence:15} },
+  { name:'Mythril Helm',   type:'helmet', slot:'helmet', rarity:'epic',   statBonus:{dexterity:0,strength:0,vigor:10,intelligence:3} },
+  { name:'Mythril Chest',  type:'chest',  slot:'chest',  rarity:'epic',   statBonus:{dexterity:0,strength:4,vigor:12,intelligence:0} },
+  { name:'Shadow Legs',    type:'legs',   slot:'legs',   rarity:'epic',   statBonus:{dexterity:4,strength:2,vigor:6,intelligence:0} },
+  { name:'Void Boots',     type:'boots',  slot:'boots',  rarity:'epic',   statBonus:{dexterity:4,strength:0,vigor:4,intelligence:2} },
+  // ── Guild Untradeable (Strength) ──
+  { name:"Champion's Seal",  type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'str_guild', guildLevel:1, statBonus:{dexterity:0,strength:8,vigor:6,intelligence:0} },
+  { name:"Warlord's Plate",  type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'str_guild', guildLevel:3, statBonus:{dexterity:0,strength:16,vigor:12,intelligence:0} },
+  { name:"Titan's Edge",     type:'weapon', slot:'weapon', rarity:'epic', untradeable:true, guildReq:'str_guild', guildLevel:5, weaponStyle:'melee', statBonus:{dexterity:0,strength:30,vigor:4,intelligence:0} },
+  // ── Guild Untradeable (Range) ──
+  { name:"Scout's Cloak",    type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'rng_guild', guildLevel:1, statBonus:{dexterity:8,strength:0,vigor:6,intelligence:0} },
+  { name:"Phantom Quiver",   type:'legs',   slot:'legs',   rarity:'epic', untradeable:true, guildReq:'rng_guild', guildLevel:3, statBonus:{dexterity:16,strength:0,vigor:4,intelligence:0} },
+  { name:"Wraith Bow",       type:'weapon', slot:'weapon', rarity:'epic', untradeable:true, guildReq:'rng_guild', guildLevel:5, weaponStyle:'ranged', statBonus:{dexterity:30,strength:0,vigor:4,intelligence:0} },
+  // ── Guild Untradeable (Mage) ──
+  { name:"Arcane Vestments", type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'mge_guild', guildLevel:1, statBonus:{dexterity:0,strength:0,vigor:6,intelligence:8} },
+  { name:"Void Robes",       type:'chest',  slot:'chest',  rarity:'epic', untradeable:true, guildReq:'mge_guild', guildLevel:3, statBonus:{dexterity:0,strength:0,vigor:8,intelligence:16} },
+  { name:"Staff of Oblivion",type:'weapon', slot:'weapon', rarity:'epic', untradeable:true, guildReq:'mge_guild', guildLevel:5, weaponStyle:'magic',  statBonus:{dexterity:0,strength:0,vigor:4,intelligence:30} },
+];
+
+// ── FOOD DATABASE ──
+const FOOD_DB = [
+  { name:'Bread',       healAmt:15, rarity:'common' },
+  { name:'Cooked Fish', healAmt:30, rarity:'rare'   },
+  { name:'Steak',       healAmt:50, rarity:'epic'   },
+];
+
+// ── MATERIAL DATABASE ──
+const MATERIAL_DB = [
+  { id:'iron_ore',    name:'Iron Ore',      rarity:'common', dropFrom:['ashfields'] },
+  { id:'bog_root',    name:'Bog Root',      rarity:'rare',   dropFrom:['bleakwood']  },
+  { id:'void_shard',  name:'Void Shard',    rarity:'epic',   dropFrom:['ironbone'] },
+  { id:'iron_bar',    name:'Iron Bar',      rarity:'common', dropFrom:[] },
+  { id:'bog_ingot',   name:'Bog Ingot',     rarity:'rare',   dropFrom:[] },
+  { id:'void_crystal',name:'Void Crystal',  rarity:'epic',   dropFrom:[] },
+];
+
+// ── BUILDINGS ──
+const BUILDINGS = [
+  { id:'forge',      x:4,  y:4,  w:4, h:3, doorX:6,  doorY:6,  label:'Forge',         runeColor:'#ff6622' },
+  { id:'bonfire',    x:12, y:4,  w:3, h:3, doorX:13, doorY:6,  label:'Bonfire',        runeColor:'#ff8800' },
+  { id:'garden',     x:20, y:4,  w:4, h:3, doorX:22, doorY:6,  label:'Garden',         runeColor:'#44ff88' },
+  { id:'shrine',     x:4,  y:13, w:4, h:4, doorX:6,  doorY:16, label:'Shrine',         runeColor:'#cc44ff' },
+  { id:'merchant',   x:12, y:13, w:4, h:3, doorX:14, doorY:15, label:'Merchant',       runeColor:'#ffdd44' },
+  { id:'watchtower', x:20, y:13, w:3, h:4, doorX:21, doorY:16, label:'Watchtower',     runeColor:'#44ddff' },
+  { id:'str_guild',  x:4,  y:22, w:5, h:3, doorX:6,  doorY:24, label:'Strength Guild', runeColor:'#ff4444' },
+  { id:'rng_guild',  x:12, y:22, w:5, h:3, doorX:14, doorY:24, label:'Range Guild',    runeColor:'#44aaff' },
+  { id:'mge_guild',  x:20, y:22, w:5, h:3, doorX:22, doorY:24, label:'Mage Guild',     runeColor:'#cc44ff' },
+];
+
+// ── FORGE RECIPES ──
+const FORGE_RECIPES = [
+  { name:'Iron Bar',     inputs:{iron_ore:3},                  output:'iron_bar',     outputName:'Iron Bar',     rarity:'common' },
+  { name:'Bog Ingot',    inputs:{iron_ore:2,bog_root:2},       output:'bog_ingot',    outputName:'Bog Ingot',    rarity:'rare'   },
+  { name:'Void Crystal', inputs:{void_shard:2,bog_root:1},     output:'void_crystal', outputName:'Void Crystal', rarity:'epic'   },
+  { name:'Iron Sword',   inputs:{iron_bar:3},                  outputGear:'Iron Sword',   slot:'weapon', weaponStyle:'melee',  rarity:'common', statBonus:{strength:5,dexterity:0,vigor:0,intelligence:0} },
+  { name:'Iron Bow',     inputs:{iron_bar:2,bog_root:3},       outputGear:'Iron Bow',     slot:'weapon', weaponStyle:'ranged', rarity:'common', statBonus:{dexterity:5,strength:0,vigor:0,intelligence:0} },
+  { name:'Iron Staff',   inputs:{iron_bar:2,bog_root:2},       outputGear:'Iron Staff',   slot:'weapon', weaponStyle:'magic',  rarity:'common', statBonus:{intelligence:5,strength:0,dexterity:0,vigor:0} },
+  { name:'Bog Blade',    inputs:{bog_ingot:3},                  outputGear:'Bog Blade',    slot:'weapon', weaponStyle:'melee',  rarity:'rare',   statBonus:{strength:12,dexterity:0,vigor:0,intelligence:0} },
+  { name:'Void Blade',   inputs:{void_crystal:2,bog_ingot:2},  outputGear:'Void Blade',   slot:'weapon', weaponStyle:'melee',  rarity:'epic',   statBonus:{strength:20,dexterity:0,vigor:2,intelligence:0} },
+];
+
+// ── GUILD DEFS ──
+const GUILD_DEFS = {
+  str_guild: {
+    name: 'Strength Guild',
+    stat: 'strength',
+    upgradeCosts: [
+      { gold:200, iron_bar:5 },
+      { gold:400, iron_bar:10, bog_ingot:3 },
+      { gold:700, bog_ingot:8 },
+      { gold:1200, bog_ingot:5, void_crystal:2 },
+      { gold:2000, void_crystal:5 },
+    ],
+    bonuses: ['Melee DMG +10%','Melee DMG +20%','Melee DMG +30%, STR+5','Melee DMG +45%','Melee DMG +60%, unlock Titan\'s Edge'],
+    unlocks: [0, null, null, null, null], // indices into GEAR_DB for claimable items
+  },
+  rng_guild: {
+    name: 'Range Guild',
+    stat: 'dexterity',
+    upgradeCosts: [
+      { gold:200, iron_bar:5 },
+      { gold:400, iron_bar:10, bog_ingot:3 },
+      { gold:700, bog_ingot:8 },
+      { gold:1200, bog_ingot:5, void_crystal:2 },
+      { gold:2000, void_crystal:5 },
+    ],
+    bonuses: ['Ranged DMG +10%','Ranged DMG +20%','Ranged DMG +30%, DEX+5','Ranged DMG +45%','Ranged DMG +60%, unlock Wraith Bow'],
+    unlocks: [0, null, null, null, null],
+  },
+  mge_guild: {
+    name: 'Mage Guild',
+    stat: 'intelligence',
+    upgradeCosts: [
+      { gold:200, iron_bar:5 },
+      { gold:400, iron_bar:10, bog_ingot:3 },
+      { gold:700, bog_ingot:8 },
+      { gold:1200, bog_ingot:5, void_crystal:2 },
+      { gold:2000, void_crystal:5 },
+    ],
+    bonuses: ['Magic DMG +10%','Magic DMG +20%','Magic DMG +30%, INT+5','Magic DMG +45%','Magic DMG +60%, unlock Staff of Oblivion'],
+    unlocks: [0, null, null, null, null],
+  },
+};
+
+// ── RARITY RANK ──
+const RARITY_RANK = { common:0, rare:1, epic:2, legendary:3 };
+
+// ═══════════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════════
+let currentZoneId = 'ashfields';
+let zoneGrid = [];
+let zoneFading = false; // true during the 0.5s portal fade transition
+
+const player = {
+  x: GRID / 2, y: GRID / 2,
+  hp: 100, maxHp: 100,
+  speed: 2,
+  isDead: false,
+  uiLocked: false, // transient — movement lock while shop/panel UI open; NEVER saved
+  currentZone: 'ashfields', // synced with currentZoneId, persisted in save
+  deathSickness: 0, // seconds remaining
+  skills: {
+    xp:    { dexterity:0, strength:0, vigor:0, intelligence:0 },
+    level: { dexterity:1, strength:1, vigor:1, intelligence:1 }
+  },
+  baseStats: { dexterity:10, strength:10, vigor:10, intelligence:10 },
+  equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
+  equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null },
+  untradableArmor: { equipped: false, broken: false } // stub — NEVER drops on death, no functionality yet
+};
+
+const backpack = {
+  items: [],     // gear items
+  food: [],      // food items
+  materials: {   // id -> count
+    iron_ore: 0,
+    bog_root: 0,
+    void_shard: 0,
+    iron_bar: 0,
+    bog_ingot: 0,
+    void_crystal: 0
+  },
+  gold: 0
+};
+
+// ── GUILD STATE ──
+const guilds = {
+  str_guild: { level:0, maxLevel:5, claimed:[] },
+  rng_guild: { level:0, maxLevel:5, claimed:[] },
+  mge_guild: { level:0, maxLevel:5, claimed:[] },
+};
+
+// ── CRAFT QUEUE ──
+let craftQueue = []; // { recipeName, outputId, outputGear, finishTime, buildingId }
+
+// ── SHRINE BUFF ──
+let shrineBuff = { active:false, endTime:0, label:'' };
+
+// ── GARDEN STATE ──
+let gardenPlot = { growing: false, herb: null, startTime: 0, duration: 120 }; // 2 min grow time
+
+// ── HOMESTEAD STRUCTURES ──
+const homestead = {
+  forge:      { level:0, maxLevel:5 },
+  shrine:     { level:0, maxLevel:5 },
+  garden:     { level:0, maxLevel:5 },
+  campfire:   { level:0, maxLevel:5 },
+  watchtower: { level:0, maxLevel:5 },
+  merchant:   { level:0, maxLevel:5 },
+};
+
+const STRUCTURE_DEFS = {
+  forge: {
+    name: '⚒ Forge / Anvil',
+    desc: (lv) => lv === 0 ? 'Passively produces Iron Ore over time.' : `Produces ${lv * 2} Iron Ore / min. Reduces material grind.`,
+    bonus: (lv) => lv === 0 ? 'None' : `+${lv*2} Iron Ore/min passively`,
+    cost: (lv) => ({ iron_ore: lv * 3 + 2, gold: lv * 50 }),
+  },
+  shrine: {
+    name: '🔮 Shrine',
+    desc: (lv) => lv === 0 ? 'Grants passive combat buffs when upgraded.' : `+${lv*3}% ATK speed, +${lv*2}% damage`,
+    bonus: (lv) => lv === 0 ? 'None' : `+${lv*3}% ATK speed, +${lv*2}% dmg`,
+    cost: (lv) => ({ iron_ore: lv * 2, bog_root: lv * 1, gold: lv * 80 }),
+  },
+  garden: {
+    name: '🌿 Garden / Pond',
+    desc: (lv) => lv === 0 ? 'Grows food passively — saves buying or fishing.' : `Produces Bread every ${Math.max(1, 5-lv)} min.`,
+    bonus: (lv) => lv === 0 ? 'None' : `Bread every ${Math.max(1,5-lv)} min`,
+    cost: (lv) => ({ iron_ore: lv * 1, gold: lv * 40 }),
+  },
+  campfire: {
+    name: '🔥 Campfire',
+    desc: (lv) => lv === 0 ? 'Reduces Death Sickness timer when upgraded.' : `Death Sickness reduced by ${lv*2} min`,
+    bonus: (lv) => lv === 0 ? 'None' : `-${lv*2} min Death Sickness`,
+    cost: (lv) => ({ iron_ore: lv * 2, gold: lv * 60 }),
+  },
+  watchtower: {
+    name: '🗼 Watchtower',
+    desc: (lv) => lv === 0 ? 'Expands minimap radar range.' : `Minimap range +${lv*2} tiles`,
+    bonus: (lv) => lv === 0 ? 'None' : `Minimap range +${lv*2} tiles`,
+    cost: (lv) => ({ iron_ore: lv * 4, gold: lv * 70 }),
+  },
+  merchant: {
+    name: '🏪 Merchant Stall',
+    desc: (lv) => lv === 0 ? 'Improves gold rates from kills.' : `+${lv*15}% gold from kills`,
+    bonus: (lv) => lv === 0 ? 'None' : `+${lv*15}% gold`,
+    cost: (lv) => ({ iron_ore: lv * 3, bog_root: lv * 1, gold: lv * 100 }),
+  }
+};
+
+const camera = { x: 0, y: 0 };
+const joystick = { x: 0, y: 0, radius: 50, touching: false };
+
+let enemies = [];
+let lootPiles = [];
+let floatingTexts = [];
+let particles = [];
+let projectiles = []; // visual-only attack effects
+let screenShake = { x:0, y:0, intensity:0 };
+let tick = 0;
+let lastSave = 0;
+let forgeTimer = 0;
+let gardenTimer = 0;
+let anyPanelOpen = false;
+
+// ═══════════════════════════════════════════════════════════
+//  WORLD GENERATION
+// ═══════════════════════════════════════════════════════════
+function buildZoneGrid(zoneId) {
+  const zone = ZONES[zoneId];
+  zoneGrid = [];
+  for (let x = 0; x < GRID; x++) {
+    zoneGrid[x] = [];
+    for (let y = 0; y < GRID; y++) {
+      zoneGrid[x][y] = (x + y) % 2 === 0 ? 'primary' : 'secondary';
+    }
+  }
+}
+
+// ── PORTAL POSITIONS (edges of the map) ──
+// Portal back to the previous zone is always available.
+function getPortals() {
+  const portals = [];
+  if (currentZoneId === 'ashfields') {
+    portals.push({ x: GRID - 2, y: GRID / 2, target: 'bleakwood', label: '→ Bleakwood Hollow' });
+  } else if (currentZoneId === 'bleakwood') {
+    portals.push({ x: 1,        y: GRID / 2, target: 'ashfields', label: '← The Ashfields' });
+    portals.push({ x: GRID - 2, y: GRID / 2, target: 'ironbone',  label: '→ Ironbone Flats' });
+  } else if (currentZoneId === 'ironbone') {
+    portals.push({ x: 1,        y: GRID / 2, target: 'bleakwood', label: '← Bleakwood Hollow' });
+  } else if (currentZoneId === 'homestead') {
+    portals.push({ x: GRID / 2, y: GRID - 2, target: 'ashfields', label: '← The Ashfields' });
+  }
+  return portals;
+}
+
+function getHomesteadPortal() {
+  if (currentZoneId !== 'ashfields') return null;
+  return { x: GRID / 2, y: 2 }; // top-center of the Ashfields
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ENEMY SPAWNING
+// ═══════════════════════════════════════════════════════════
+function spawnEnemies() {
+  enemies = [];
+  const zone = ZONES[currentZoneId];
+  if (zone.isSafe || !zone.enemyTypes || zone.enemyTypes.length === 0) return; // safe zones spawn nothing
+  const count = 12;
+  for (let i = 0; i < count; i++) {
+    spawnOneEnemy(zone);
+  }
+  // Spawn a boss
+  spawnBoss(zone);
+}
+
+function pickEnemyType(zone) {
+  const r = Math.random();
+  let acc = 0;
+  for (const t of zone.enemyTypes) {
+    acc += t.weight;
+    if (r <= acc) return t;
+  }
+  return zone.enemyTypes[zone.enemyTypes.length - 1];
+}
+
+function spawnOneEnemy(zone, isRespawn) {
+  const type = pickEnemyType(zone);
+  const r = Math.random();
+  const rarity = r < 0.6 ? 'common' : r < 0.9 ? 'rare' : 'epic';
+  const m = RARITY_MULT[rarity];
+  const e = {
+    x: 2 + Math.random() * (GRID - 4),
+    y: 2 + Math.random() * (GRID - 4),
+    name: type.name,
+    behavior: type.behavior || null,
+    color: type.color,
+    hp: type.hp * m.hp,
+    maxHp: type.hp * m.hp,
+    damage: type.damage * m.dmg,
+    speed: type.speed,
+    attackSpeed: type.attackSpeed,
+    xpReward: type.xp * m.xp,
+    goldMult: m.gold,
+    rarity: rarity,
+    direction: Math.random() * Math.PI * 2,
+    dirTimer: 0,
+    healTimer: 0,
+    isBoss: false,
+    phase: 1,
+    flashTimer: 0
+  };
+  if (!isRespawn) {
+    enemies.push(e);
+  }
+  return e;
+}
+
+function spawnBoss(zone) {
+  if (!zone.boss) return;
+  const b = zone.boss;
+  enemies.push({
+    x: GRID / 2 + (Math.random() - 0.5) * 10,
+    y: GRID / 2 + (Math.random() - 0.5) * 10,
+    name: b.name,
+    behavior: null,
+    color: null,
+    hp: b.hp, maxHp: b.hp,
+    damage: b.damage,
+    speed: b.speed,
+    attackSpeed: b.attackSpeed,
+    xpReward: b.xp,
+    goldMult: RARITY_MULT.epic.gold,
+    rarity: 'epic',
+    direction: 0,
+    dirTimer: 0,
+    healTimer: 0,
+    isBoss: true,
+    phase: 1,
+    flashTimer: 0
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STAT HELPERS
+// ═══════════════════════════════════════════════════════════
+function getStat(stat) {
+  return player.baseStats[stat] + player.equippedBonuses[stat] + getHomesteadBonus(stat);
+}
+
+function getHomesteadBonus(stat) {
+  let bonus = 0;
+  if (stat === 'dexterity') bonus += homestead.shrine.level * 3 * 0.1; // +3% atkspd per level → approx +0.3 dex per level
+  if (stat === 'strength')  bonus += homestead.shrine.level * 2 * 0.1;
+  return bonus;
+}
+
+function getMinimapRange() {
+  return 6 + homestead.watchtower.level * 2;
+}
+
+function getGoldBonus() {
+  return 1 + homestead.merchant.level * 0.15;
+}
+
+// melee=1.3 tiles, ranged=3.5, magic=2.8
+function getWeaponStyle() {
+  const w = player.equipped.weapon;
+  return w ? (w.weaponStyle || 'melee') : 'melee';
+}
+function getCombatRange() {
+  const style = getWeaponStyle();
+  if (style === 'ranged') return 210 / TILE_W;
+  if (style === 'magic')  return 170 / TILE_W;
+  return 85 / TILE_W; // melee
+}
+function getCombatStat() {
+  const style = getWeaponStyle();
+  if (style === 'ranged') return getStat('dexterity');
+  if (style === 'magic')  return getStat('intelligence');
+  return getStat('strength');
+}
+function getDeathSicknessDuration() {
+  return Math.max(60, 600 - homestead.campfire.level * 120); // base 10min, -2min per campfire level
+}
+
+function recalcMaxHp() {
+  let vig = getStat('vigor');
+  if (!Number.isFinite(vig)) vig = 10; // corrupted stat/bonus guard — never let NaN reach maxHp
+  const base = 50 + vig * 5;
+  if (player.deathSickness > 0) {
+    player.maxHp = Math.floor(base * 0.5);
+  } else {
+    player.maxHp = base;
+  }
+  // HP NaN guard — recalcMaxHp runs every update frame, so this self-heals hp
+  // if a corrupted save or bad arithmetic ever poisons it (NaN/null/undefined).
+  if (!Number.isFinite(player.hp)) player.hp = player.maxHp;
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ZONE TRANSITION
+// ═══════════════════════════════════════════════════════════
+function travelToZone(zoneId, arrivalPos) {
+  currentZoneId = zoneId;
+  player.currentZone = zoneId;
+  const zone = ZONES[zoneId];
+  buildZoneGrid(zoneId);
+  // Despawn all current enemies, spawn the new zone's roster
+  if (!zone.isSafe) {
+    spawnEnemies();
+  } else {
+    enemies = [];
+  }
+  lootPiles = [];
+  if (arrivalPos) {
+    player.x = arrivalPos.x; // explicit arrival override (used by Homestead respawn)
+    player.y = arrivalPos.y;
+  } else if (zoneId === 'homestead') {
+    player.x = 14;
+    player.y = 27;
+  } else {
+    player.x = GRID / 2;
+    player.y = GRID / 2;
+  }
+  showBanner(`${zone.name}\n${zone.subtitle}`);
+  saveGame(); // persist player.currentZone on every transition
+}
+
+// Fade to black (0.25s), swap zone, fade back in (0.25s) — 0.5s total
+function transitionToZone(zoneId, arrivalPos) {
+  if (zoneFading || zoneId === currentZoneId || !ZONES[zoneId]) return;
+  zoneFading = true;
+  const fade = document.getElementById('zone-fade');
+  fade.style.opacity = '1';
+  setTimeout(() => {
+    try {
+      travelToZone(zoneId, arrivalPos);
+    } finally {
+      fade.style.opacity = '0';
+      setTimeout(() => { zoneFading = false; }, 250);
+    }
+  }, 250);
+}
+
+let bannerTimeout = null;
+function showBanner(text) {
+  const el = document.getElementById('zone-banner');
+  el.innerHTML = text.replace('\n', '<br><span style="font-size:13px;color:#aaa;letter-spacing:2px">');
+  el.style.display = 'block';
+  if (bannerTimeout) clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DEATH & RESPAWN
+// ═══════════════════════════════════════════════════════════
+const DEATH_PILE_DESPAWN_MS = 5 * 60 * 1000; // 5 minute despawn timer
+
+function triggerDeath() {
+  if (player.isDead) return;
+  player.isDead = true;
+
+  // Drop ALL equipped standard gear — untradeable gear never drops (incl. untradableArmor stub)
+  const dropped = [];
+  for (const slot in player.equipped) {
+    const item = player.equipped[slot];
+    if (!item || item.untradeable) continue;
+    dropped.push(item);
+    player.equipped[slot] = null;
+    const bi = backpack.items.indexOf(item);
+    if (bi !== -1) backpack.items.splice(bi, 1);
+  }
+
+  // 50% gold death tax (round down) — remainder stays with player
+  const goldLost = Math.floor(backpack.gold / 2);
+  backpack.gold -= goldLost;
+
+  // Death pile at death location
+  if (dropped.length > 0) {
+    lootPiles.push({
+      x: player.x, y: player.y,
+      items: dropped,
+      gold: 0,
+      isDeathPile: true,
+      zoneId: currentZoneId,
+      expiresAt: Date.now() + DEATH_PILE_DESPAWN_MS
+    });
+  }
+
+  recalcEquippedBonuses();
+  recalcMaxHp();
+
+  const gearList = dropped.length > 0 ? dropped.map(i => i.name).join(', ') : 'none';
+  document.getElementById('death-msg').textContent =
+    `Gold lost: ${goldLost}g — Gear dropped: ${gearList}`;
+  document.getElementById('death-screen').classList.add('show');
+  saveGame();
+}
+
+function respawnPlayer() {
+  player.isDead = false;
+  // BACKLOG fix (GDD §15): respawn at the Homestead center via the existing
+  // fade transition. If somehow already there, just snap to center.
+  if (currentZoneId !== 'homestead') {
+    transitionToZone('homestead', { x: GRID / 2, y: GRID / 2 });
+  } else {
+    player.x = GRID / 2;
+    player.y = GRID / 2;
+  }
+
+  const sickDur = getDeathSicknessDuration();
+  player.deathSickness = sickDur;
+  recalcMaxHp();
+  player.hp = player.maxHp;
+
+  document.getElementById('death-screen').classList.remove('show');
+  document.getElementById('sickness-bar').style.display = 'block';
+  saveGame();
+}
+
+function recalcEquippedBonuses() {
+  player.equippedBonuses = { dexterity:0, strength:0, vigor:0, intelligence:0 };
+  for (const slot in player.equipped) {
+    const item = player.equipped[slot];
+    if (item && item.statBonus) {
+      for (const stat in item.statBonus) {
+        player.equippedBonuses[stat] = (player.equippedBonuses[stat] || 0) + item.statBonus[stat];
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOOT LOGIC
+// ═══════════════════════════════════════════════════════════
+// Roll a gear drop from the current zone's dropTable.
+// Higher zones never drop below their minimum rarity. Legendary items are
+// generated from epic bases with 2x stat bonuses (no legendary entries in GEAR_DB yet).
+function rollZoneGear(zone, isBoss) {
+  const dt = zone.dropTable || { rarities:['rare'], legendaryChance:0 };
+  let rarity;
+  if (Math.random() < (dt.legendaryChance || 0)) {
+    rarity = 'legendary';
+  } else if (isBoss) {
+    rarity = dt.rarities[dt.rarities.length - 1]; // boss drops the zone's top tier
+  } else {
+    rarity = dt.rarities[Math.floor(Math.random() * dt.rarities.length)];
+  }
+  const poolRarity = rarity === 'legendary' ? 'epic' : rarity;
+  const pool = GEAR_DB.filter(g => g.rarity === poolRarity && !g.untradeable);
+  if (pool.length === 0) return null;
+  const base = pool[Math.floor(Math.random() * pool.length)];
+  const item = { ...base, statBonus: { ...base.statBonus }, name: `${zone.tierName} ${base.name}` };
+  if (rarity === 'legendary') {
+    item.rarity = 'legendary';
+    for (const k in item.statBonus) item.statBonus[k] = Math.ceil(item.statBonus[k] * 2);
+  }
+  return item;
+}
+
+function dropLootFromEnemy(enemy) {
+  const zone = ZONES[currentZoneId];
+  const pile = { x: enemy.x, y: enemy.y, items: [], gold: 0, isDeathPile: false };
+
+  // Gold — zone loot mult x merchant bonus x enemy rarity gold mult
+  const baseGold = Math.floor(Math.random() * 10) + 1;
+  pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus() * (enemy.goldMult || 1));
+
+  // Gear (30% base, higher rarity enemies = more chance) — pulls from zone dropTable
+  const gearChance = enemy.rarity === 'epic' ? 0.7 : enemy.rarity === 'rare' ? 0.5 : 0.3;
+  if (Math.random() < gearChance) {
+    const item = rollZoneGear(zone, enemy.isBoss);
+    if (item) pile.items.push(item);
+  }
+
+  // Material drops
+  const matChance = enemy.rarity === 'epic' ? 0.6 : enemy.rarity === 'rare' ? 0.35 : 0.15;
+  if (Math.random() < matChance) {
+    const zoneMats = MATERIAL_DB.filter(m => m.dropFrom.includes(currentZoneId));
+    if (zoneMats.length) {
+      const mat = zoneMats[Math.floor(Math.random() * zoneMats.length)];
+      pile.materialDrop = mat.id;
+    }
+  }
+
+  // Food drop (rare)
+  if (Math.random() < 0.08) {
+    const f = FOOD_DB[Math.min(Math.floor(zone.lootMult - 1), FOOD_DB.length - 1)];
+    pile.foodDrop = {...f};
+  }
+
+  lootPiles.push(pile);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════════════════════
+function spawnParticles(wx, wy, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.5 + Math.random() * 1.5;
+    particles.push({
+      x: wx, y: wy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.6 + Math.random() * 0.4,
+      maxLife: 1,
+      color,
+      size: 3 + Math.random() * 4
+    });
+  }
+}
+
+function addScreenShake(intensity) {
+  screenShake.intensity = Math.max(screenShake.intensity, intensity);
+}
+
+function spawnAttackVisual(style, px, py, tx, ty) {
+  if (style === 'melee') {
+    // slash arc at enemy — 3 short lines radiating outward
+    for (let i = 0; i < 3; i++) {
+      const angle = Math.atan2(ty - py, tx - px) + (i - 1) * 0.5;
+      projectiles.push({ type:'slash', x:tx*TILE_W, y:ty*TILE_H, angle, life:0.18, maxLife:0.18, color:'#ffaa44' });
+    }
+  } else {
+    const speed = style === 'ranged' ? 9 : 6; // tiles/sec
+    const dx = tx - px, dy = ty - py;
+    const dist = Math.hypot(dx, dy) || 0.01;
+    projectiles.push({
+      type: 'proj', style,
+      x: px * TILE_W, y: py * TILE_H,
+      vx: (dx / dist) * speed * TILE_W,
+      vy: (dy / dist) * speed * TILE_H,
+      life: dist / speed, maxLife: dist / speed,
+      color: style === 'ranged' ? '#88ddff' : '#cc44ff'
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MAIN UPDATE
+// ═══════════════════════════════════════════════════════════
+function update(dt) {
+  if (player.isDead) return;
+  if (zoneFading) return; // freeze world during zone transition fade
+
+  tick++;
+
+  // Death sickness countdown
+  if (player.deathSickness > 0) {
+    player.deathSickness -= dt;
+    if (player.deathSickness <= 0) {
+      player.deathSickness = 0;
+      document.getElementById('sickness-bar').style.display = 'none';
+    }
+    recalcMaxHp();
+    const mins = Math.floor(player.deathSickness / 60);
+    const secs = Math.floor(player.deathSickness % 60);
+    document.getElementById('sickness-timer').textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+  }
+
+  // Passive homestead production
+  forgeTimer += dt;
+  gardenTimer += dt;
+  const forgeLv = homestead.forge.level;
+  if (forgeLv > 0 && forgeTimer >= 60 / (forgeLv * 2)) {
+    backpack.materials.iron_ore += forgeLv * 2;
+    forgeTimer = 0;
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${forgeLv*2} Iron Ore`, timer:0, color:'#7d5' });
+  }
+  const gardenLv = homestead.garden.level;
+  const gardenInterval = Math.max(60, (5 - gardenLv) * 60);
+  if (gardenLv > 0 && gardenTimer >= gardenInterval) {
+    backpack.food.push({...FOOD_DB[0]});
+    gardenTimer = 0;
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: '+Bread', timer:0, color:'#fa8' });
+  }
+
+  // Movement — joystick locked while shop/panel UI is open (BACKLOG fix)
+  applyKeyboardMovement(dt);
+  if (!player.uiLocked && joystick.touching) {
+    const angle = Math.atan2(joystick.y, joystick.x);
+    player.x += Math.cos(angle) * player.speed * dt;
+    player.y += Math.sin(angle) * player.speed * dt;
+  }
+  player.x = Math.max(0, Math.min(player.x, GRID - 1));
+  player.y = Math.max(0, Math.min(player.y, GRID - 1));
+
+  // Camera
+  camera.x = player.x * TILE_W - VW / 2 + TILE_W / 2;
+  camera.y = player.y * TILE_H - VH / 2 + TILE_H / 2;
+
+  // Screen shake decay
+  if (screenShake.intensity > 0) {
+    screenShake.x = (Math.random() - 0.5) * screenShake.intensity * 2;
+    screenShake.y = (Math.random() - 0.5) * screenShake.intensity * 2;
+    screenShake.intensity *= 0.8;
+    if (screenShake.intensity < 0.5) screenShake.intensity = 0;
+  } else {
+    screenShake.x = 0; screenShake.y = 0;
+  }
+
+  // Portal check
+  for (const portal of getPortals()) {
+    const dist = Math.hypot(player.x - portal.x, player.y - portal.y);
+    if (dist < 1.2) {
+      transitionToZone(portal.target);
+      return;
+    }
+  }
+
+  // Homestead portal (Ashfields only)
+  const hsPortal = getHomesteadPortal();
+  if (hsPortal) {
+    const dist = Math.hypot(player.x - hsPortal.x, player.y - hsPortal.y);
+    if (dist < 1.2) {
+      transitionToZone('homestead');
+      return;
+    }
+  }
+
+  // Building door check (homestead only)
+  if (currentZoneId === 'homestead') {
+    for (const b of BUILDINGS) {
+      if (Math.hypot(player.x - b.doorX, player.y - b.doorY) < 1.0) {
+        openBuildingPanel(b.id);
+        break;
+      }
+    }
+  }
+
+  // Craft queue check
+  checkCraftQueue();
+
+  // Freeze enemies while any panel is open — no movement, no attacks
+  if (anyPanelOpen) return;
+
+  // Enemy AI + combat
+  const weaponStyle = getWeaponStyle();
+  const combatStat  = getCombatStat();
+  const combatRange = getCombatRange();
+  const atkInterval = Math.max(20, Math.floor((1 / (combatStat / 10)) * 60));
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+
+    // Flash decay
+    if (e.flashTimer > 0) e.flashTimer -= dt;
+
+    // Behavior: Revenant self-heals 5% max HP every 5 seconds
+    if (e.behavior === 'selfheal') {
+      e.healTimer += dt;
+      if (e.healTimer >= 5) {
+        e.healTimer = 0;
+        if (e.hp > 0 && e.hp < e.maxHp) {
+          const heal = Math.ceil(e.maxHp * 0.05);
+          e.hp = Math.min(e.maxHp, e.hp + heal);
+          floatingTexts.push({ x: e.x, y: e.y - 0.8, text: `+${heal}`, timer:0, color:'#4f4' });
+        }
+      }
+    }
+
+    // Phase transition for boss
+    if (e.isBoss && e.phase === 1 && e.hp < e.maxHp * 0.5) {
+      e.phase = 2;
+      e.damage *= 1.5;
+      e.speed *= 1.4;
+      addScreenShake(12);
+      floatingTexts.push({ x: e.x, y: e.y - 1, text: 'ENRAGED!', timer:0, color:'#f44' });
+    }
+
+    // Enemy wander
+    e.dirTimer += dt;
+    const dirChange = e.isBoss ? (e.phase === 2 ? 0.8 : 1.5) : (2 + Math.random());
+    if (e.dirTimer > dirChange) {
+      if (e.isBoss && e.phase === 2) {
+        // Phase 2 boss charges at player
+        e.direction = Math.atan2(player.y - e.y, player.x - e.x);
+      } else {
+        e.direction = Math.random() * Math.PI * 2;
+      }
+      e.dirTimer = 0;
+    }
+
+    e.x += Math.cos(e.direction) * e.speed * dt;
+    e.y += Math.sin(e.direction) * e.speed * dt;
+    e.x = Math.max(0, Math.min(e.x, GRID - 1));
+    e.y = Math.max(0, Math.min(e.y, GRID - 1));
+
+    const dist = Math.hypot(player.x - e.x, player.y - e.y);
+
+    if (dist < combatRange) {
+      // Player attacks enemy
+      if (tick % atkInterval === 0) {
+        const dmg = Math.max(1, Math.floor(combatStat / 5));
+        e.hp -= dmg;
+        e.flashTimer = 0.12;
+        spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
+        floatingTexts.push({ x: e.x, y: e.y - 0.5, text: `-${dmg}`, timer:0, color:'#f88' });
+
+        if (e.hp <= 0) {
+          // Particles + shake on kill
+          const zone = ZONES[currentZoneId];
+          spawnParticles(e.x * TILE_W, e.y * TILE_H, zone.enemyColor, e.isBoss ? 25 : 12);
+          addScreenShake(e.isBoss ? 16 : 6);
+
+          // XP: weapon skill gets full xp, vigor gets 50%, other combat skills get nothing
+          const xpGain = e.xpReward;
+          if (weaponStyle === 'melee')  player.skills.xp.strength     += xpGain;
+          if (weaponStyle === 'ranged') player.skills.xp.dexterity    += xpGain;
+          if (weaponStyle === 'magic')  player.skills.xp.intelligence += xpGain;
+          player.skills.xp.vigor += xpGain * 0.5;
+          floatingTexts.push({ x: e.x, y: e.y - 1, text: `+${Math.floor(xpGain)} XP`, timer:0, color:'#e8c97a' });
+
+          // Loot
+          dropLootFromEnemy(e);
+
+          enemies.splice(i, 1);
+
+          // Respawn after delay (not boss) — only if player is still in the same zone
+          if (!e.isBoss) {
+            const spawnZoneId = currentZoneId;
+            setTimeout(() => {
+              if (currentZoneId !== spawnZoneId) return; // zone changed — don't spawn stale enemy
+              const newE = spawnOneEnemy(ZONES[currentZoneId], true);
+              enemies.push(newE);
+            }, e.rarity === 'epic' ? 12000 : e.rarity === 'rare' ? 7000 : 4000);
+          }
+          continue;
+        }
+      }
+
+      // Enemy attacks player
+      const eAtkInterval = Math.max(20, Math.floor((1 / e.attackSpeed) * 60));
+      if (tick % eAtkInterval === 0) {
+        if (devInvincible) continue;
+        // Behavior: Bone Collector attacks have a projectile-style visual
+        if (e.behavior === 'ranged') spawnAttackVisual('ranged', e.x, e.y, player.x, player.y);
+        player.hp -= e.damage;
+        floatingTexts.push({ x: player.x, y: player.y - 0.5, text: `-${e.damage}`, timer:0, color:'#f44' });
+        addScreenShake(e.isBoss ? 10 : 4);
+        if (player.hp <= 0) {
+          if (devInvincible) { player.hp = 1; } else { player.hp = 0; triggerDeath(); return; }
+        }
+      }
+    }
+  }
+
+  // Loot pickup
+  for (let i = lootPiles.length - 1; i >= 0; i--) {
+    const pile = lootPiles[i];
+    // Death pile despawn (5 min timer)
+    if (pile.expiresAt && Date.now() > pile.expiresAt) {
+      lootPiles.splice(i, 1);
+      continue;
+    }
+    const dist = Math.hypot(player.x - pile.x, player.y - pile.y);
+    if (dist < 60 / TILE_W) {
+      // Collect gold
+      if (pile.gold > 0) {
+        backpack.gold += pile.gold;
+        floatingTexts.push({ x: player.x, y: player.y - 0.8, text: `+${pile.gold}g`, timer:0, color:'#e8c97a' });
+      }
+      // Collect items
+      for (const item of pile.items) {
+        backpack.items.push(item);
+        floatingTexts.push({ x: player.x, y: player.y - 1, text: `${item.name}!`, timer:0, color: item.rarity === 'legendary' ? '#ff8f00' : item.rarity === 'epic' ? '#9b59b6' : item.rarity === 'rare' ? '#4a90d9' : '#ccc' });
+      }
+      // Collect material
+      if (pile.materialDrop) {
+        backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1;
+        const mat = MATERIAL_DB.find(m => m.id === pile.materialDrop);
+        floatingTexts.push({ x: player.x, y: player.y - 1.3, text: `+${mat.name}`, timer:0, color:'#7d5' });
+      }
+      // Collect food
+      if (pile.foodDrop) {
+        backpack.food.push(pile.foodDrop);
+        floatingTexts.push({ x: player.x, y: player.y - 1.5, text: `+${pile.foodDrop.name}`, timer:0, color:'#fa8' });
+      }
+      lootPiles.splice(i, 1);
+    }
+  }
+
+  // Floating text decay
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    floatingTexts[i].timer += dt;
+    if (floatingTexts[i].timer > 1.2) floatingTexts.splice(i, 1);
+  }
+
+  // Particle update
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    p.x += p.vx * TILE_W * dt;
+    p.y += p.vy * TILE_H * dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Projectile update
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.life -= dt;
+    if (p.type === 'proj') { p.x += p.vx * dt; p.y += p.vy * dt; }
+    if (p.life <= 0) projectiles.splice(i, 1);
+  }
+
+  // XP level-up
+  for (const skill of ['dexterity','strength','vigor','intelligence']) {
+    const threshold = 100 * player.skills.level[skill];
+    if (player.skills.xp[skill] >= threshold) {
+      player.skills.level[skill]++;
+      player.skills.xp[skill] -= threshold;
+      player.baseStats[skill]++;
+      floatingTexts.push({ x: player.x, y: player.y - 2, text: `${skill.toUpperCase()} UP!`, timer:0, color:'#e8c97a' });
+    }
+  }
+
+  recalcMaxHp();
+  if (player.hp > player.maxHp) player.hp = player.maxHp;
+
+  // Auto-save every 10s
+  lastSave += dt;
+  if (lastSave >= 10) { saveGame(); lastSave = 0; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PIXI RENDERER (PixiJS 8.x — WebGL)
+//  Stage layers bottom→top:
+//    backgroundLayer — zone gradient (tile grid removed)
+//    worldLayer      — statics / loot / enemies / player (camera-scrolled)
+//    particleLayer   — kill bursts, projectiles, hit sparks (camera-scrolled)
+//    uiEffectsLayer  — damage numbers + HUD (fixed, no scroll)
+//  Render-only: game logic never reads from anything in this section.
+// ═══════════════════════════════════════════════════════════
+const RARITY_COLORS = { common:0x888888, rare:0x4fc3f7, epic:0xab47bc, legendary:0xff8f00 };
+const RARITY_LIGHT  = { common:0xffffff, rare:0xaad8ff, epic:0xe2b6ff, legendary:0xffcf90 }; // light casts over typed enemy shapes
+const SLOT_BASE_COLORS = { helmet:0x555555, chest:0x333366, legs:0x336633, boots:0x663333, weapon:0xaaaaaa };
+const PORTAL_LABEL_RADIUS = 120; // px — BACKLOG fix (was 60)
+
+function hexColor(c) {
+  if (typeof c === 'number') return c;
+  let h = String(c).replace('#', '');
+  if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
+  return parseInt(h, 16);
+}
+function lerpColor(a, b, t) {
+  const r  = Math.round(((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t);
+  const g  = Math.round(((a >> 8)  & 255) + (((b >> 8)  & 255) - ((a >> 8)  & 255)) * t);
+  const bl = Math.round((a & 255) + ((b & 255) - (a & 255)) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+function hudTextStyle(size, color, bold) {
+  return {
+    fontFamily: 'Courier New, monospace',
+    fontSize: size,
+    fontWeight: bold ? 'bold' : 'normal',
+    fill: color,
+    dropShadow: { alpha: 0.9, blur: 4, color: 0x000000, distance: 0, angle: 0 },
+  };
+}
+
+let app = null;
+let backgroundLayer, worldLayer, particleLayer, uiEffectsLayer;
+let staticsContainer, lootContainer, enemiesContainer;
+let playerContainer, playerParts, auraContainer, playerHpBarGfx, rangeRingGfx;
+let fxGraphics;
+let hudContainer, hudTexts, xpBarsGfx, hudHpBarGfx, joystickGfx, minimapGfx;
+const enemyViews = new Map();   // enemy obj -> view
+const lootViews  = new Map();   // pile obj -> container
+const textViews  = new Map();   // floatingText obj -> PIXI.Text
+let portalViews = [];
+let doorGlowViews = [];
+let lastZoneRendered = null;
+let circleTexture = null;
+let auraSprites = [];
+let auraPool = [];
+let sparkFx = [];               // renderer-side hit sparks {x,y,vx,vy,life,maxLife,color}
+let prevPlayerHp = null;
+
+async function loadSprites() {
+  // Robust base64 → texture: decode an <img> then wrap it (data-URI safe across PIXI v8).
+  // Any failure leaves TEXTURES[key] undefined so the Graphics fallback path activates.
+  for (const [key, dataUri] of Object.entries(SPRITES)) {
+    try {
+      const img = new Image();
+      img.src = dataUri;
+      await img.decode();
+      TEXTURES[key] = PIXI.Texture.from(img);
+    } catch (e) {
+      console.warn(`[RunePortal] Sprite load failed: ${key}`, e);
+    }
+  }
+}
+
+async function initPixi() {
+  app = new PIXI.Application();
+  await app.init({
+    canvas: canvas,                            // adopt the existing #canvas element —
+    width: VW, height: VH,                     // input handlers + CSS z-index stay valid
+    resolution: window.devicePixelRatio || 1,  // retina/mobile sharpness
+    autoDensity: true,                         // stage coords stay in CSS pixels
+    backgroundAlpha: 0,                        // transparent — backgroundLayer paints zone color
+    antialias: true,
+  });
+
+  backgroundLayer = new PIXI.Graphics();
+  worldLayer      = new PIXI.Container();
+  particleLayer   = new PIXI.Container();
+  uiEffectsLayer  = new PIXI.Container();
+  app.stage.addChild(backgroundLayer, worldLayer, particleLayer, uiEffectsLayer);
+
+  staticsContainer = new PIXI.Container(); // buildings, portals, paths — rebuilt per zone
+  lootContainer    = new PIXI.Container();
+  enemiesContainer = new PIXI.Container();
+  worldLayer.addChild(staticsContainer, lootContainer, enemiesContainer);
+
+  buildPlayerContainer();
+  worldLayer.addChild(playerContainer);
+
+  fxGraphics = new PIXI.Graphics();
+  particleLayer.addChild(fxGraphics);
+
+  const cg = new PIXI.Graphics().circle(0, 0, 3).fill(0xffffff);
+  circleTexture = app.renderer.generateTexture(cg);
+  cg.destroy();
+
+  buildHUD();
+  window.addEventListener('resize', onPixiResize);
+}
+
+function onPixiResize() {
+  if (!app) return;
+  VW = window.innerWidth;
+  VH = window.innerHeight;
+  app.renderer.resize(VW, VH);
+  layoutHUD();
+  lastZoneRendered = null; // force background + statics rebuild at the new size
+}
+
+// ── PLAYER — layered shaped container (GDD §2 layer order, XP Hero style)
+//    Origin = character center-bottom (feet). Shapes drawn white where rarity
+//    tint applies at runtime; body drawn in skin tone (sickness tint multiplies).
+function buildPlayerContainer() {
+  playerContainer = new PIXI.Container();
+
+  rangeRingGfx = new PIXI.Graphics(); // combat range ring sits under the body
+  playerContainer.addChild(rangeRingGfx);
+
+  const add = g => { playerContainer.addChild(g); return g; };
+
+  // bodySprite — pixel art sprite if its texture loaded (feet-anchored, behind all
+  // gear), else the Graphics stick figure (redrawn each frame by drawPlayerFigure();
+  // tint persists across clear() so the sickness tint logic is untouched).
+  const body = add(TEXTURES.playerBase ? (() => {
+    const s = new PIXI.Sprite(TEXTURES.playerBase);
+    s.anchor.set(0.5, 1);                          // feet at the container origin
+    const aspect = s.texture.width / s.texture.height;
+    s.height = 54; s.width = 54 * aspect;          // ~stick-figure bounds (head ≈ -52)
+    return s;
+  })() : new PIXI.Graphics());
+
+  // legsSprite — two leg plates; redrawn each frame to follow the animated legs
+  const legs = add(new PIXI.Graphics());
+
+  // chestSprite — trapezoid plate, wider at shoulders, + center seam detail.
+  // Static shape — idle breathing scales it vertically around the hip (y = -10).
+  const chest = new PIXI.Graphics();
+  chest.poly([-12, -28, 12, -28, 9, -10, -9, -10]).fill({ color: 0xffffff, alpha: 0.85 });
+  chest.moveTo(0, -26).lineTo(0, -12).stroke({ width: 1, color: 0x111111, alpha: 0.4 });
+  add(chest);
+
+  // helmetSprite — dome over the head. Static shape — translated with the head bob.
+  const helmet = new PIXI.Graphics();
+  helmet.poly([-11, -32, -13, -40, 0, -52, 13, -40, 11, -32])
+        .fill({ color: 0xffffff, alpha: 0.9 })
+        .stroke({ width: 1, color: 0x222222 });
+  add(helmet);
+
+  // bootsSprite — redrawn each frame to follow the animated foot positions
+  const boots = add(new PIXI.Graphics());
+
+  // weaponSprite — upward sword at the right hand (handle brown; blade/guard
+  // white so the runtime rarity tint colors them — handle picks up a slight cast).
+  // Static shape drawn at the REST hand (10,-16) — translated to follow the
+  // right hand during walk/attack swings.
+  const weapon = new PIXI.Graphics();
+  weapon.poly([14, -30, 17, -20, 14, -10, 11, -20]).fill(0xffffff); // blade diamond
+  weapon.rect(10, -16, 8, 2).fill(0xffffff);                       // guard
+  weapon.rect(13, -14, 2, 6).fill(0x4a3000);                       // handle
+  add(weapon);
+
+  playerParts = { body, legs, chest, helmet, boots, weapon };
+  for (const slot of ['legs','chest','helmet','boots','weapon']) playerParts[slot].visible = false;
+
+  // Weapon sprites — 3 static pixel-art sprites (one shown at a time by weaponStyle).
+  // Fallback: if any texture is missing, keep the Graphics `weapon` layer instead.
+  if (TEXTURES.sword && TEXTURES.bow && TEXTURES.staff) {
+    const mkWeapon = tex => {
+      const s = new PIXI.Sprite(tex);
+      s.anchor.set(0.5, 1);                         // grip at the hand, blade up
+      const aspect = s.texture.width / s.texture.height;
+      s.height = 30; s.width = 30 * aspect;
+      s.visible = false;
+      playerContainer.addChild(s);
+      return s;
+    };
+    playerParts.weaponSprites = { melee: mkWeapon(TEXTURES.sword), ranged: mkWeapon(TEXTURES.bow), magic: mkWeapon(TEXTURES.staff) };
+    weapon.visible = false;                          // permanently hide the Graphics weapon when sprites are active
+  }
+
+  auraContainer = new PIXI.Container();
+  playerContainer.addChild(auraContainer);
+
+  playerHpBarGfx = new PIXI.Graphics();
+  playerContainer.addChild(playerHpBarGfx);
+}
+
+// ── PLAYER ANIMATION — walk / attack / idle-breathe.
+//    Render-only: reads game state (position, enemies, tick), never writes it.
+//    All joints in figure-local coords, origin = feet (container origin).
+let animPrevPX = null, animPrevPY = null;
+
+function computePlayerPose() {
+  const now = Date.now();
+
+  // Moving? — position delta since last rendered frame (keyboard or joystick)
+  const moving = animPrevPX !== null &&
+    (Math.abs(player.x - animPrevPX) > 0.0001 || Math.abs(player.y - animPrevPY) > 0.0001);
+  animPrevPX = player.x; animPrevPY = player.y;
+
+  // In combat? — same proximity test the combat loop uses (read-only mirror)
+  let inCombat = false;
+  if (!anyPanelOpen && !ZONES[currentZoneId].isSafe) {
+    const range = getCombatRange();
+    for (const e of enemies) {
+      if (Math.hypot(player.x - e.x, player.y - e.y) < range) { inCombat = true; break; }
+    }
+  }
+
+  // IDLE — subtle breathing: torso length oscillates ±2% on a slow sin
+  const breath = (!moving && !inCombat) ? 1 + 0.02 * Math.sin(now * 0.002) : 1;
+  const torsoTopY = -10 - 18 * breath;   // rest -28 (torso bottom fixed at the hip, -10)
+  const shoulderY = torsoTopY + 2;       // rest -26
+  const torsoShift = torsoTopY + 28;     // 0 at rest — lifts neck/head with the breath
+
+  // WALK — legs alternate (left phase 0, right phase π), ±12px swing;
+  // arms counter-swing; head bobs ±2px
+  const ws = moving ? Math.sin(now * 0.008) : 0; // right leg = sin(+π) = -ws
+  const footLX = -6 + 12 * ws;
+  const footRX =  6 - 12 * ws;
+  const headBob = moving ? 2 * Math.sin(now * 0.016) : 0;
+  let handL = [-10 - 10 * ws, -16 + torsoShift];
+  let handR = [ 10 + 10 * ws, -16 + torsoShift];
+
+  // ATTACK — right arm rest (10,-16) → extended (18,-26) over 0.15s, return 0.1s.
+  // Phase comes from the EXISTING attack timer: combat fires at tick % atkInterval
+  // === 0, so (tick % atkInterval)/60 is the time since the last swing.
+  if (inCombat) {
+    const atkInterval = Math.max(20, Math.floor((1 / (getCombatStat() / 10)) * 60));
+    const tSec = (tick % atkInterval) / 60;
+    let t = 0;
+    if (tSec < 0.15)      t = tSec / 0.15;              // swing out
+    else if (tSec < 0.25) t = 1 - (tSec - 0.15) / 0.1;  // return
+    handR = [10 + 8 * t, -16 - 10 * t];
+  }
+
+  return {
+    headY: torsoTopY - 12 + headBob, // rest -40
+    torsoTopY, shoulderY, handL, handR, footLX, footRX, breath, moving,
+  };
+}
+
+// Redraws the animated parts (body, leg plates, boots) and transforms the static
+// gear shapes so every gear layer follows the limb it covers.
+function drawPlayerFigure(p) {
+  const { body, legs, boots, chest, helmet, weapon } = playerParts;
+
+  if (body instanceof PIXI.Graphics) {
+    body.clear();
+    body.circle(0, p.headY, 8).fill(0xe8d5b0);                     // head
+    body.moveTo(0, p.headY + 8).lineTo(0, p.torsoTopY)             // neck
+        .moveTo(0, p.torsoTopY).lineTo(0, -10)                     // torso
+        .moveTo(0, p.shoulderY).lineTo(p.handL[0], p.handL[1])     // left arm
+        .moveTo(0, p.shoulderY).lineTo(p.handR[0], p.handR[1])     // right arm
+        .moveTo(0, -10).lineTo(p.footLX, 0)                        // left leg
+        .moveTo(0, -10).lineTo(p.footRX, 0)                        // right leg
+        .stroke({ width: 2.5, color: 0xe8d5b0, cap: 'round' });
+  } else {
+    // Sprite body — bob along the vertical axis while moving (Graphics fallback ignores y)
+    body.y = p.moving ? Math.sin(Date.now() * 0.008) * 2 : 0;
+  }
+
+  // Leg plates — top edge pinned at the hip, bottom edge follows each foot
+  legs.clear();
+  legs.poly([-9, -10, -3, -10, p.footLX + 3, 0, p.footLX - 3, 0]).fill({ color: 0xffffff, alpha: 0.85 });
+  legs.poly([3, -10, 9, -10, p.footRX + 3, 0, p.footRX - 3, 0]).fill({ color: 0xffffff, alpha: 0.85 });
+
+  // Boots — same rest shapes, translated to the animated foot positions
+  boots.clear();
+  const ldx = p.footLX + 6, rdx = p.footRX - 6; // x-shift from rest feet (∓6)
+  boots.poly([ldx - 12, -2, ldx - 3, -2, ldx - 3, 2, ldx - 13, 2]).fill({ color: 0xffffff, alpha: 0.9 });
+  boots.rect(ldx - 15, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });   // left raised toe
+  boots.poly([rdx + 3, -2, rdx + 12, -2, rdx + 13, 2, rdx + 3, 2]).fill({ color: 0xffffff, alpha: 0.9 });
+  boots.rect(rdx + 12, -4, 3, 4).fill({ color: 0xffffff, alpha: 0.9 });   // right raised toe
+
+  // Chest breathes with the torso — scaled around the hip (y = -10)
+  chest.scale.y = p.breath;
+  chest.y = -10 * (1 - p.breath);
+
+  // Helmet stays on the head (drawn at rest head -40)
+  helmet.y = p.headY + 40;
+
+  // Weapon follows the right hand (drawn at rest hand (10,-16))
+  weapon.x = p.handR[0] - 10;
+  weapon.y = p.handR[1] + 16;
+
+  // Weapon sprites (if active) ride the right hand too — grip at the hand
+  if (playerParts.weaponSprites) {
+    for (const s of Object.values(playerParts.weaponSprites)) {
+      s.x = p.handR[0]; s.y = p.handR[1] + 6;
+    }
+  }
+}
+
+function getHighestEquippedRarity() {
+  let best = null;
+  for (const slot in player.equipped) {
+    const it = player.equipped[slot];
+    if (!it) continue;
+    if (best === null || (RARITY_RANK[it.rarity] || 0) > (RARITY_RANK[best] || 0)) best = it.rarity;
+  }
+  return best;
+}
+
+function updatePlayerView() {
+  playerContainer.visible = !player.isDead;
+  if (player.isDead) return;
+  // Origin is the figure's feet — stand on the bottom edge of the player's tile
+  playerContainer.x = player.x * TILE_W + TILE_W / 2;
+  playerContainer.y = player.y * TILE_H + TILE_H;
+
+  // Animate the figure (walk/attack/idle) — gear layers follow their limbs
+  drawPlayerFigure(computePlayerPose());
+
+  // Death sickness tint (multiplies the skin tone toward purple)
+  playerParts.body.tint = player.deathSickness > 0 ? 0x8844aa : 0xffffff;
+
+  // Armor overlays: visible when slot filled, tinted by rarity (common = slot base color)
+  for (const slot of ['legs','chest','helmet','boots']) {
+    const item = player.equipped[slot];
+    playerParts[slot].visible = !!item;
+    if (item) {
+      playerParts[slot].tint = (item.rarity && item.rarity !== 'common')
+        ? (RARITY_COLORS[item.rarity] || SLOT_BASE_COLORS[slot])
+        : SLOT_BASE_COLORS[slot];
+    }
+  }
+
+  // Weapon: sprite path (sword/bow/staff by style, rarity-tinted) or Graphics fallback
+  const wItem = player.equipped.weapon;
+  if (playerParts.weaponSprites) {
+    const wStyle = wItem ? (wItem.weaponStyle || 'melee') : null;
+    for (const [style, s] of Object.entries(playerParts.weaponSprites)) {
+      s.visible = !!wItem && style === wStyle;
+      if (s.visible) {
+        s.tint = (wItem.rarity && wItem.rarity !== 'common')
+          ? (RARITY_COLORS[wItem.rarity] || 0xffffff) : 0xffffff;
+      }
+    }
+  } else {
+    playerParts.weapon.visible = !!wItem;
+    if (wItem) {
+      playerParts.weapon.tint = (wItem.rarity && wItem.rarity !== 'common')
+        ? (RARITY_COLORS[wItem.rarity] || SLOT_BASE_COLORS.weapon)
+        : SLOT_BASE_COLORS.weapon;
+    }
+  }
+
+  // Combat range ring — dashed ellipse, centered on the player's TILE center
+  // (combat distance is measured from player.x/y, not from the feet origin)
+  const style = getWeaponStyle();
+  const ringColor = style === 'magic' ? 0xaa44ff : style === 'ranged' ? 0x44aaff : 0xff8844;
+  const rx = getCombatRange() * TILE_W;
+  const ry = getCombatRange() * TILE_H;
+  const ringCy = -TILE_H / 2;
+  rangeRingGfx.clear();
+  const segs = 36;
+  for (let i = 0; i < segs; i += 2) {
+    const a0 = (i / segs) * Math.PI * 2;
+    const a1 = ((i + 1) / segs) * Math.PI * 2;
+    rangeRingGfx.moveTo(Math.cos(a0) * rx, ringCy + Math.sin(a0) * ry)
+                .lineTo(Math.cos(a1) * rx, ringCy + Math.sin(a1) * ry);
+  }
+  rangeRingGfx.stroke({ width: 1, color: ringColor, alpha: 0.3 });
+
+  // HP bar above the head (helmet apex is -52)
+  playerHpBarGfx.clear();
+  playerHpBarGfx.rect(-TILE_W / 2, -62, TILE_W, 5).fill(0x333333);
+  playerHpBarGfx.rect(-TILE_W / 2, -62, TILE_W * Math.max(0, player.hp / player.maxHp), 5).fill(0xe44444);
+
+  // Red hit sparks when the player takes damage (HP delta — no combat-logic hooks)
+  if (prevPlayerHp !== null && player.hp < prevPlayerHp) {
+    spawnSparkFx(playerContainer.x, playerContainer.y - 24, 0xff4444);
+  }
+  prevPlayerHp = player.hp;
+}
+
+// ── AURA PARTICLES — subtle glow halo, color = highest equipped rarity ──
+//    Max 6 active 3-4px circles orbiting ~15px around the torso center
+//    (origin = feet → torso center ≈ (0,-20)). Low alpha + tiny size keep the
+//    character body fully visible — halo, not cloud.
+const AURA_MAX = 6;
+const AURA_TORSO_Y = -20;
+function updateAuraParticles() {
+  for (let i = auraSprites.length - 1; i >= 0; i--) {
+    const s = auraSprites[i];
+    s.auraA += s.auraSpd;                                  // orbit around the torso
+    s.x = Math.cos(s.auraA) * s.auraR;
+    s.y = AURA_TORSO_Y + Math.sin(s.auraA) * s.auraR * 0.6 - s.auraRise;
+    s.auraRise += 0.08;                                    // slow upward drift
+    s.alpha -= 0.006;                                      // gentle fade, then recycle
+    if (s.alpha <= 0) {
+      auraContainer.removeChild(s);
+      auraPool.push(s);
+      auraSprites.splice(i, 1);
+    }
+  }
+  if (player.isDead) return;
+  const best = getHighestEquippedRarity();
+  if (!best) return; // nothing equipped — no aura
+  const color = RARITY_COLORS[best] || 0x888888;
+  while (auraSprites.length < AURA_MAX) {
+    const s = auraPool.pop() || new PIXI.Sprite(circleTexture);
+    s.anchor.set(0.5);
+    s.auraA = Math.random() * Math.PI * 2;
+    s.auraSpd = 0.02 + Math.random() * 0.02;
+    s.auraR = 13 + Math.random() * 4;                      // ~15px emission radius
+    s.auraRise = 0;
+    s.x = Math.cos(s.auraA) * s.auraR;
+    s.y = AURA_TORSO_Y + Math.sin(s.auraA) * s.auraR * 0.6;
+    s.alpha = 0.25 + Math.random() * 0.25;
+    s.scale.set(0.5 + Math.random() * 0.17);               // 3-4px (texture circle = 6px)
+    s.tint = color;
+    auraContainer.addChild(s);
+    auraSprites.push(s);
+  }
+}
+
+// ── ENEMY SILHOUETTES — per-type humanoid shapes (PIXI.Graphics only) ──
+// Drawn in their own type colors; rarity applies as a light tint cast on top
+// (RARITY_LIGHT). Hit flash uses a white overlay copy of the same silhouette.
+// Bosses are drawn white so the existing boss-color/enrage/flash tints apply.
+const ENEMY_SHAPE_DEFS = {
+  'Ashwalker Scavenger': { color: '#8b6914', lw: 2,   lean: 0.26, handR: [12, -34] },          // lean, hunched, arm raised
+  'Raider Brute':        { color: '#5c3317', lw: 4,   torsoLw: 6.5, headR: 11,
+                           handL: [-16, -24], handR: [16, -24], feetSpread: 8 },               // wide, stocky, arms out
+  'Bone Collector':      { color: '#d4c9a8', lw: 1.5, eyes: true, fingers: true,
+                           handL: [-12, -28], handR: [12, -28] },                              // tall, skeletal
+  'Hollow Hunter':       { color: '#3d2b1f', quad: true },                                     // skeletal werewolf — quadruped
+  'Wraith Stalker':      { color: '#6a5acd', wraith: true },                                   // spectral — no legs, trailing wisps
+  'Iron Construct':      { color: '#4a4a4a', boxy: true },                                     // blocky mechanical
+  'Revenant':            { color: '#7a7a8a', lw: 2.5, chestPlate: true },                      // spectral armor plates
+  '__boss':              { color: '#ffffff', lw: 3.5, headR: 9 },
+};
+
+// Draws a humanoid into g. Origin = container center; total height H (feet at +H/2).
+// override: draw everything in this color (white flash copy / white-drawn bosses).
+function drawEnemyShape(g, name, H, override) {
+  const o = ENEMY_SHAPE_DEFS[name] || {};
+  const color = override !== undefined ? override : hexColor(o.color || '#888888');
+  const u = H / 48;                       // template is 48px tall
+  const X = v => v * u;
+  const Y = v => v * u + H / 2;
+  const lw = Math.max(1, (o.lw || 2.5) * u);
+
+  if (o.quad) { // Hollow Hunter — skeletal werewolf: low wide quadruped, NOT a stick figure
+    const lwq = Math.max(1.5, 3 * u);
+    g.ellipse(X(0), Y(-15), X(17), X(7)).fill(color);                       // low wide body (wider than humanoids)
+    g.moveTo(X(-11), Y(-12)).lineTo(X(-15), Y(0))                           // 4 limbs angled down from center mass
+     .moveTo(X(-4),  Y(-12)).lineTo(X(-7),  Y(0))
+     .moveTo(X(4),   Y(-12)).lineTo(X(7),   Y(0))
+     .moveTo(X(11),  Y(-12)).lineTo(X(15),  Y(0))
+     .stroke({ width: lwq, color, cap: 'round' });
+    g.ellipse(X(16), Y(-22), X(7), X(5.5)).fill(color);                     // large oval head at the front
+    g.poly([X(11), Y(-26), X(13), Y(-33), X(15), Y(-26)]).fill(color);      // pointed ear triangles
+    g.poly([X(16), Y(-26), X(18), Y(-33), X(20), Y(-26)]).fill(color);
+    return;
+  }
+
+  if (o.wraith) { // Wraith Stalker — spectral: NO legs, body tapers to a point
+    g.poly([X(-9), Y(-28), X(9), Y(-28), X(0), Y(2)]).fill({ color, alpha: 0.85 }); // tapered wispy body
+    g.moveTo(X(-8), Y(-25)).lineTo(X(-14), Y(-12)).lineTo(X(-12), Y(-2))            // long arms drooping at the ends
+     .moveTo(X(8),  Y(-25)).lineTo(X(14),  Y(-12)).lineTo(X(12),  Y(-2))
+     .stroke({ width: Math.max(1, 1.5 * u), color, cap: 'round' });
+    g.circle(X(0), Y(-37), 9 * u).stroke({ width: Math.max(1.5, 2 * u), color });    // hollow head — outlined only
+    g.moveTo(X(-4), Y(0)).lineTo(X(-5), Y(8))                                        // 3 trailing wisps, varied lengths
+     .moveTo(X(0),  Y(2)).lineTo(X(0),  Y(12))
+     .moveTo(X(4),  Y(0)).lineTo(X(5),  Y(7))
+     .stroke({ width: Math.max(1, 1.2 * u), color, alpha: 0.7, cap: 'round' });
+    return;
+  }
+
+  if (o.boxy) { // Iron Construct — box torso, square head + eye slots, thick rect limbs, rivets
+    const torsoC = override !== undefined ? override : 0x2a2a2a;
+    const rivetC = override !== undefined ? override : 0x6a6a6a;
+    const eyeC   = override !== undefined ? override : 0x1a1a1a;
+    g.rect(X(-13), Y(-28), X(6), X(16)).fill(color);   // 4 thick rectangular limbs
+    g.rect(X(7),   Y(-28), X(6), X(16)).fill(color);   // extending from the box corners
+    g.rect(X(-7),  Y(-12), X(5), X(12)).fill(color);
+    g.rect(X(2),   Y(-12), X(5), X(12)).fill(color);
+    g.rect(X(-7), Y(-30), X(14), X(20)).fill(torsoC);  // filled box torso
+    g.rect(X(-5), Y(-42), X(10), X(10)).fill(color);   // square head
+    g.rect(X(-3.5), Y(-39), X(2.5), X(1.5)).fill(eyeC); // two small rect eye slots
+    g.rect(X(1),    Y(-39), X(2.5), X(1.5)).fill(eyeC);
+    for (const [rx, ry] of [[-4, -26], [4, -26], [-4, -16], [4, -16]]) {
+      g.circle(X(rx), Y(ry), Math.max(1, 1.2 * u)).fill(rivetC);
+    }
+    return;
+  }
+
+  // Stick-figure template (player proportions), optionally leaned around the hip
+  const lean = o.lean || 0;
+  const rot = (x, y) => {
+    const dx = x, dy = y + 10; // hip at (0,-10)
+    return [dx * Math.cos(lean) - dy * Math.sin(lean),
+            -10 + dx * Math.sin(lean) + dy * Math.cos(lean)];
+  };
+  const headR = (o.headR || 8) * u;
+  const [hcx, hcy] = rot(0, -40);
+  const [ntx, nty] = rot(0, -32);
+  const [nbx, nby] = rot(0, -28);
+  const [shx, shy] = rot(0, -26);
+  const hl = rot(...(o.handL || [-10, -16]));
+  const hr = rot(...(o.handR || [10, -16]));
+  const fs = o.feetSpread || 6;
+
+  // Head (oval hint for Hollow Hunter; eye sockets for Bone Collector)
+  if (o.headOval) g.ellipse(X(hcx), Y(hcy), headR * 0.85, headR * 1.15).fill(color);
+  else g.circle(X(hcx), Y(hcy), headR).fill(color);
+  if (o.eyes && override === undefined) {
+    g.circle(X(hcx) - headR * 0.35, Y(hcy) - headR * 0.1, Math.max(1, headR * 0.18)).fill(0x222222);
+    g.circle(X(hcx) + headR * 0.35, Y(hcy) - headR * 0.1, Math.max(1, headR * 0.18)).fill(0x222222);
+  }
+
+  // Neck, torso, arms, legs
+  g.moveTo(X(ntx), Y(nty)).lineTo(X(nbx), Y(nby))
+   .moveTo(X(nbx), Y(nby)).lineTo(X(0), Y(-10))
+   .moveTo(X(shx), Y(shy)).lineTo(X(hl[0]), Y(hl[1]))
+   .moveTo(X(shx), Y(shy)).lineTo(X(hr[0]), Y(hr[1]))
+   .moveTo(X(0), Y(-10)).lineTo(X(-fs), Y(0))
+   .moveTo(X(0), Y(-10)).lineTo(X(fs), Y(0))
+   .stroke({ width: lw, color, cap: 'round' });
+  if (o.torsoLw) { // Brute: chunky wide torso redraw on top
+    g.moveTo(X(nbx), Y(nby)).lineTo(X(0), Y(-10))
+     .stroke({ width: Math.max(3, o.torsoLw * u), color, cap: 'round' });
+  }
+
+  // Hand details — 3 short fanned lines (fingers/claws)
+  if (o.fingers || o.claws) {
+    const len = (o.claws ? 5 : 4) * u;
+    for (const [hx, hy] of [hl, hr]) {
+      for (let k = -1; k <= 1; k++) {
+        g.moveTo(X(hx), Y(hy)).lineTo(X(hx) + k * len * 0.5, Y(hy) + len);
+      }
+    }
+    g.stroke({ width: Math.max(1, lw * 0.6), color, cap: 'round' });
+  }
+
+  // Revenant — faint spectral chest plate over the torso
+  if (o.chestPlate) {
+    const pc = override !== undefined ? override : 0xaaaaff;
+    g.poly([X(-8), Y(-27), X(8), Y(-27), X(6), Y(-12), X(-6), Y(-12)]).fill({ color: pc, alpha: 0.4 });
+  }
+}
+
+// ── ENEMIES — typed humanoid silhouette + HP bar + rarity glow ──
+function makeEnemyView(e, zone) {
+  const c = new PIXI.Container();
+  let size = e.isBoss ? TILE_W * 0.7
+    : (e.rarity === 'epic' ? TILE_W * 0.45 : e.rarity === 'rare' ? TILE_W * 0.38 : TILE_W * 0.3);
+  // Per-type size scale from zone config (art-pass values)
+  const typeDef = (zone.enemyTypes || []).find(t => t.name === e.name);
+  if (typeDef && typeDef.sizeScale) size *= typeDef.sizeScale;
+  const H = size * 2; // figure height
+
+  // Rarity glow circle behind the body (rare/epic/legendary)
+  const glow = new PIXI.Graphics().circle(0, 0, size * 1.5).fill(RARITY_COLORS[e.rarity] || 0x888888);
+  glow.alpha = 0.3;
+  glow.visible = e.rarity !== 'common';
+  c.addChild(glow);
+
+  // Bleakwood bioluminescent aura (zone config) — simple static glow
+  let zoneAura = null;
+  if (zone.auraColor && !e.isBoss) {
+    zoneAura = new PIXI.Graphics().circle(0, 0, size * 1.25).fill(hexColor(zone.auraColor));
+    zoneAura.alpha = 0.22;
+    c.addChild(zoneAura);
+  }
+
+  // ── Pixel art sprites for 3 special enemy types (non-boss). Fallback: Graphics. ──
+  const SPRITE_ENEMY_MAP = { 'Hollow Hunter': 'hollowHunter', 'Wraith Stalker': 'wraithStalker', 'Iron Construct': 'ironConstruct' };
+  const spriteKey = !e.isBoss ? SPRITE_ENEMY_MAP[e.name] : null;
+  let enemySprite = null;
+  if (spriteKey && TEXTURES[spriteKey]) {
+    enemySprite = new PIXI.Sprite(TEXTURES[spriteKey]);
+    enemySprite.anchor.set(0.5, 1);              // feet at +H/2 (matches the silhouette baseline)
+    const aspect = enemySprite.texture.width / enemySprite.texture.height;
+    enemySprite.height = H; enemySprite.width = H * aspect;
+    enemySprite.y = H / 2;                        // stand on the figure baseline
+    enemySprite.tint = RARITY_LIGHT[e.rarity] || 0xffffff;
+    c.addChild(enemySprite);
+  }
+
+  const body = new PIXI.Graphics();
+  let flashOverlay = null;
+  if (e.isBoss) {
+    drawEnemyShape(body, '__boss', H, 0xffffff); // white-drawn — boss tints color it
+  } else if (!enemySprite) {
+    drawEnemyShape(body, e.name, H);
+    flashOverlay = new PIXI.Graphics();          // white copy shown during hit flash
+    drawEnemyShape(flashOverlay, e.name, H, 0xffffff);
+    flashOverlay.visible = false;
+  }
+  body.visible = !enemySprite;                   // hide the Graphics body when a sprite is present
+  c.addChild(body);
+  if (flashOverlay) c.addChild(flashOverlay);
+
+  const hpBar = new PIXI.Graphics();
+  c.addChild(hpBar);
+
+  if (e.isBoss) {
+    const name = new PIXI.Text({ text: e.name || '', style: hudTextStyle(10, 0xe8c97a, true) });
+    name.anchor.set(0.5, 1);
+    name.y = -size - 16;
+    c.addChild(name);
+    const crown = new PIXI.Text({ text: '♛', style: { fontFamily: 'Arial', fontSize: 14, fill: 0xe8c97a } });
+    crown.anchor.set(0.5, 1);
+    crown.y = -size - 4;
+    c.addChild(crown);
+  }
+
+  enemiesContainer.addChild(c);
+  return { c, body, flashOverlay, glow, zoneAura, hpBar, size, lastHp: e.hp, healFlash: 0, sprite: enemySprite };
+}
+
+function updateEnemyViews(zone) {
+  for (const e of enemies) {
+    let v = enemyViews.get(e);
+    if (!v) { v = makeEnemyView(e, zone); enemyViews.set(e, v); }
+    v.c.x = e.x * TILE_W + TILE_W / 2;
+    v.c.y = e.y * TILE_H + TILE_H / 2;
+    // Iron Construct stomp — y offset alternates ±2px every 20 frames (render-only)
+    if (e.name === 'Iron Construct') v.c.y += (Math.floor(tick / 20) % 2) ? 2 : -2;
+
+    // Wraith Stalker phasing — opacity pulse on body + glows (HP bar stays solid)
+    const phaseAlpha = e.behavior === 'phasing' ? 0.25 + 0.6 * Math.abs(Math.sin(tick * 0.03)) : 1;
+    v.body.alpha = phaseAlpha;
+    v.glow.alpha = 0.3 * phaseAlpha;
+    if (v.zoneAura) v.zoneAura.alpha = 0.22 * phaseAlpha;
+    if (v.flashOverlay) v.flashOverlay.alpha = phaseAlpha;
+    if (v.sprite) v.sprite.alpha = phaseAlpha;
+
+    // HP deltas drive effects — no combat-logic hooks needed
+    if (e.hp > v.lastHp) v.healFlash = 18;                       // Revenant self-heal → green pulse
+    if (e.hp < v.lastHp) spawnSparkFx(v.c.x, v.c.y, 0xffffff);   // player hit lands → white sparks
+    v.lastHp = e.hp;
+    if (v.healFlash > 0) v.healFlash--;
+
+    // Bosses (white-drawn) keep full tint logic; typed humanoids are drawn in their
+    // own colors — rarity applies as a light cast, hit flash via the white overlay
+    if (e.isBoss) {
+      v.body.tint = e.flashTimer > 0 ? 0xffffff
+        : (e.phase === 2 ? 0xff4400 : hexColor(zone.bossColor || '#8B0000'));
+    } else {
+      v.body.tint = v.healFlash > 0 ? 0x44ee66 : (RARITY_LIGHT[e.rarity] || 0xffffff);
+      if (v.flashOverlay) v.flashOverlay.visible = e.flashTimer > 0;
+      if (v.sprite) v.sprite.tint = e.flashTimer > 0 ? 0xffffff
+        : (v.healFlash > 0 ? 0x44ee66 : (RARITY_LIGHT[e.rarity] || 0xffffff));
+    }
+
+    // HP bar above body — green/amber/red by remaining fraction
+    const barW = e.isBoss ? TILE_W : TILE_W / 2;
+    const frac = Math.max(0, e.hp / e.maxHp);
+    const barColor = frac > 0.5 ? 0x44aa44 : frac > 0.25 ? 0xaaaa44 : 0xaa4444;
+    v.hpBar.clear();
+    v.hpBar.rect(-barW / 2, -TILE_H / 2 - 10, barW, 4).fill(0x333333);
+    v.hpBar.rect(-barW / 2, -TILE_H / 2 - 10, barW * frac, 4).fill(barColor);
+  }
+  // Remove views for despawned enemies
+  for (const [e, v] of enemyViews) {
+    if (!enemies.includes(e)) {
+      v.c.destroy({ children: true });
+      enemyViews.delete(e);
+    }
+  }
+}
+
+// ── LOOT PILES — gold circle (scaled), rarity diamonds, name label ──
+function makeLootView(pile) {
+  const c = new PIXI.Container();
+  c.x = pile.x * TILE_W;
+  c.y = pile.y * TILE_H;
+
+  let labelText = '';
+  if (pile.isDeathPile) {
+    const skull = new PIXI.Text({ text: '☠', style: { fontFamily: 'Arial', fontSize: 20, fill: 0xff4444 } });
+    skull.anchor.set(0.5);
+    skull.x = TILE_W / 2; skull.y = TILE_H / 2;
+    c.addChild(skull);
+    labelText = 'YOUR GEAR';
+  } else {
+    if (pile.gold > 0) {
+      const r = Math.min(11, 4 + Math.sqrt(pile.gold) * 0.4); // size scales with amount
+      c.addChild(new PIXI.Graphics().circle(TILE_W / 2, TILE_H / 2, r).fill(0xffd700));
+    }
+    pile.items.forEach((item, k) => {
+      const dx = 8 + k * 13, dy = 8;
+      c.addChild(new PIXI.Graphics()
+        .poly([dx, dy - 7, dx + 7, dy, dx, dy + 7, dx - 7, dy])
+        .fill(RARITY_COLORS[item.rarity] || 0x888888));
+    });
+    if (pile.items.length > 0) {
+      labelText = pile.items[0].name + (pile.items.length > 1 ? ` +${pile.items.length - 1}` : '');
+    } else if (pile.gold > 0) {
+      labelText = `${pile.gold}g`;
+    }
+  }
+  if (labelText) {
+    const label = new PIXI.Text({ text: labelText, style: hudTextStyle(9, 0xffffff, false) });
+    label.anchor.set(0.5, 1);
+    label.x = TILE_W / 2; label.y = -4;
+    c.addChild(label);
+  }
+  lootContainer.addChild(c);
+  return c;
+}
+
+function updateLootViews() {
+  for (const pile of lootPiles) {
+    if (!lootViews.has(pile)) lootViews.set(pile, makeLootView(pile));
+  }
+  for (const [pile, c] of lootViews) {
+    if (!lootPiles.includes(pile)) {
+      c.destroy({ children: true });
+      lootViews.delete(pile);
+    }
+  }
+}
+
+// ── ZONE STATICS — background gradient, buildings, portals ──
+function rebuildZoneVisuals(zone) {
+  lastZoneRendered = currentZoneId;
+
+  // Zone gradient background, full canvas (banded fill — stable across Pixi 8.x minors)
+  backgroundLayer.clear();
+  const top = hexColor(zone.bgGradient[0]);
+  const bottom = hexColor(zone.bgGradient[1]);
+  const bands = 48;
+  const bandH = Math.ceil(VH / bands);
+  for (let i = 0; i < bands; i++) {
+    backgroundLayer.rect(0, i * bandH, VW, bandH + 1).fill(lerpColor(top, bottom, i / (bands - 1)));
+  }
+
+  staticsContainer.removeChildren().forEach(ch => ch.destroy({ children: true }));
+  portalViews = [];
+  doorGlowViews = [];
+
+  if (currentZoneId === 'homestead') buildHomesteadStatics();
+
+  for (const portal of getPortals()) {
+    const dest = ZONES[portal.target];
+    addPortalView(portal, hexColor((dest && dest.portalColor) || '#e8c97a'), portal.label, false);
+  }
+  const hsp = getHomesteadPortal();
+  if (hsp) {
+    addPortalView(hsp, hexColor(ZONES.homestead.portalColor || '#77dd55'), '⚒ HOMESTEAD', true);
+  }
+}
+
+function addPortalView(portal, color, labelText, alwaysLabel) {
+  const c = new PIXI.Container();
+  c.x = portal.x * TILE_W + TILE_W / 2;
+  c.y = portal.y * TILE_H + TILE_H / 2;
+
+  const halo = new PIXI.Graphics().circle(0, 0, 27).fill(color); // soft outer glow
+  halo.alpha = 0.12;
+  const core = new PIXI.Graphics().circle(0, 0, 10).fill(color); // solid inner circle
+  core.alpha = 0.9;
+  const ring = new PIXI.Graphics().circle(0, 0, 20).stroke({ width: 2, color }); // pulsing ring
+  c.addChild(halo, core, ring);
+
+  const label = new PIXI.Text({ text: labelText, style: hudTextStyle(10, color, true) });
+  label.anchor.set(0.5, 1);
+  label.y = -26;
+  label.visible = !!alwaysLabel;
+  c.addChild(label);
+
+  staticsContainer.addChild(c);
+  portalViews.push({ portal, ring, halo, label, alwaysLabel });
+}
+
+function animateZoneStatics() {
+  for (const pv of portalViews) {
+    const pulse = 0.7 + 0.3 * Math.sin(tick * (pv.alwaysLabel ? 0.04 : 0.05) + (pv.alwaysLabel ? 1 : 0));
+    pv.ring.alpha = pulse;
+    pv.halo.alpha = 0.08 + 0.1 * pulse;
+    if (!pv.alwaysLabel) {
+      // Portal proximity label — 120px radius (BACKLOG fix, was 60px)
+      const dx = (player.x - pv.portal.x) * TILE_W;
+      const dy = (player.y - pv.portal.y) * TILE_H;
+      pv.label.visible = Math.hypot(dx, dy) < PORTAL_LABEL_RADIUS;
+    }
+  }
+  for (const dg of doorGlowViews) {
+    dg.gfx.alpha = 0.4 * (0.5 + 0.5 * Math.sin(tick * 0.06));
+  }
+}
+
+function buildHomesteadStatics() {
+  // Rune path lanes (cross pattern)
+  const paths = new PIXI.Graphics();
+  paths.rect(0, (GRID / 2) * TILE_H, GRID * TILE_W, TILE_H).fill(0x1a3a1a);
+  paths.rect((GRID / 2) * TILE_W, 0, TILE_W, GRID * TILE_H).fill(0x1a3a1a);
+  staticsContainer.addChild(paths);
+
+  for (const b of BUILDINGS) {
+    const bx = b.x * TILE_W, by = b.y * TILE_H;
+    const bw = b.w * TILE_W, bh = b.h * TILE_H;
+    const doorPixX = (b.doorX - b.x) * TILE_W;
+    const color = hexColor(b.runeColor);
+
+    const g = new PIXI.Graphics();
+    g.rect(bx, by, bw, bh).fill(0x1a1a2a);
+    // Glowing border: soft wide underlay + crisp line (approximates canvas shadowBlur)
+    const walls = [
+      [bx, by, bx + bw, by],                                // top
+      [bx, by, bx, by + bh],                                // left
+      [bx + bw, by, bx + bw, by + bh],                      // right
+      [bx, by + bh, bx + doorPixX, by + bh],                // south, left of door
+      [bx + doorPixX + TILE_W, by + bh, bx + bw, by + bh],  // south, right of door
+    ];
+    for (const [x1, y1, x2, y2] of walls) g.moveTo(x1, y1).lineTo(x2, y2);
+    g.stroke({ width: 6, color, alpha: 0.22 });
+    for (const [x1, y1, x2, y2] of walls) g.moveTo(x1, y1).lineTo(x2, y2);
+    g.stroke({ width: 2, color });
+    staticsContainer.addChild(g);
+
+    // Pulsing door glow
+    const door = new PIXI.Graphics().rect(b.doorX * TILE_W, b.doorY * TILE_H, TILE_W, TILE_H).fill(color);
+    staticsContainer.addChild(door);
+    doorGlowViews.push({ gfx: door });
+
+    const label = new PIXI.Text({ text: b.label, style: hudTextStyle(10, color, true) });
+    label.anchor.set(0.5, 1);
+    label.x = bx + bw / 2;
+    label.y = by - 4;
+    staticsContainer.addChild(label);
+  }
+}
+
+// ── FX — kill bursts + projectiles (logic-owned) and hit sparks (renderer-owned) ──
+function spawnSparkFx(wx, wy, color) {
+  const n = 4 + Math.floor(Math.random() * 3); // 4-6 sparks
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1.5 + Math.random() * 2.5;
+    sparkFx.push({ x: wx, y: wy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, life: 15, maxLife: 15, color });
+  }
+}
+
+function updateFxGraphics() {
+  for (let i = sparkFx.length - 1; i >= 0; i--) {
+    const s = sparkFx[i];
+    s.x += s.vx; s.y += s.vy;
+    s.life--;
+    if (s.life <= 0) sparkFx.splice(i, 1);
+  }
+
+  fxGraphics.clear();
+
+  // Kill-burst particles (spawned + aged by game logic)
+  for (const p of particles) {
+    fxGraphics.rect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size)
+              .fill({ color: hexColor(p.color), alpha: Math.max(0, p.life / p.maxLife) });
+  }
+
+  // Attack visuals / projectiles (spawned + aged by game logic)
+  for (const p of projectiles) {
+    const t = Math.max(0, p.life / p.maxLife);
+    const color = hexColor(p.color);
+    if (p.type === 'slash') {
+      fxGraphics.moveTo(p.x + Math.cos(p.angle) * 6, p.y + Math.sin(p.angle) * 6)
+                .lineTo(p.x + Math.cos(p.angle) * 22, p.y + Math.sin(p.angle) * 22)
+                .stroke({ width: 3, color, alpha: t, cap: 'round' });
+    } else if (p.style === 'ranged') {
+      fxGraphics.circle(p.x, p.y, 4).fill({ color, alpha: t });
+      fxGraphics.moveTo(p.x, p.y).lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04)
+                .stroke({ width: 2, color, alpha: t });
+    } else {
+      fxGraphics.circle(p.x, p.y, 11).fill({ color, alpha: t * 0.25 }); // magic orb halo
+      fxGraphics.circle(p.x, p.y, 5).fill({ color, alpha: t });
+    }
+  }
+
+  // Hit sparks
+  for (const s of sparkFx) {
+    fxGraphics.rect(s.x - 1.5, s.y - 1.5, 3, 3).fill({ color: s.color, alpha: s.life / s.maxLife });
+  }
+}
+
+// ── FLOATING TEXTS — damage numbers, XP, pickups (data owned by game logic) ──
+function updateFloatingTextViews() {
+  const sx = Math.round(screenShake.x), sy = Math.round(screenShake.y);
+  for (const ft of floatingTexts) {
+    let t = textViews.get(ft);
+    if (!t) {
+      t = new PIXI.Text({ text: ft.text, style: hudTextStyle(13, hexColor(ft.color || '#fff'), true) });
+      t.anchor.set(0.5, 1);
+      uiEffectsLayer.addChildAt(t, 0); // under the HUD container
+      textViews.set(ft, t);
+      // Level-up visual burst — gold sparks at the player
+      if (typeof ft.text === 'string' && ft.text.endsWith('UP!')) {
+        spawnSparkFx(player.x * TILE_W + TILE_W / 2, player.y * TILE_H + TILE_H / 2, 0xe8c97a);
+        spawnSparkFx(player.x * TILE_W + TILE_W / 2, player.y * TILE_H + TILE_H / 2, 0xffe9a0);
+      }
+    }
+    // World→screen conversion: these live on the fixed layer but track world positions
+    t.x = ft.x * TILE_W - camera.x + TILE_W / 2 + sx;
+    t.y = ft.y * TILE_H - camera.y - ft.timer * 50 + sy;
+    t.alpha = Math.max(0, 1 - ft.timer / 1.2);
+  }
+  for (const [ft, t] of textViews) {
+    if (!floatingTexts.includes(ft)) {
+      t.destroy();
+      textViews.delete(ft);
+    }
+  }
+}
+
+// ── HUD — was canvas-drawn (not HTML); rebuilt in Pixi at identical coordinates
+//    so the existing coordinate-based canvas touch/click handlers keep working ──
+function buildHUD() {
+  hudContainer = new PIXI.Container();
+  uiEffectsLayer.addChild(hudContainer);
+
+  hudTexts = {};
+  const addText = (key, size, color, bold, anchorX, anchorY) => {
+    const t = new PIXI.Text({ text: '', style: hudTextStyle(size, color, bold) });
+    t.anchor.set(anchorX, anchorY);
+    hudContainer.addChild(t);
+    hudTexts[key] = t;
+    return t;
+  };
+
+  for (let i = 0; i < 4; i++) addText('stat' + i, 13, 0xe8c97a, true, 0, 0);  // stats top-left
+  for (let i = 0; i < 4; i++) addText('lv' + i, 10, 0x888888, false, 0, 0);   // XP level labels
+  xpBarsGfx = new PIXI.Graphics();
+  hudContainer.addChild(xpBarsGfx);
+
+  // Top-right buttons — tap targets are handled by the existing canvas listeners
+  addText('bag',  14, 0xe8c97a, true, 1, 0).text = 'BAG';
+  addText('home', 14, 0xe8c97a, true, 1, 0).text = 'HOME';
+  addText('dev',  14, 0xff8800, true, 1, 0).text = 'DEV';
+
+  addText('zone',     12, 0xaaaaaa, true,  0.5, 0); // zone name top-center
+  addText('recLevel', 10, 0x666666, false, 0.5, 0);
+
+  addText('hp',   12, 0xe44444, true, 0, 0); // bottom-left, above joystick area
+  addText('gold', 12, 0xe8c97a, true, 0, 0);
+  hudHpBarGfx = new PIXI.Graphics();
+  hudContainer.addChild(hudHpBarGfx);
+
+  joystickGfx = new PIXI.Graphics();
+  hudContainer.addChild(joystickGfx);
+
+  minimapGfx = new PIXI.Graphics();
+  hudContainer.addChild(minimapGfx);
+
+  layoutHUD();
+}
+
+function layoutHUD() {
+  for (let i = 0; i < 4; i++) hudTexts['stat' + i].position.set(10, 4 + i * 18);
+  for (let i = 0; i < 4; i++) hudTexts['lv' + i].position.set(10, 81 + i * 14);
+  // BAG/HOME/DEV sit below the top-right minimap (BACKLOG fix: minimap moved)
+  hudTexts.bag.position.set(VW - 10, 106);
+  hudTexts.home.position.set(VW - 10, 126);
+  hudTexts.dev.position.set(VW - 10, 146);
+  hudTexts.zone.position.set(VW / 2, 5);
+  hudTexts.recLevel.position.set(VW / 2, 20);
+  hudTexts.hp.position.set(10, VH - 171);
+  hudTexts.gold.position.set(10, VH - 156);
+  hudHpBarGfx.position.set(10, VH - 186);
+  joystickGfx.position.set(70, VH - 110); // nudged up 40px — clears death sickness banner (BACKLOG fix)
+  minimapGfx.position.set(VW - 98, 8);    // top-right, 8px inset (BACKLOG fix)
+}
+
+function updateHUD(zone) {
+  hudTexts.stat0.text = `DEX: ${getStat('dexterity')}`;
+  hudTexts.stat1.text = `STR: ${getStat('strength')}`;
+  hudTexts.stat2.text = `VIG: ${getStat('vigor')}`;
+  hudTexts.stat3.text = `INT: ${getStat('intelligence')}`;
+
+  const skills = ['dexterity','strength','vigor','intelligence'];
+  xpBarsGfx.clear();
+  skills.forEach((sk, i) => {
+    hudTexts['lv' + i].text = `Lv${player.skills.level[sk]}`;
+    const threshold = 100 * player.skills.level[sk];
+    xpBarsGfx.rect(38, 80 + i * 14, 80, 6).fill(0x333333);
+    xpBarsGfx.rect(38, 80 + i * 14, 80 * Math.min(1, player.skills.xp[sk] / threshold), 6)
+             .fill({ color: 0xe8c97a, alpha: 0.33 });
+  });
+
+  hudTexts.zone.text = zone.name;
+  hudTexts.recLevel.text = zone.recommendedLevel ? `Recommended Level: ${zone.recommendedLevel}` : '';
+
+  hudTexts.hp.text = `HP: ${Math.ceil(player.hp)}/${player.maxHp}`; // ceil — fractional enemy damage never shows decimals
+  hudTexts.gold.text = `GOLD: ${backpack.gold}`;
+
+  // Player HP bar — bottom of screen, above joystick area
+  const frac = Math.max(0, Math.min(1, player.hp / player.maxHp));
+  hudHpBarGfx.clear();
+  hudHpBarGfx.rect(0, 0, 140, 7).fill(0x333333);
+  if (frac > 0) hudHpBarGfx.rect(0, 0, 140 * frac, 7).fill(0xe44444);
+  hudHpBarGfx.rect(0, 0, 140, 7).stroke({ width: 1, color: 0x555555 });
+
+  // Joystick ring + thumb (input handling untouched — this is display only)
+  joystickGfx.clear();
+  joystickGfx.circle(0, 0, joystick.radius).stroke({ width: 2, color: 0xffffff, alpha: 0.25 });
+  if (joystick.touching) {
+    joystickGfx.circle(joystick.x, joystick.y, 18).fill({ color: 0xffffff, alpha: 0.4 });
+  }
+
+  renderMinimapPixi();
+}
+
+function renderMinimapPixi() {
+  const range = getMinimapRange();
+  const mmSize = 90;
+  const scale = mmSize / (range * 2);
+  const g = minimapGfx;
+  g.clear();
+  g.rect(0, 0, mmSize, mmSize).fill({ color: 0x000000, alpha: 0.6 });
+  g.rect(0, 0, mmSize, mmSize).stroke({ width: 1, color: 0x444444 });
+
+  for (const e of enemies) {
+    const dx = (e.x - player.x) * scale;
+    const dy = (e.y - player.y) * scale;
+    if (Math.abs(dx) > mmSize / 2 || Math.abs(dy) > mmSize / 2) continue;
+    const color = e.isBoss ? 0xff8800 : e.rarity === 'epic' ? 0xab47bc : e.rarity === 'rare' ? 0x4fc3f7 : 0xee4444;
+    const s = e.isBoss ? 5 : 3;
+    g.rect(mmSize / 2 + dx - 2, mmSize / 2 + dy - 2, s, s).fill(color);
+  }
+  for (const pile of lootPiles) {
+    const dx = (pile.x - player.x) * scale;
+    const dy = (pile.y - player.y) * scale;
+    if (Math.abs(dx) > mmSize / 2 || Math.abs(dy) > mmSize / 2) continue;
+    g.rect(mmSize / 2 + dx - 1, mmSize / 2 + dy - 1, 3, 3).fill(pile.isDeathPile ? 0xff4444 : 0xe8c97a);
+  }
+  for (const portal of getPortals()) {
+    const dx = (portal.x - player.x) * scale;
+    const dy = (portal.y - player.y) * scale;
+    if (Math.abs(dx) > mmSize / 2 || Math.abs(dy) > mmSize / 2) continue;
+    g.circle(mmSize / 2 + dx, mmSize / 2 + dy, 3).fill(0xe8c97a);
+  }
+  g.circle(mmSize / 2, mmSize / 2, 4).fill(0x44aaff);
+}
+
+// ── MASTER RENDER — called once per ticker frame, after update(dt) ──
+function renderPixi() {
+  if (!app) return;
+  const zone = ZONES[currentZoneId];
+
+  // Zone background + statics rebuild on zone transition (and on resize)
+  if (lastZoneRendered !== currentZoneId) rebuildZoneVisuals(zone);
+
+  // Camera scroll + screen shake — world & particle layers move, UI stays fixed
+  const sx = Math.round(screenShake.x), sy = Math.round(screenShake.y);
+  worldLayer.x = -camera.x + sx;
+  worldLayer.y = -camera.y + sy;
+  particleLayer.x = worldLayer.x;
+  particleLayer.y = worldLayer.y;
+
+  animateZoneStatics();
+  updatePlayerView();
+  updateAuraParticles();
+  updateEnemyViews(zone);
+  updateLootViews();
+  updateFloatingTextViews();
+  updateFxGraphics();
+  updateHUD(zone);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════════
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.key] = true; });
+document.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+function applyKeyboardMovement(dt) {
+  const spd = 0.08;
+  if (!player.uiLocked) { // movement locked while shop/panel UI is open (BACKLOG fix)
+    if (keys['ArrowUp']    || keys['w'] || keys['W']) player.y -= spd;
+    if (keys['ArrowDown']  || keys['s'] || keys['S']) player.y += spd;
+    if (keys['ArrowLeft']  || keys['a'] || keys['A']) player.x -= spd;
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += spd;
+  }
+  if (keys['b'] || keys['B']) { openPanel('backpack'); delete keys['b']; delete keys['B']; }
+  if (keys['h'] || keys['H']) { openPanel('homestead'); delete keys['h']; delete keys['H']; }
+  if (keys['Escape']) {
+    closePanel('backpack'); closePanel('homestead'); hideTooltip();
+    delete keys['Escape'];
+  }
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const rx = t.clientX, ry = t.clientY;
+  // Joystick zone
+  if (rx < 150 && ry > VH - 190) { // joystick zone raised 40px (BACKLOG fix)
+    joystick.touching = true;
+    joystick.x = rx - 70;
+    joystick.y = ry - (VH - 110);
+  }
+  // BAG/HOME/DEV tap zones moved below the top-right minimap (BACKLOG fix)
+  if (rx > VW - 60 && ry >= 100 && ry < 124) openPanel('backpack');
+  if (rx > VW - 70 && ry >= 124 && ry < 144) openPanel('homestead');
+  if (rx > VW - 60 && ry >= 144 && ry < 166) openPanel('dev');
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (!joystick.touching) return;
+  const t = e.touches[0];
+  joystick.x = t.clientX - 70;
+  joystick.y = t.clientY - (VH - 110); // joystick raised 40px (BACKLOG fix)
+  const len = Math.hypot(joystick.x, joystick.y);
+  if (len > joystick.radius) {
+    joystick.x = (joystick.x / len) * joystick.radius;
+    joystick.y = (joystick.y / len) * joystick.radius;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => { joystick.touching = false; });
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  // BAG/HOME/DEV click zones moved below the top-right minimap (BACKLOG fix)
+  if (x > VW - 60 && y >= 100 && y < 124) openPanel('backpack');
+  if (x > VW - 70 && y >= 124 && y < 144) openPanel('homestead');
+  if (x > VW - 60 && y >= 144 && y < 166) openPanel('dev');
+});
+
+// ═══════════════════════════════════════════════════════════
+//  UI — BACKPACK PANEL
+// ═══════════════════════════════════════════════════════════
+let activeTab = 'items';
+let tooltipItemIndex = -1;
+let tooltipItemSource = '';
+
+function openPanel(which) {
+  if (which === 'backpack') {
+    document.getElementById('backpackPanel').classList.add('open');
+    canvas.style.pointerEvents = 'none';
+    renderBackpack();
+  } else if (which === 'homestead') {
+    document.getElementById('homesteadPanel').classList.add('open');
+    canvas.style.pointerEvents = 'none';
+    renderHomestead();
+  } else if (which === 'dev') {
+    document.getElementById('devPanel').classList.add('open');
+    canvas.style.pointerEvents = 'none';
+  }
+  anyPanelOpen = true;
+  player.uiLocked = true; // BACKLOG fix: block movement while UI is open
+}
+
+function closePanel(which) {
+  if (which === 'backpack') document.getElementById('backpackPanel').classList.remove('open');
+  else if (which === 'homestead') document.getElementById('homesteadPanel').classList.remove('open');
+  else if (which === 'dev') document.getElementById('devPanel').classList.remove('open');
+  const allPanelIds = ['backpackPanel','homesteadPanel','devPanel',
+    'forgePanel','bonfirePanel','gardenPanel','shrinePanel','merchantPanel',
+    'watchtowerPanel','strGuildPanel','rngGuildPanel','mgeGuildPanel'];
+  const stillOpen = allPanelIds.some(id => document.getElementById(id).classList.contains('open'));
+  anyPanelOpen = stillOpen;
+  player.uiLocked = stillOpen; // BACKLOG fix: unlock movement when all panels closed
+  if (!stillOpen) canvas.style.pointerEvents = 'auto';
+  hideTooltip();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['items','equipment','food','materials'][i] === tab);
+  });
+  document.getElementById('tab-items').style.display      = tab === 'items'     ? 'grid' : 'none';
+  document.getElementById('tab-equipment').style.display  = tab === 'equipment' ? 'grid' : 'none';
+  document.getElementById('tab-food').style.display       = tab === 'food'      ? 'block' : 'none';
+  document.getElementById('tab-materials').style.display  = tab === 'materials' ? 'block' : 'none';
+  renderBackpack();
+}
+
+function renderBackpack() {
+  document.getElementById('goldCount').textContent = backpack.gold;
+
+  // Items tab
+  const grid = document.getElementById('tab-items');
+  grid.innerHTML = '';
+  if (backpack.items.length === 0) {
+    grid.innerHTML = '<div style="color:#555;font-size:12px;grid-column:1/-1;text-align:center;padding:20px;">Empty</div>';
+  } else {
+    backpack.items.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'item ' + item.rarity.toLowerCase();
+      const isEquipped = Object.values(player.equipped).includes(item);
+      div.innerHTML = `${isEquipped ? '<span class="equipped-badge">EQ</span>' : ''}<div>${item.name}</div><div class="item-type">${item.type}</div>`;
+      div.onclick = () => showItemTooltip(idx, 'gear');
+      grid.appendChild(div);
+    });
+  }
+
+  // Equipment tab
+  const slots = ['weapon','helmet','chest','legs','boots'];
+  slots.forEach(slot => {
+    const item = player.equipped[slot];
+    const nameEl = document.getElementById(`slot-${slot}-name`);
+    const slotEl = document.getElementById(`slot-${slot}`);
+    if (item) {
+      nameEl.textContent = item.name;
+      nameEl.className = 'slot-item ' + item.rarity;
+      slotEl.classList.add('filled');
+    } else {
+      nameEl.textContent = '— empty —';
+      nameEl.className = 'slot-item empty';
+      slotEl.classList.remove('filled');
+    }
+  });
+
+  // Food tab
+  const foodGrid = document.getElementById('food-grid');
+  foodGrid.innerHTML = '';
+  if (backpack.food.length === 0) {
+    foodGrid.innerHTML = '<div style="color:#555;font-size:12px;grid-column:1/-1;text-align:center;padding:20px;">No food</div>';
+  } else {
+    backpack.food.forEach((f, idx) => {
+      const div = document.createElement('div');
+      div.className = 'item food';
+      div.innerHTML = `<div>${f.name}</div><div class="item-type">+${f.healAmt} HP</div>`;
+      div.onclick = () => eatFood(idx);
+      foodGrid.appendChild(div);
+    });
+  }
+
+  // Materials tab
+  const matList = document.getElementById('materials-list');
+  matList.innerHTML = '';
+  MATERIAL_DB.forEach(mat => {
+    const count = backpack.materials[mat.id] || 0;
+    matList.innerHTML += `<div style="color:${count>0?'#7d5':'#444'}">${mat.name}: <b>${count}</b></div>`;
+  });
+}
+
+function showItemTooltip(idx, source) {
+  tooltipItemIndex = idx;
+  tooltipItemSource = source;
+  const item = backpack.items[idx];
+  if (!item) return;
+
+  const isEquipped = Object.values(player.equipped).includes(item);
+  const statsHtml = Object.entries(item.statBonus)
+    .filter(([,v]) => v > 0)
+    .map(([k,v]) => `+${v} ${k}`).join(', ');
+
+  const tt = document.getElementById('tooltip');
+  tt.innerHTML = `
+    <div class="tt-name">${item.name}</div>
+    <div class="item-type">${item.type} · ${item.rarity}</div>
+    <div class="tt-stats">${statsHtml}</div>
+    ${!isEquipped
+      ? `<button class="tt-btn tt-equip" onclick="equipItem(${idx})">Equip</button>`
+      : `<button class="tt-btn tt-unequip" onclick="unequipItemByRef(${idx})">Unequip</button>`
+    }
+    <button class="tt-btn tt-drop" onclick="dropItem(${idx})">Drop</button>
+  `;
+  tt.style.display = 'block';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+  tooltipItemIndex = -1;
+}
+
+function equipItem(idx) {
+  const item = backpack.items[idx];
+  if (!item) return;
+  const slot = item.slot;
+  // Unequip current if occupied
+  if (player.equipped[slot]) {
+    // Current equipped item stays in backpack (already there conceptually)
+  }
+  player.equipped[slot] = item;
+  recalcEquippedBonuses();
+  hideTooltip();
+  renderBackpack();
+}
+
+function unequipSlot(slot) {
+  if (player.equipped[slot]) {
+    player.equipped[slot] = null;
+    recalcEquippedBonuses();
+    renderBackpack();
+  }
+}
+
+function unequipItemByRef(idx) {
+  const item = backpack.items[idx];
+  for (const slot in player.equipped) {
+    if (player.equipped[slot] === item) {
+      player.equipped[slot] = null;
+    }
+  }
+  recalcEquippedBonuses();
+  hideTooltip();
+  renderBackpack();
+}
+
+function dropItem(idx) {
+  const item = backpack.items[idx];
+  if (item && item.untradeable) {
+    alert("Can't drop — untradeable item.");
+    return;
+  }
+  backpack.items.splice(idx, 1);
+  hideTooltip();
+  renderBackpack();
+}
+
+function eatFood(idx) {
+  const food = backpack.food[idx];
+  if (!food) return;
+  player.hp = Math.min(player.maxHp, player.hp + food.healAmt);
+  backpack.food.splice(idx, 1);
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${food.healAmt} HP`, timer: 0, color: '#4f4' });
+  renderBackpack();
+  closePanel('backpack');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI — HOMESTEAD PANEL
+// ═══════════════════════════════════════════════════════════
+function renderHomestead() {
+  const grid = document.getElementById('structuresGrid');
+  grid.innerHTML = '';
+  for (const [id, def] of Object.entries(STRUCTURE_DEFS)) {
+    const s = homestead[id];
+    const lv = s.level;
+    const maxed = lv >= s.maxLevel;
+    const cost = def.cost(lv + 1);
+    const canAfford = !maxed && Object.entries(cost).every(([k,v]) => {
+      if (k === 'gold') return backpack.gold >= v;
+      return (backpack.materials[k] || 0) >= v;
+    });
+
+    let costStr = '';
+    if (!maxed) {
+      costStr = Object.entries(cost).map(([k,v]) => {
+        const label = k === 'gold' ? `${v}g` : `${v} ${MATERIAL_DB.find(m=>m.id===k)?.name||k}`;
+        return label;
+      }).join(', ');
+    }
+
+    const card = document.createElement('div');
+    card.className = 'structure-card' + (maxed ? ' maxed' : '');
+    card.innerHTML = `
+      <div class="structure-name">${def.name}</div>
+      <div class="structure-level">Level ${lv} / ${s.maxLevel}</div>
+      <div class="structure-desc">${def.desc(lv)}</div>
+      <div class="structure-bonus">${lv > 0 ? 'Bonus: ' + def.bonus(lv) : ''}</div>
+      ${!maxed ? `<div class="structure-cost">Cost: ${costStr}</div>` : '<div style="color:#e8c97a;font-size:10px;">MAX LEVEL</div>'}
+      ${!maxed ? `<button class="upgrade-btn" ${canAfford?'':'disabled'} onclick="upgradeStructure('${id}')">${lv===0?'Build':'Upgrade'}</button>` : ''}
+    `;
+    grid.appendChild(card);
+  }
+}
+
+function upgradeStructure(id) {
+  const s = homestead[id];
+  if (s.level >= s.maxLevel) return;
+  const def = STRUCTURE_DEFS[id];
+  const cost = def.cost(s.level + 1);
+
+  // Check and spend cost
+  for (const [k, v] of Object.entries(cost)) {
+    if (k === 'gold') {
+      if (backpack.gold < v) return;
+    } else {
+      if ((backpack.materials[k] || 0) < v) return;
+    }
+  }
+  for (const [k, v] of Object.entries(cost)) {
+    if (k === 'gold') backpack.gold -= v;
+    else backpack.materials[k] -= v;
+  }
+
+  s.level++;
+  recalcMaxHp();
+  renderHomestead();
+  floatingTexts.push({ x: player.x, y: player.y - 2, text: `${def.name} Lv${s.level}!`, timer:0, color:'#7d5' });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BUILDING PANEL OPEN/CLOSE
+// ═══════════════════════════════════════════════════════════
+const BUILDING_PANEL_IDS = {
+  forge:      'forgePanel',
+  bonfire:    'bonfirePanel',
+  garden:     'gardenPanel',
+  shrine:     'shrinePanel',
+  merchant:   'merchantPanel',
+  watchtower: 'watchtowerPanel',
+  str_guild:  'strGuildPanel',
+  rng_guild:  'rngGuildPanel',
+  mge_guild:  'mgeGuildPanel',
+};
+
+function openBuildingPanel(id) {
+  const panelId = BUILDING_PANEL_IDS[id];
+  if (!panelId) return;
+  // Close any already-open building panels first
+  Object.values(BUILDING_PANEL_IDS).forEach(pid => document.getElementById(pid).classList.remove('open'));
+  document.getElementById(panelId).classList.add('open');
+  canvas.style.pointerEvents = 'none';
+  anyPanelOpen = true;
+  player.uiLocked = true; // BACKLOG fix: block movement while shop UI is open
+  // Render content
+  if (id === 'forge')      renderForgePanel();
+  else if (id === 'bonfire')    renderBonfirePanel();
+  else if (id === 'garden')     renderGardenPanel();
+  else if (id === 'shrine')     renderShrinePanel();
+  else if (id === 'merchant')   renderMerchantPanel();
+  else if (id === 'watchtower') renderWatchtowerPanel();
+  else if (id === 'str_guild' || id === 'rng_guild' || id === 'mge_guild') renderGuildPanel(id);
+}
+
+function closeBuildingPanel(id) {
+  const panelId = BUILDING_PANEL_IDS[id];
+  if (panelId) document.getElementById(panelId).classList.remove('open');
+  const allPanelIds = ['backpackPanel','homesteadPanel','devPanel', ...Object.values(BUILDING_PANEL_IDS)];
+  const stillOpen = allPanelIds.some(pid => document.getElementById(pid).classList.contains('open'));
+  anyPanelOpen = stillOpen;
+  player.uiLocked = stillOpen; // BACKLOG fix: unlock movement when all panels closed
+  if (!stillOpen) canvas.style.pointerEvents = 'auto';
+  // Nudge player away from door so panel doesn't immediately reopen
+  player.y += 1.5;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FORGE PANEL
+// ═══════════════════════════════════════════════════════════
+const FAIL_RATES = { common: 0.10, rare: 0.30, epic: 0.50 };
+
+function renderForgePanel() {
+  const container = document.getElementById('forgeRecipes');
+  container.innerHTML = '';
+  FORGE_RECIPES.forEach((recipe, idx) => {
+    const canAfford = canAffordRecipe(recipe);
+    const inputStr = Object.entries(recipe.inputs).map(([k,v]) => {
+      const mat = MATERIAL_DB.find(m => m.id === k);
+      const have = backpack.materials[k] || 0;
+      return `${mat ? mat.name : k} x${v} (have ${have})`;
+    }).join(', ');
+    const failPct = Math.round(FAIL_RATES[recipe.rarity] * 100);
+    const div = document.createElement('div');
+    div.className = 'recipe-card' + (canAfford ? ' can-afford' : '');
+    div.innerHTML = `
+      <div class="recipe-name">${recipe.name} <span style="color:#888;font-size:9px;">[${recipe.rarity}]</span></div>
+      <div class="recipe-inputs">${inputStr}</div>
+      <div class="recipe-btns">
+        <button class="craft-btn instant" ${canAfford?'':'disabled'} onclick="craftInstant(${idx})">
+          Instant (${failPct}% fail)
+        </button>
+        <button class="craft-btn timed" ${canAfford?'':'disabled'} onclick="craftTimed(${idx})">
+          Timed (always succeeds)
+        </button>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  renderCraftQueue();
+}
+
+function canAffordRecipe(recipe) {
+  return Object.entries(recipe.inputs).every(([k,v]) => (backpack.materials[k] || 0) >= v);
+}
+
+function spendRecipeInputs(recipe) {
+  for (const [k, v] of Object.entries(recipe.inputs)) {
+    backpack.materials[k] -= v;
+  }
+}
+
+function giveRecipeOutput(recipe) {
+  if (recipe.output) {
+    backpack.materials[recipe.output] = (backpack.materials[recipe.output] || 0) + 1;
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${recipe.outputName}`, timer:0, color:'#7d5' });
+  } else if (recipe.outputGear) {
+    const gear = {
+      name: recipe.outputGear,
+      type: recipe.slot,
+      slot: recipe.slot,
+      rarity: recipe.rarity,
+      weaponStyle: recipe.weaponStyle || undefined,
+      statBonus: recipe.statBonus || {}
+    };
+    backpack.items.push(gear);
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: `Crafted ${recipe.outputGear}!`, timer:0, color:'#e8c97a' });
+  }
+}
+
+function craftInstant(recipeIdx) {
+  const recipe = FORGE_RECIPES[recipeIdx];
+  if (!canAffordRecipe(recipe)) return;
+  spendRecipeInputs(recipe);
+  const failRate = FAIL_RATES[recipe.rarity] || 0;
+  if (Math.random() < failRate) {
+    floatingTexts.push({ x: player.x, y: player.y - 1, text: 'Craft FAILED!', timer:0, color:'#f44' });
+  } else {
+    giveRecipeOutput(recipe);
+  }
+  renderForgePanel();
+}
+
+const TIMED_DURATIONS = { common: 30, rare: 90, epic: 180 }; // seconds
+
+function craftTimed(recipeIdx) {
+  const recipe = FORGE_RECIPES[recipeIdx];
+  if (!canAffordRecipe(recipe)) return;
+  spendRecipeInputs(recipe);
+  const dur = TIMED_DURATIONS[recipe.rarity] || 60;
+  craftQueue.push({
+    recipeName: recipe.name,
+    recipeIdx,
+    finishTime: Date.now() + dur * 1000,
+    buildingId: 'forge'
+  });
+  renderForgePanel();
+}
+
+function checkCraftQueue() {
+  const now = Date.now();
+  for (let i = craftQueue.length - 1; i >= 0; i--) {
+    const job = craftQueue[i];
+    if (now >= job.finishTime) {
+      const recipe = FORGE_RECIPES[job.recipeIdx];
+      if (recipe) giveRecipeOutput(recipe);
+      craftQueue.splice(i, 1);
+    }
+  }
+}
+
+function renderCraftQueue() {
+  const el = document.getElementById('forgeCraftQueue');
+  if (!el) return;
+  if (craftQueue.length === 0) {
+    el.innerHTML = '<div style="color:#444;font-size:10px;">No active jobs</div>';
+    return;
+  }
+  const now = Date.now();
+  el.innerHTML = craftQueue.map(job => {
+    const secsLeft = Math.max(0, Math.ceil((job.finishTime - now) / 1000));
+    return `<div class="queue-item">${job.recipeName} — ${secsLeft}s remaining</div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BONFIRE PANEL
+// ═══════════════════════════════════════════════════════════
+function renderBonfirePanel() {
+  const el = document.getElementById('bonfireContent');
+  const reduction = homestead.campfire.level * 120; // seconds reduced per level
+  el.innerHTML = `
+    <div style="color:#888;font-size:11px;margin-bottom:12px;">
+      HP: ${Math.ceil(player.hp)} / ${player.maxHp}<br>
+      Death Sickness: ${player.deathSickness > 0 ? Math.ceil(player.deathSickness) + 's remaining' : 'None'}<br>
+      Campfire level: ${homestead.campfire.level} (reduces sickness by ${reduction / 60} min)
+    </div>
+    <button class="bonfire-btn" onclick="bonfireRest()">🔥 Rest (Heal to Full)</button>
+    ${player.deathSickness > 0 ? `<button class="bonfire-btn" style="margin-left:8px;" onclick="bonfireReduceSickness()">☠ Reduce Sickness</button>` : ''}
+  `;
+}
+
+function bonfireRest() {
+  recalcMaxHp();
+  player.hp = player.maxHp;
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: 'Fully Rested!', timer:0, color:'#4f4' });
+  renderBonfirePanel();
+}
+
+function bonfireReduceSickness() {
+  const reduction = Math.max(60, homestead.campfire.level * 120);
+  player.deathSickness = Math.max(0, player.deathSickness - reduction);
+  if (player.deathSickness === 0) document.getElementById('sickness-bar').style.display = 'none';
+  recalcMaxHp();
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: 'Sickness reduced!', timer:0, color:'#cc44ff' });
+  renderBonfirePanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GARDEN PANEL
+// ═══════════════════════════════════════════════════════════
+const GARDEN_HERBS = [
+  { name:'Swamp Herb', healAmt:20, growTime:60, rarity:'common' },
+  { name:'Bog Flower', healAmt:40, growTime:120, rarity:'rare' },
+];
+
+function renderGardenPanel() {
+  const el = document.getElementById('gardenContent');
+  const now = Date.now();
+  let html = '';
+  if (gardenPlot.growing) {
+    const secsLeft = Math.max(0, Math.ceil((gardenPlot.startTime + gardenPlot.duration * 1000 - now) / 1000));
+    if (secsLeft === 0) {
+      html += `<div class="plot-status">✅ ${gardenPlot.herb.name} — Ready to harvest!</div>`;
+      html += `<button class="guild-btn" onclick="harvestGarden()">Harvest</button>`;
+    } else {
+      html += `<div class="plot-status">🌱 Growing: ${gardenPlot.herb.name} — ${secsLeft}s left</div>`;
+    }
+  } else {
+    html += `<div class="plot-status">Plot is empty. Choose what to grow:</div>`;
+    GARDEN_HERBS.forEach((h, i) => {
+      html += `<button class="guild-btn" onclick="plantGarden(${i})">${h.name} (${h.growTime}s)</button> `;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function plantGarden(idx) {
+  const herb = GARDEN_HERBS[idx];
+  gardenPlot = { growing: true, herb, startTime: Date.now(), duration: herb.growTime };
+  renderGardenPanel();
+}
+
+function harvestGarden() {
+  if (!gardenPlot.growing) return;
+  const now = Date.now();
+  const ready = now >= gardenPlot.startTime + gardenPlot.duration * 1000;
+  if (!ready) return;
+  backpack.food.push({ name: gardenPlot.herb.name, healAmt: gardenPlot.herb.healAmt, rarity: gardenPlot.herb.rarity });
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${gardenPlot.herb.name}`, timer:0, color:'#44ff88' });
+  gardenPlot = { growing: false, herb: null, startTime: 0, duration: 120 };
+  renderGardenPanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SHRINE PANEL
+// ═══════════════════════════════════════════════════════════
+const SHRINE_OFFERINGS = [
+  { label:'Iron Offering',  cost:{iron_ore:5},  buffLabel:'+15% DMG', duration:120,  stat:'dmg', amount:0.15 },
+  { label:'Bog Offering',   cost:{bog_root:3},  buffLabel:'+10% SPD', duration:180,  stat:'spd', amount:0.10 },
+  { label:'Void Offering',  cost:{void_shard:2},buffLabel:'+25% DMG', duration:240,  stat:'dmg', amount:0.25 },
+];
+
+function renderShrinePanel() {
+  const el = document.getElementById('shrineContent');
+  const now = Date.now();
+  let html = '';
+  if (shrineBuff.active && now < shrineBuff.endTime) {
+    const secsLeft = Math.ceil((shrineBuff.endTime - now) / 1000);
+    html += `<div class="buff-active">⚡ Active buff: ${shrineBuff.label} — ${secsLeft}s remaining</div>`;
+  } else {
+    shrineBuff.active = false;
+    html += `<div style="color:#666;font-size:11px;margin-bottom:10px;">No active buff.</div>`;
+  }
+  html += `<div style="color:#aaa;font-size:11px;margin-bottom:8px;">Choose an offering:</div>`;
+  SHRINE_OFFERINGS.forEach((o, i) => {
+    const costStr = Object.entries(o.cost).map(([k,v]) => {
+      const mat = MATERIAL_DB.find(m=>m.id===k);
+      return `${mat?mat.name:k} x${v} (have ${backpack.materials[k]||0})`;
+    }).join(', ');
+    const canAfford = Object.entries(o.cost).every(([k,v]) => (backpack.materials[k]||0) >= v);
+    html += `<div class="recipe-card${canAfford?' can-afford':''}">
+      <div class="recipe-name">${o.label} → ${o.buffLabel} for ${o.duration}s</div>
+      <div class="recipe-inputs">${costStr}</div>
+      <button class="shrine-btn" ${canAfford?'':'disabled'} onclick="activateShrineOffering(${i})"
+        style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Offer</button>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function activateShrineOffering(idx) {
+  const offering = SHRINE_OFFERINGS[idx];
+  if (!Object.entries(offering.cost).every(([k,v]) => (backpack.materials[k]||0) >= v)) return;
+  for (const [k,v] of Object.entries(offering.cost)) backpack.materials[k] -= v;
+  shrineBuff = { active: true, endTime: Date.now() + offering.duration * 1000, label: offering.buffLabel, stat: offering.stat, amount: offering.amount };
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: offering.buffLabel + '!', timer:0, color:'#cc44ff' });
+  renderShrinePanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MERCHANT PANEL
+// ═══════════════════════════════════════════════════════════
+const MERCHANT_BUY_LIST = [
+  { name:'Bread',           type:'food',     healAmt:15, rarity:'common', price:50 },
+  { name:'Cooked Fish',     type:'food',     healAmt:30, rarity:'rare',   price:120 },
+  { name:'Steak',           type:'food',     healAmt:50, rarity:'epic',   price:250 },
+  { name:'Iron Ore (x5)',   type:'material', matId:'iron_ore',   amount:5, price:80 },
+  { name:'Bog Root (x3)',   type:'material', matId:'bog_root',   amount:3, price:150 },
+  { name:'Void Shard (x2)', type:'material', matId:'void_shard', amount:2, price:300 },
+];
+
+function renderMerchantPanel() {
+  const el = document.getElementById('merchantContent');
+  let html = `<div style="color:#e8c97a;font-size:13px;margin-bottom:10px;">GOLD: ${backpack.gold}</div>`;
+  html += `<div style="color:#aaa;font-size:11px;margin-bottom:8px;">BUY:</div>`;
+  MERCHANT_BUY_LIST.forEach((item, i) => {
+    const canAfford = backpack.gold >= item.price;
+    html += `<div class="merchant-item">
+      <div>
+        <div class="merchant-item-name">${item.name}</div>
+        <div class="merchant-item-price">${item.price}g</div>
+      </div>
+      <button class="merchant-buy-btn" ${canAfford?'':'disabled'} onclick="merchantBuy(${i})"
+        style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Buy</button>
+    </div>`;
+  });
+  html += `<div style="color:#aaa;font-size:11px;margin:12px 0 8px;">SELL (gear items for gold):</div>`;
+  if (backpack.items.length === 0) {
+    html += `<div style="color:#444;font-size:10px;">No items to sell.</div>`;
+  } else {
+    backpack.items.forEach((item, i) => {
+      if (item.untradeable) return;
+      const sellPrice = item.rarity === 'legendary' ? 500 : item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
+      html += `<div class="merchant-item">
+        <div>
+          <div class="merchant-item-name" style="color:${item.rarity==='legendary'?'#ff8f00':item.rarity==='epic'?'#9b59b6':item.rarity==='rare'?'#4a90d9':'#ccc'}">${item.name}</div>
+          <div class="merchant-item-price">${sellPrice}g</div>
+        </div>
+        <button class="merchant-buy-btn" onclick="merchantSell(${i})">Sell</button>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function merchantBuy(idx) {
+  const item = MERCHANT_BUY_LIST[idx];
+  if (backpack.gold < item.price) return;
+  backpack.gold -= item.price;
+  if (item.type === 'food') {
+    backpack.food.push({ name: item.name, healAmt: item.healAmt, rarity: item.rarity });
+  } else if (item.type === 'material') {
+    backpack.materials[item.matId] = (backpack.materials[item.matId] || 0) + item.amount;
+  }
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `Bought ${item.name}`, timer:0, color:'#ffdd44' });
+  renderMerchantPanel();
+}
+
+function merchantSell(idx) {
+  const item = backpack.items[idx];
+  if (!item || item.untradeable) return;
+  const sellPrice = item.rarity === 'legendary' ? 500 : item.rarity === 'epic' ? 200 : item.rarity === 'rare' ? 80 : 25;
+  backpack.gold += sellPrice;
+  backpack.items.splice(idx, 1);
+  // Unequip if equipped
+  for (const slot in player.equipped) {
+    if (player.equipped[slot] === item) player.equipped[slot] = null;
+  }
+  recalcEquippedBonuses();
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `+${sellPrice}g`, timer:0, color:'#e8c97a' });
+  renderMerchantPanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WATCHTOWER PANEL
+// ═══════════════════════════════════════════════════════════
+function renderWatchtowerPanel() {
+  const el = document.getElementById('watchtowerContent');
+  const s = homestead.watchtower;
+  const lv = s.level;
+  const maxed = lv >= s.maxLevel;
+  const def = STRUCTURE_DEFS.watchtower;
+  const cost = !maxed ? def.cost(lv + 1) : null;
+  const costStr = cost ? Object.entries(cost).map(([k,v]) => k === 'gold' ? `${v}g` : `${v} ${MATERIAL_DB.find(m=>m.id===k)?.name||k}`).join(', ') : '';
+  const canAfford = !maxed && cost && Object.entries(cost).every(([k,v]) => k === 'gold' ? backpack.gold >= v : (backpack.materials[k]||0) >= v);
+  el.innerHTML = `
+    <div style="color:#aaa;font-size:12px;margin-bottom:10px;">
+      Level: <b style="color:#44ddff;">${lv} / ${s.maxLevel}</b><br>
+      Minimap Range: <b>${getMinimapRange()} tiles</b>
+    </div>
+    ${lv > 0 ? `<div style="color:#44ddff;font-size:11px;margin-bottom:8px;">Bonus: ${def.bonus(lv)}</div>` : ''}
+    ${!maxed ? `<div style="color:#f90;font-size:10px;margin-bottom:8px;">Upgrade cost: ${costStr}</div>
+    <button class="guild-btn" ${canAfford?'':'disabled'} onclick="upgradeStructure('watchtower');renderWatchtowerPanel();"
+      style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Upgrade</button>` : '<div style="color:#e8c97a;font-size:11px;">MAX LEVEL</div>'}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GUILD PANELS
+// ═══════════════════════════════════════════════════════════
+function renderGuildPanel(guildId) {
+  const panelContentId = { str_guild:'strGuildContent', rng_guild:'rngGuildContent', mge_guild:'mgeGuildContent' }[guildId];
+  const el = document.getElementById(panelContentId);
+  const def = GUILD_DEFS[guildId];
+  const g = guilds[guildId];
+  const lv = g.level;
+  const maxed = lv >= g.maxLevel;
+  const cost = !maxed ? def.upgradeCosts[lv] : null;
+  const costStr = cost ? Object.entries(cost).map(([k,v]) => k === 'gold' ? `${v}g` : `${v} ${MATERIAL_DB.find(m=>m.id===k)?.name||k}`).join(', ') : '';
+  const canAfford = !maxed && cost && Object.entries(cost).every(([k,v]) => k === 'gold' ? backpack.gold >= v : (backpack.materials[k]||0) >= v);
+
+  let html = `<div style="color:#aaa;font-size:12px;margin-bottom:10px;">
+    Level: <b style="color:#e8c97a;">${lv} / ${g.maxLevel}</b>
+  </div>`;
+
+  if (lv > 0) {
+    html += `<div style="color:#7d5;font-size:11px;margin-bottom:8px;">Current bonus: ${def.bonuses[lv-1]}</div>`;
+  }
+
+  if (!maxed) {
+    html += `<div style="color:#f90;font-size:10px;margin-bottom:4px;">Next: ${def.bonuses[lv]}</div>`;
+    html += `<div style="color:#f90;font-size:10px;margin-bottom:8px;">Cost: ${costStr}</div>`;
+    html += `<button class="guild-btn" ${canAfford?'':'disabled'} onclick="upgradeGuild('${guildId}')"
+      style="${!canAfford?'opacity:0.4;cursor:not-allowed;':''}">Upgrade Guild</button>`;
+  } else {
+    html += `<div style="color:#e8c97a;font-size:11px;margin-bottom:8px;">MAX LEVEL</div>`;
+  }
+
+  // Unlockable gear
+  const guildGear = GEAR_DB.filter(g => g.guildReq === guildId);
+  if (guildGear.length) {
+    html += `<div style="color:#aaa;font-size:11px;margin:14px 0 6px;letter-spacing:1px;">UNLOCKABLE GEAR:</div>`;
+    guildGear.forEach((item, i) => {
+      const claimed = g.claimed && g.claimed.includes(item.name);
+      const unlocked = lv >= item.guildLevel;
+      const statsStr = Object.entries(item.statBonus).filter(([,v])=>v>0).map(([k,v])=>`+${v} ${k}`).join(', ');
+      html += `<div class="guild-unlock-card${claimed?' claimed':''}">
+        <div class="guild-unlock-name">${item.name} <span style="color:#888;font-size:9px;">[${item.slot}]</span></div>
+        <div class="guild-unlock-req">Requires Guild Lv${item.guildLevel} | ${statsStr}</div>
+        ${!claimed && unlocked
+          ? `<button class="guild-btn" style="margin-top:6px;" onclick="claimGuildGear('${guildId}','${item.name}')">Claim</button>`
+          : claimed ? `<div style="color:#555;font-size:10px;margin-top:4px;">Already claimed</div>`
+          : `<div style="color:#555;font-size:10px;margin-top:4px;">Requires Guild Lv${item.guildLevel}</div>`
+        }
+      </div>`;
+    });
+  }
+
+  el.innerHTML = html;
+}
+
+function upgradeGuild(guildId) {
+  const def = GUILD_DEFS[guildId];
+  const g = guilds[guildId];
+  if (g.level >= g.maxLevel) return;
+  const cost = def.upgradeCosts[g.level];
+  // Check
+  if (!Object.entries(cost).every(([k,v]) => k === 'gold' ? backpack.gold >= v : (backpack.materials[k]||0) >= v)) return;
+  // Spend
+  for (const [k,v] of Object.entries(cost)) {
+    if (k === 'gold') backpack.gold -= v;
+    else backpack.materials[k] -= v;
+  }
+  g.level++;
+  floatingTexts.push({ x: player.x, y: player.y - 2, text: `${def.name} Lv${g.level}!`, timer:0, color:'#e8c97a' });
+  renderGuildPanel(guildId);
+}
+
+function claimGuildGear(guildId, itemName) {
+  const g = guilds[guildId];
+  const item = GEAR_DB.find(i => i.name === itemName && i.guildReq === guildId);
+  if (!item || g.level < item.guildLevel) return;
+  if (!g.claimed) g.claimed = [];
+  if (g.claimed.includes(itemName)) return;
+  g.claimed.push(itemName);
+  backpack.items.push({...item});
+  floatingTexts.push({ x: player.x, y: player.y - 1, text: `Claimed ${itemName}!`, timer:0, color:'#e8c97a' });
+  renderGuildPanel(guildId);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DEV / QA FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+function devGold() { backpack.gold += 10000; renderBackpack(); }
+function devMaterials() {
+  MATERIAL_DB.forEach(m => { backpack.materials[m.id] = 99; });
+  renderBackpack();
+}
+function devWeapon(style) {
+  GEAR_DB.filter(g => g.slot === 'weapon' && g.weaponStyle === style).forEach(g => backpack.items.push({...g}));
+  renderBackpack();
+}
+function devAllGear() {
+  GEAR_DB.forEach(g => backpack.items.push({...g}));
+  renderBackpack();
+}
+function devSkills(targetLevel) {
+  ['dexterity','strength','vigor','intelligence'].forEach(sk => {
+    player.skills.level[sk] = targetLevel;
+    player.skills.xp[sk] = 0;
+    player.baseStats[sk] = 10 + (targetLevel - 1);
+  });
+  recalcMaxHp();
+  player.hp = player.maxHp;
+}
+function devResetSkills() {
+  ['dexterity','strength','vigor','intelligence'].forEach(sk => {
+    player.skills.level[sk] = 1;
+    player.skills.xp[sk] = 0;
+    player.baseStats[sk] = 10;
+  });
+  recalcEquippedBonuses();
+  recalcMaxHp();
+  player.hp = player.maxHp;
+}
+function devHeal() { recalcMaxHp(); player.hp = player.maxHp; }
+let devInvincible = false;
+function devToggleInvincible() {
+  devInvincible = !devInvincible;
+  document.getElementById('invincBtn').textContent = `Invincible: ${devInvincible ? 'ON ⚡' : 'OFF'}`;
+  document.getElementById('invincBtn').style.color = devInvincible ? '#4f4' : '';
+  document.getElementById('invincBtn').style.borderColor = devInvincible ? '#4f4' : '';
+}
+function devClearSickness() {
+  player.deathSickness = 0;
+  document.getElementById('sickness-bar').style.display = 'none';
+  recalcMaxHp();
+  player.hp = player.maxHp;
+}
+function devKillAll() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    dropLootFromEnemy(enemies[i]);
+    enemies.splice(i, 1);
+  }
+}
+function devClearSave() {
+  try { localStorage.removeItem('runeportal_save'); } catch(e) {}
+  location.reload();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SAVE / LOAD
+// ═══════════════════════════════════════════════════════════
+let storageAvailable = false;
+try { localStorage.setItem('_test','1'); localStorage.removeItem('_test'); storageAvailable = true; } catch(e) {}
+
+function saveGame() {
+  if (!storageAvailable) return;
+  try {
+    localStorage.setItem('runeportal_save', JSON.stringify({
+      skills:          player.skills,
+      hp:              player.hp,
+      baseStats:       player.baseStats,
+      equippedBonuses: player.equippedBonuses,
+      equipped:        player.equipped,
+      isDead:          player.isDead,
+      untradableArmor: player.untradableArmor,
+      deathSickness:   player.deathSickness,
+      gold:            backpack.gold,
+      items:           backpack.items,
+      food:            backpack.food,
+      materials:       backpack.materials,
+      homestead:       homestead,
+      guilds:          guilds,
+      craftQueue:      craftQueue,
+      gardenPlot:      gardenPlot,
+      shrineBuff:      shrineBuff,
+      currentZone:     currentZoneId, // player.currentZone — persists through reload
+    }));
+  } catch(e) { storageAvailable = false; }
+}
+
+function loadGame() {
+  if (!storageAvailable) return;
+  try {
+    const raw = localStorage.getItem('runeportal_save');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.skills)          Object.assign(player.skills, d.skills);
+    if (Number.isFinite(d.hp)) player.hp = d.hp; // NaN fix: JSON turns NaN → null, which passed the old !== undefined guard
+    if (d.baseStats)       Object.assign(player.baseStats, d.baseStats);
+    if (d.equippedBonuses) Object.assign(player.equippedBonuses, d.equippedBonuses);
+    if (d.equipped)        Object.assign(player.equipped, d.equipped);
+    if (d.untradableArmor) Object.assign(player.untradableArmor, d.untradableArmor);
+    if (d.isDead) {
+      player.isDead = true;
+      document.getElementById('death-msg').textContent = 'You died. Press RESPAWN to continue.';
+      document.getElementById('death-screen').classList.add('show');
+    }
+    if (d.deathSickness)   {
+      player.deathSickness = d.deathSickness;
+      if (player.deathSickness > 0) document.getElementById('sickness-bar').style.display = 'block';
+    }
+    if (d.gold !== undefined) backpack.gold = d.gold;
+    if (d.items)           backpack.items = d.items;
+    if (d.food)            backpack.food = d.food;
+    if (d.materials)       Object.assign(backpack.materials, d.materials);
+    if (d.homestead)       Object.keys(homestead).forEach(k => { if (d.homestead[k]) Object.assign(homestead[k], d.homestead[k]); });
+    if (d.guilds)          Object.keys(guilds).forEach(k => { if (d.guilds[k]) Object.assign(guilds[k], d.guilds[k]); });
+    if (d.craftQueue)      craftQueue = d.craftQueue;
+    if (d.gardenPlot)      Object.assign(gardenPlot, d.gardenPlot);
+    if (d.shrineBuff)      Object.assign(shrineBuff, d.shrineBuff);
+    if (d.currentZone && ZONES[d.currentZone]) {
+      currentZoneId = d.currentZone;
+      player.currentZone = d.currentZone;
+    }
+  } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GAME LOOP — PixiJS ticker (single internal rAF; raw
+//  requestAnimationFrame loop removed — still exactly ONE loop)
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', async function() {
+  if (!window.PIXI) {
+    // CDN failed (offline / blocked). Fallback if v8 ever has CDN issues:
+    // https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js (v7 UMD)
+    console.error('PixiJS failed to load from CDN — renderer cannot start.');
+    const banner = document.getElementById('zone-banner');
+    banner.textContent = 'RENDERER FAILED TO LOAD — CHECK CONNECTION';
+    banner.style.display = 'block';
+    return;
+  }
+  await loadSprites();   // textures ready before buildPlayerContainer/makeEnemyView
+  await initPixi();
+  buildZoneGrid(currentZoneId);
+  loadGame();
+  buildZoneGrid(currentZoneId);
+  recalcMaxHp();
+  spawnEnemies();
+  app.ticker.add((ticker) => {
+    const dt = Math.min(ticker.deltaMS / 1000, 0.1); // same clamp as the old rAF loop
+    update(dt);   // game logic — unchanged
+    renderPixi(); // render layer
+  });
+});

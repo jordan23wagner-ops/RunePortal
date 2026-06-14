@@ -1,0 +1,482 @@
+﻿import os, re, shutil, json, textwrap, difflib, subprocess
+from datetime import datetime
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ.get("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1"
+)
+
+GAME_FILE     = r"C:\Users\Jordon\OneDrive\Desktop\runeportal_phase3.html"
+BACKUP_DIR    = r"C:\Users\Jordon\OneDrive\Desktop\runeportal_backups"
+MEMORY_FILE   = r"C:\Users\Jordon\runeportal_memory.json"
+PATTERNS_FILE = r"C:\Users\Jordon\runeportal_patterns.json"
+PREVIEW_URL   = "http://192.168.1.75:8080/runeportal_phase3.html"
+PHONE_URL     = "http://192.168.1.69:8080/runeportal_phase3.html"
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+# ── MEMORY (T1) ───────────────────────────────────────────
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        return json.load(open(MEMORY_FILE, encoding="utf-8"))
+    return {"features": [], "fixes": [], "failures": [], "patterns_used": []}
+
+def save_memory(mem):
+    json.dump(mem, open(MEMORY_FILE, "w", encoding="utf-8"), indent=2)
+
+def memory_summary(mem):
+    f    = mem.get("features", [])[-5:]
+    b    = mem.get("fixes", [])[-5:]
+    fail = mem.get("failures", [])[-3:]
+    lines = []
+    if f:    lines.append("Recently built: " + ", ".join(f))
+    if b:    lines.append("Recently fixed: " + ", ".join(b))
+    if fail: lines.append("Known failures: " + ", ".join(fail))
+    return "\n".join(lines) if lines else "No history yet."
+
+# ── PATTERN LIBRARY (T2) ─────────────────────────────────
+def load_patterns():
+    if os.path.exists(PATTERNS_FILE):
+        return json.load(open(PATTERNS_FILE, encoding="utf-8"))
+    return {}
+
+def save_patterns(p):
+    json.dump(p, open(PATTERNS_FILE, "w", encoding="utf-8"), indent=2)
+
+def find_matching_pattern(user_input, patterns):
+    user_lower = user_input.lower()
+    for key, pat in patterns.items():
+        if any(k in user_lower for k in pat.get("keywords", [])):
+            return pat
+    return None
+
+def save_pattern(user_input, find_str, replace_str, patterns):
+    key = re.sub(r'\W+', '_', user_input.lower())[:40]
+    patterns[key] = {
+        "description": user_input,
+        "keywords": [w for w in user_input.lower().split() if len(w) > 3],
+        "find": find_str,
+        "replace": replace_str
+    }
+    save_patterns(patterns)
+
+# ── GAME FILE UTILS ───────────────────────────────────────
+def load_game():
+    return open(GAME_FILE, encoding="utf-8").read()
+
+def save_game(content):
+    open(GAME_FILE, "w", encoding="utf-8").write(content)
+
+def backup_game():
+    ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst = os.path.join(BACKUP_DIR, f"runeportal_{ts}.html")
+    shutil.copy2(GAME_FILE, dst)
+    return dst
+
+def extract_relevant_section(code, user_input):
+    keywords = [w for w in user_input.lower().split() if len(w) > 3]
+    lines    = code.split('\n')
+    window   = 30
+    scored   = [i for i, line in enumerate(lines)
+                if any(k in line.lower() for k in keywords)]
+    included = set()
+    for idx in scored:
+        for j in range(max(0, idx-window), min(len(lines), idx+window)):
+            included.add(j)
+    if len(included) < 20 or len(included) > len(lines) * 0.6:
+        head = '\n'.join(lines[:50])
+        tail = '\n'.join(lines[-50:])
+        return f"{head}\n... [middle truncated] ...\n{tail}"
+    return '\n'.join(lines[i] for i in sorted(included))
+
+def build_game_summary(code):
+    checks = [
+        ('joystick','virtual joystick'), ('backpack','backpack UI'),
+        ('equipment','equipment slots'), ('loot','loot drops'),
+        ('xpReward','XP system'), ('respawn','enemy respawn'),
+        ('localStorage','save state'), ('applyKeyboardMovement','keyboard controls'),
+        ('switchTab','tab switching'), ('gold','gold system'),
+        ('floatingText','floating text'), ('boundary','boundary clamping')
+    ]
+    features = [label for key, label in checks if key in code]
+    return f"RunePortal HTML5 isometric ARPG. Features: {', '.join(features)}. File: {len(code)} chars."
+
+# ── GROQ: JSON MODE (8B) ──────────────────────────────────
+def chat_8b_json(prompt, system=None):
+    msgs = [{"role": "system", "content": system}] if system else []
+    msgs.append({"role": "user", "content": prompt})
+    r = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=msgs,
+        max_tokens=256,
+        temperature=0.1,
+        response_format={"type": "json_object"}
+    )
+    return json.loads(r.choices[0].message.content)
+
+def chat_8b(prompt, system=None):
+    msgs = [{"role": "system", "content": system}] if system else []
+    msgs.append({"role": "user", "content": prompt})
+    r = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=msgs,
+        max_tokens=512,
+        temperature=0.3
+    )
+    return r.choices[0].message.content.strip()
+
+# ── GROQ: STRUCTURED OUTPUT (70B) ────────────────────────
+def chat_70b_structured(prompt, system=None):
+    """70B with guaranteed JSON schema output — eliminates parse failures."""
+    msgs = [{"role": "system", "content": system}] if system else []
+    msgs.append({"role": "user", "content": prompt})
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "find":       {"type": "string", "description": "Exact string to find verbatim in the code"},
+            "replace":    {"type": "string", "description": "String to replace it with"},
+            "confidence": {"type": "number", "description": "0.0-1.0 confidence the find string exists verbatim"},
+            "reason":     {"type": "string", "description": "One sentence explaining the change"}
+        },
+        "required": ["find", "replace", "confidence", "reason"]
+    }
+
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=msgs,
+        max_tokens=4096,
+        temperature=0.1,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "code_patch",
+                "strict": True,
+                "schema": schema
+            }
+        }
+    )
+    return json.loads(r.choices[0].message.content)
+
+def chat_70b(prompt, system=None):
+    msgs = [{"role": "system", "content": system}] if system else []
+    msgs.append({"role": "user", "content": prompt})
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=msgs,
+        max_tokens=4096,
+        temperature=0.2
+    )
+    return r.choices[0].message.content.strip()
+
+# ── INTENT CLASSIFICATION (JSON MODE) ────────────────────
+def classify_intent(user_input, mem):
+    summary = memory_summary(mem)
+    try:
+        result = chat_8b_json(
+            f"""Classify this request. Return JSON only.
+
+Intents:
+BUILD = add new feature
+FIX = fix a bug
+UNDO = undo last change
+STATUS = what is built or remaining
+SERVER = start local server
+URL = show preview links
+CHAT = general question
+
+History: {summary}
+Request: "{user_input}"
+
+Return: {{"intent": "BUILD|FIX|UNDO|STATUS|SERVER|URL|CHAT", "reason": "one sentence"}}""",
+            system='You classify game dev requests. Return only valid JSON with keys "intent" and "reason".'
+        )
+        return result.get("intent", "CHAT").upper()
+    except Exception:
+        return "CHAT"
+
+# ── MoA: 8B REVIEWS 70B PATCH ────────────────────────────
+def review_patch(find_str, replace_str, code, user_input):
+    """Mixture of Agents: 8B reviews the 70B patch before applying."""
+    context = extract_relevant_section(code, user_input)
+    try:
+        result = chat_8b_json(
+            f"""Review this code patch for correctness.
+
+Task: "{user_input}"
+
+Patch:
+FIND: {find_str[:300]}
+REPLACE: {replace_str[:300]}
+
+Relevant code:
+{context[:1000]}
+
+Does the FIND string look like it could exist in this code?
+Does the REPLACE look correct for the task?
+
+Return: {{"approved": true/false, "confidence": 0.0-1.0, "issue": "describe problem if not approved"}}""",
+            system='You are a code reviewer. Return only valid JSON with keys "approved", "confidence", "issue".'
+        )
+        return result
+    except Exception:
+        return {"approved": True, "confidence": 0.5, "issue": ""}
+
+# ── FUZZY MATCH ───────────────────────────────────────────
+def fuzzy_find_replace(code, find_str, replace_str, threshold=0.82):
+    find_lines  = find_str.strip().splitlines()
+    code_lines  = code.splitlines()
+    window_size = max(len(find_lines), 1)
+    best_ratio  = 0
+    best_start  = -1
+    for i in range(len(code_lines) - window_size + 1):
+        window = '\n'.join(code_lines[i:i + window_size])
+        ratio  = difflib.SequenceMatcher(None, find_str.strip(), window).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_start = i
+    if best_ratio >= threshold:
+        matched = '\n'.join(code_lines[best_start:best_start + window_size])
+        return code.replace(matched, replace_str, 1), best_ratio
+    return None, best_ratio
+
+# ── SELF-HEAL ─────────────────────────────────────────────
+def self_heal(user_input, failed_find, code):
+    print("  Self-healing: correcting patch...")
+    context = extract_relevant_section(code, user_input)
+    try:
+        result = chat_70b_structured(
+            f"""A patch failed. Correct the FIND string so it matches verbatim.
+
+Task: "{user_input}"
+Failed FIND: {failed_find[:300]}
+Actual code: {context}
+
+Generate a corrected patch.""",
+            system="Expert HTML5 game developer. Find the exact matching string and provide corrected patch."
+        )
+        return result.get("find",""), result.get("replace",""), result.get("confidence", 0)
+    except Exception:
+        return "", "", 0
+
+# ── MAIN PATCH FLOW ───────────────────────────────────────
+def run_patch(user_input, intent, mem, patterns):
+    code        = load_game()
+    backup_path = backup_game()
+    print(f"  Backup: {os.path.basename(backup_path)}")
+
+    # Check pattern library first
+    pattern      = find_matching_pattern(user_input, patterns)
+    pattern_hint = ""
+    if pattern:
+        pattern_hint = f"\nSimilar fix that worked before:\nFIND: {pattern['find'][:200]}\nREPLACE: {pattern['replace'][:200]}"
+        print(f"  Pattern match: {pattern['description'][:50]}")
+
+    context      = extract_relevant_section(code, user_input)
+    game_summary = build_game_summary(code)
+    history      = memory_summary(mem)
+
+    print("  Generating patch (70B structured)...")
+    try:
+        patch = chat_70b_structured(
+            f"""You are patching RunePortal, an HTML5 isometric ARPG.
+
+Game: {game_summary}
+History: {history}
+{pattern_hint}
+
+Relevant code:
+{context}
+
+Task: "{user_input}"
+
+Find the exact string to change and provide the replacement.
+The find string MUST exist verbatim in the code above.""",
+            system="Expert HTML5 game developer. Provide a minimal surgical patch."
+        )
+    except Exception as e:
+        print(f"  Structured output failed: {e}")
+        print("  Falling back to standard 70B...")
+        raw = chat_70b(
+            f'Fix this in RunePortal: "{user_input}"\n\nCode:\n{context}\n\nReturn FIND: and REPLACE: blocks only.',
+            system="Expert HTML5 game dev. FIND/REPLACE format only."
+        )
+        find_m    = re.search(r'FIND:\s*\n(.*?)(?=\nREPLACE:)', raw, re.DOTALL)
+        replace_m = re.search(r'REPLACE:\s*\n(.*?)$', raw, re.DOTALL)
+        if not find_m:
+            mem["failures"].append(user_input[:60])
+            save_memory(mem)
+            return False
+        patch = {
+            "find": find_m.group(1).strip(),
+            "replace": replace_m.group(1).strip(),
+            "confidence": 0.5,
+            "reason": "fallback"
+        }
+
+    find_str    = patch["find"]
+    replace_str = patch["replace"]
+    confidence  = patch["confidence"]
+    reason      = patch["reason"]
+
+    print(f"  Patch reason: {reason}")
+    print(f"  Confidence:   {confidence:.0%}")
+
+    # MoA: 8B reviews before applying
+    print("  Reviewing patch (8B MoA)...")
+    review = review_patch(find_str, replace_str, code, user_input)
+    if not review.get("approved", True) and review.get("confidence", 1) < 0.3:
+        print(f"  Review rejected: {review.get('issue','unknown')}")
+        mem["failures"].append(user_input[:60])
+        save_memory(mem)
+        return False
+    print(f"  Review: {'approved' if review.get('approved') else 'warning — applying anyway'} ({review.get('confidence',0):.0%})")
+
+    # Apply patch — exact → fuzzy → self-heal
+    new_code = None
+    if find_str in code:
+        new_code = code.replace(find_str, replace_str, 1)
+        print("  Applied: exact match.")
+    else:
+        print(f"  Exact match failed (confidence was {confidence:.0%}) — trying fuzzy...")
+        new_code, ratio = fuzzy_find_replace(code, find_str, replace_str)
+        if new_code:
+            print(f"  Applied: fuzzy match ({ratio:.0%}).")
+        else:
+            print(f"  Fuzzy too low ({ratio:.0%}) — self-healing...")
+            find2, replace2, conf2 = self_heal(user_input, find_str, code)
+            if find2 and find2 in code:
+                new_code    = code.replace(find2, replace_str, 1)
+                find_str    = find2
+                replace_str = replace2
+                print("  Applied: self-heal exact match.")
+            elif find2:
+                new_code, ratio2 = fuzzy_find_replace(code, find2, replace2)
+                if new_code:
+                    find_str    = find2
+                    replace_str = replace2
+                    print(f"  Applied: self-heal + fuzzy ({ratio2:.0%}).")
+
+    if not new_code:
+        print("  All strategies failed. Try rephrasing.")
+        mem["failures"].append(user_input[:60])
+        save_memory(mem)
+        return False
+
+    save_game(new_code)
+    save_pattern(user_input, find_str, replace_str, patterns)
+
+    if intent == "BUILD":
+        mem["features"].append(user_input[:60])
+    else:
+        mem["fixes"].append(user_input[:60])
+    save_memory(mem)
+    return True
+
+# ── STATUS ────────────────────────────────────────────────
+def get_status(mem):
+    code    = load_game()
+    summary = build_game_summary(code)
+    history = memory_summary(mem)
+    return chat_8b(
+        f"Game: {summary}\nHistory:\n{history}\n\nList concisely: 1) working 2) likely broken 3) top 3 next features.",
+        system="Game dev assistant reviewing RunePortal. Be specific and brief."
+    )
+
+# ── UNDO ──────────────────────────────────────────────────
+def undo_last():
+    backups = sorted(os.listdir(BACKUP_DIR))
+    if not backups:
+        return "No backups found."
+    latest = os.path.join(BACKUP_DIR, backups[-1])
+    shutil.copy2(latest, GAME_FILE)
+    os.remove(latest)
+    return f"Restored: {backups[-1]}"
+
+# ── SERVER ────────────────────────────────────────────────
+def start_server():
+    game_dir = os.path.dirname(GAME_FILE)
+    subprocess.Popen(
+        ["python", "-m", "http.server", "8080", "--directory", game_dir],
+        creationflags=subprocess.CREATE_NEW_CONSOLE
+    )
+    return f"Server started.\n  Desktop: {PREVIEW_URL}\n  Phone:   {PHONE_URL}"
+
+# ── UI ────────────────────────────────────────────────────
+def wrap(text, width=60):
+    lines = text.split('\n')
+    out   = []
+    for line in lines:
+        out.extend(textwrap.wrap(line, width) if len(line) > width else [line])
+    return '\n'.join(out)
+
+def print_banner(mem, patterns):
+    feat_count = len(mem.get("features", []))
+    fix_count  = len(mem.get("fixes", []))
+    pat_count  = len(patterns)
+    fail_count = len(mem.get("failures", []))
+    print("\n" + "="*60)
+    print("  RUNEPORTAL DEV STUDIO  v3.0  |  Groq Free Tier")
+    print(f"  Memory : {feat_count} features | {fix_count} fixes | {fail_count} failures")
+    print(f"  Patterns: {pat_count} saved")
+    print(f"  Engine : Structured JSON + MoA review + fuzzy + self-heal")
+    print("  Commands: status | undo | url | server | quit")
+    print("="*60 + "\n")
+
+# ── MAIN ──────────────────────────────────────────────────
+def main():
+    mem      = load_memory()
+    patterns = load_patterns()
+    print_banner(mem, patterns)
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting.")
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in ('quit', 'exit', 'q'):
+            print("Later.")
+            break
+
+        print()
+        intent = classify_intent(user_input, mem)
+
+        if intent == "UNDO":
+            print(f"  {undo_last()}\n")
+
+        elif intent == "STATUS":
+            print("  Reviewing game state...\n")
+            print(wrap(get_status(mem)))
+            print()
+
+        elif intent == "SERVER":
+            print(f"  {start_server()}\n")
+
+        elif intent == "URL":
+            print(f"  Desktop: {PREVIEW_URL}")
+            print(f"  Phone:   {PHONE_URL}\n")
+
+        elif intent in ("BUILD", "FIX"):
+            action = "Building" if intent == "BUILD" else "Fixing"
+            print(f"  {action}: {user_input}")
+            success = run_patch(user_input, intent, mem, patterns)
+            if success:
+                print(f"  Done. Hard refresh to see changes.")
+                print(f"  Desktop: {PREVIEW_URL}")
+                print(f"  Phone:   {PHONE_URL}\n")
+            else:
+                print("  Failed. Try rephrasing.\n")
+
+        else:
+            reply = chat_8b(
+                user_input,
+                system=f"Game dev assistant for RunePortal. {build_game_summary(load_game())} Be concise."
+            )
+            print(f"  {wrap(reply)}\n")
+
+if __name__ == "__main__":
+    main()

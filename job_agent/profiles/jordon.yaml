@@ -1,0 +1,172 @@
+# ============================================================
+# JORDON WAGNER — MASTER PROFILE
+# Job Agent Source of Truth
+# ============================================================
+
+personal:
+  name: "Jordon Wagner"
+  email: "Jordan23wagner@gmail.com"
+  phone: "1-775-351-6657"
+  location: "Cypress, TX"
+  linkedin: "https://www.linkedin.com/in/jordonwagner"  # update if different
+  remote_only: true
+  open_to_hybrid: true
+  hybrid_max_days_in_office: 2
+
+search_criteria:
+  salary_minimum: 130000
+  salary_target: 155000
+  job_types:
+    - "Senior Project Manager"
+    - "Senior Technical Project Manager"
+    - "Sr PM AI Automation"
+    - "Senior Program Manager"
+    - "Implementation Program Manager"
+    - "Client Success Program Manager"
+    - "RCM Program Manager"
+  industries:
+    preferred:
+      - "Healthcare Technology"
+      - "Revenue Cycle Management"
+      - "Health IT"
+      - "Digital Health"
+      - "SaaS – Healthcare"
+    acceptable:
+      - "Enterprise SaaS"
+      - "HealthTech"
+      - "Insurtech"
+    avoid:
+      - "Pharma/Clinical Trials only"
+      - "Construction"
+      - "Finance only"
+  target_companies:
+    - "Waystar"
+    - "Veradigm"
+    - "Optum"
+    - "Availity"
+    - "Cotiviti"
+    - "R1 RCM"
+    - "Abridge"
+    - "Innovaccer"
+    - "Netsmart"
+    - "Modernizing Medicine"
+    - "Epic"
+    - "Oracle Health"
+    - "Inovalon"
+    - "Change Healthcare"
+
+summary: >
+  Client Success Operations Project Manager driving strategic RCM solution scaling through AI
+  automation and process optimization. Expertise in architecting agentic AI tools, cross-functional
+  alignment, churn management, and enabling CA capacity scaling. Track record of leading $100M+
+  business units and delivering enterprise-scale healthcare implementations.
+
+certifications:
+  - name: "Certified ScrumMaster (CSM)"
+    issuer: "Scrum Alliance"
+  - name: "Lean Six Sigma Green Belt"
+    issuer: "LSSGB"
+
+skills:
+  project_management:
+    - "Salesforce"
+    - "JIRA"
+    - "Asana"
+    - "ServiceNow"
+    - "Microsoft Project"
+    - "Agile"
+    - "Scrum"
+    - "Waterfall"
+    - "Hybrid delivery"
+  ai_and_automation:
+    - "Agentic AI tools"
+    - "NotebookLM"
+    - "Gemini"
+    - "Google App Scripts"
+    - "Claude API"
+    - "LLM workflow orchestration"
+    - "AI-driven process automation"
+  analytics:
+    - "PowerBI"
+    - "Data Integration"
+    - "Salesforce reporting"
+    - "KPI dashboards"
+  tools:
+    - "BlueWorks Live"
+    - "Visio"
+    - "SharePoint"
+    - "MS Office Suite"
+  domain:
+    - "Revenue Cycle Management (RCM)"
+    - "EHR Implementation"
+    - "Healthcare IT"
+    - "Churn management"
+    - "Client retention"
+    - "ARR management"
+
+experience:
+  - title: "Senior Project Manager – RCM Client Success Operations"
+    company: "ModMed (Modernizing Medicine)"
+    start: "February 2026"
+    end: "Present"
+    highlights:
+      - "Architected and scaled RCM solution to 3x growth trajectory using agentic AI tools, NotebookLM, and Gemini — reduced Client Advisor manual workload by 30%"
+      - "Built AI-driven automation infrastructure using Google App Scripts integrated across Salesforce, PowerBI, and internal systems"
+      - "Managed 600 RCM client accounts ($100M+ ARR) — 100% of RCM business unit revenue"
+      - "Maintained churn below industry benchmarks through proactive risk tracking and retention initiatives"
+      - "Served as Voice of Customer for RCM product, translating client feedback into strategic product direction via JIRA"
+      - "Coordinated cross-functional alignment across Business Ops, CS Ops, and product teams"
+
+  - title: "Senior Project Manager – EHR Implementations"
+    company: "ModMed (Modernizing Medicine)"
+    start: "June 2024"
+    end: "February 2026"
+    highlights:
+      - "Orchestrated end-to-end cloud-based EHR implementations across Orthopedics, Ophthalmology, Dermatology, Plastics, and Podiatry specialties"
+      - "Managed $1M+ software deployment budgets"
+      - "Achieved 20–50% patient volume increases for implemented practices, driving 15–20% revenue growth"
+      - "Compressed implementation timelines from 90 to 75 days using AI tooling"
+      - "Led cross-functional teams of up to 15 individuals"
+      - "Maintained sub-3% churn rate through proactive communication and rapid escalation resolution"
+      - "Deployed Salesforce for contract lifecycle oversight and deliverable tracking"
+
+  - title: "Global Program Manager"
+    company: "Arrow Electronics"
+    start: "April 2022"
+    end: "February 2024"
+    highlights:
+      - "Collaborated with MIT CSAIL on OCR technology integration delivering $10M+ enterprise value"
+      - "Led global ICS2 compliance project for EU air cargo imports"
+      - "Optimized largest PDC Inbound processes — $300K+ annual savings"
+      - "Managed Mexico-based OCR project protecting $91M in revenue"
+
+  - title: "Production Supervisor"
+    company: "Top Cap – Panasonic Energy of North America"
+    start: "July 2021"
+    end: "April 2022"
+    highlights:
+      - "Drove $2M in annual savings by reducing operator downtime 32%"
+      - "Led mentorship of 25+ Lean Six Sigma Yellow Belts"
+      - "Decreased operational costs 14% through lean manufacturing"
+
+education:
+  - institution: "Truckee Meadows Community College"
+    field: "Business Administration & Radiology"
+
+people_leadership_years: 6
+
+# ATS form fill defaults — used by Playwright agent
+form_defaults:
+  work_authorization: "US Citizen"
+  requires_sponsorship: false
+  willing_to_relocate: false
+  notice_period: "2 weeks"
+  preferred_salary: "135000"
+  years_experience: "8"
+  cover_letter_default: >
+    I am excited to apply for this role. With 8+ years of project management experience spanning
+    healthcare IT, RCM, and enterprise SaaS — including direct oversight of $100M+ ARR and
+    AI automation architecture — I bring both strategic depth and hands-on execution. I am
+    specifically drawn to this opportunity because of [COMPANY]'s focus on [FOCUS_AREA].
+    I thrive in remote, cross-functional environments and have a proven record of delivering
+    complex programs on time and under budget.
