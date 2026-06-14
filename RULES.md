@@ -151,4 +151,26 @@ Minimum tap target size: 44x44px. No hover-only interactions.
 
 ---
 
+---
+
+## THREE.JS R128 RULES (2026-06-13 onward)
+
+**21. No CapsuleGeometry — use CylinderGeometry + SphereGeometry instead.**  
+CapsuleGeometry does not exist until r142. Current version r128. This will cause a runtime error.
+
+**22. localStorage key is `runeportal_save` — must clear if player object changes.**  
+If adding new fields to the player object, flag it explicitly in changelog + clear localStorage before testing.
+
+**23. Patch format for Studio (Python): str.replace() ONLY, never PowerShell -replace.**  
+PowerShell -replace breaks on multi-line JS strings. Use Python via here-string.
+
+**24. Line-number targeted surgery for structural changes to `<script>` tag.**  
+Never block-search for `<script>` — it will find the wrong block and delete the game code.
+
+**25. After every patch, verify the file size changed.**  
+If file size is the same, the patch did not land. Do not proceed.
+
+**26. Three.js scene graph: player, enemies, loot, buildings all in scene, not a canvas layer.**  
+Camera offset: `new THREE.Vector3(0, 18, 12)` looking at origin. Never move the camera offset — it breaks the isometric angle.
+
 *RULES.md — RunePortal — jordan23wagner-ops — June 2026*
