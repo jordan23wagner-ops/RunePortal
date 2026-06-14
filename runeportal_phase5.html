@@ -1744,10 +1744,15 @@
         if (aggroDist < 5) e.aggroed = true;
         if (aggroDist > 7) e.aggroed = false;
         if (e.aggroed) {
-          // Aggro: face and charge player
           e.direction = Math.atan2(player.y - e.y, player.x - e.x);
-          e.x += Math.cos(e.direction) * e.speed * dt;
-          e.y += Math.sin(e.direction) * e.speed * dt;
+          const eAR = e.behavior === 'ranged' ? 3.0 : 1.0;
+          if (aggroDist > eAR + 0.3) {
+            e.x += Math.cos(e.direction) * e.speed * dt;
+            e.y += Math.sin(e.direction) * e.speed * dt;
+          } else if (e.behavior === 'ranged' && aggroDist < eAR - 0.5) {
+            e.x -= Math.cos(e.direction) * e.speed * 0.6 * dt;
+            e.y -= Math.sin(e.direction) * e.speed * 0.6 * dt;
+          }
         } else {
           // Idle state machine
           e.idleTimer -= dt;
@@ -1807,6 +1812,9 @@
             continue;
           }
         }
+      }
+      const eAttackRange = e.isBoss ? 1.5 : e.behavior === 'ranged' ? 3.0 : 1.0;
+      if (dist < eAttackRange) {
         const eAtkInterval = Math.max(20, Math.floor((1 / e.attackSpeed) * 60));
         if (tick % eAtkInterval === 0) {
           if (devInvincible) continue;
