@@ -1822,10 +1822,10 @@
       const pile = lootPiles[i];
       if (pile.expiresAt && Date.now() > pile.expiresAt) { lootPiles.splice(i, 1); continue; }
       if (Math.hypot(player.x - pile.x, player.y - pile.y) < 60 / TILE_W) {
-        if (pile.gold > 0) backpack.gold += pile.gold;
-        for (const item of pile.items) backpack.items.push(item);
-        if (pile.materialDrop) backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1;
-        if (pile.foodDrop) backpack.food.push(pile.foodDrop);
+        if (pile.gold > 0) { backpack.gold += pile.gold; showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + pile.gold + 'g', '#f0c040'); }
+        for (const item of pile.items) { backpack.items.push(item); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), item.name, rarText(item.rarity)); }
+        if (pile.materialDrop) { backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1; const _mi = MATERIAL_DB.find(m => m.id === pile.materialDrop); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), _mi ? _mi.name : pile.materialDrop, '#7ddd55'); }
+        if (pile.foodDrop) { backpack.food.push(pile.foodDrop); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), pile.foodDrop.name + ' +' + pile.foodDrop.healAmt + 'HP', '#ffaa44'); }
         lootPiles.splice(i, 1);
       }
     }
@@ -2000,7 +2000,9 @@
     else backpack.items.forEach((item, idx) => {
       const d = document.createElement('div');
       d.className = 'bp-item ' + (item.rarity || 'common');
+      const _stats = Object.entries(item.statBonus || {}).filter(([,v]) => v > 0).map(([k,v]) => k.slice(0,3).toUpperCase()+' +'+v).join(' · ');
       d.innerHTML = `<div class="bp-item-name">${item.name}</div><div class="bp-item-type">${item.type || item.slot}</div>`
+        + `<div style="font:9px monospace;color:#777;margin-top:2px">${_stats || '<i style="color:#444">No affixes</i>'}</div>`
         + (playerNearMerchant ? `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>` : '');
       d.onclick = () => equipFromBag(idx);
       grid.appendChild(d);
