@@ -1,7 +1,7 @@
-# RunePortal Dev Startup — syncs repo, runs studio
-
+# RunePortal Dev Startup — syncs repo, runs studio + token tracker
 $repoPath = "C:\Users\Jordon\OneDrive\Desktop"
 $studioScript = "$repoPath\runeportal_studio.py"
+$trackerScript = "C:\Users\Jordon\token_tracker.ps1"
 
 Set-Location $repoPath
 
@@ -20,13 +20,24 @@ if (Test-Path "CONTEXT.md") {
     Write-Host "⚠️  CONTEXT.md not found" -ForegroundColor Yellow
 }
 
+# Start token tracker in separate window
+Write-Host "`n📊 Starting Token Tracker..." -ForegroundColor Cyan
+$trackerJob = Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -NoExit -File `"$trackerScript`"" -PassThru
+Write-Host "✅ Tracker running (PID: $($trackerJob.Id))" -ForegroundColor Green
+
 Write-Host "`n🤖 Starting RunePortal Studio (v4.0)..." -ForegroundColor Cyan
 Write-Host "────────────────────────────────────────" -ForegroundColor Gray
 
 python $studioScript
 
 Write-Host "`n────────────────────────────────────────" -ForegroundColor Gray
-Write-Host "💾 Syncing to GitHub..." -ForegroundColor Cyan
+
+# Stop tracker when studio exits
+Write-Host "`n🛑 Stopping Token Tracker..." -ForegroundColor Cyan
+Stop-Process -Id $trackerJob.Id -ErrorAction SilentlyContinue
+Write-Host "✅ Tracker stopped" -ForegroundColor Green
+
+Write-Host "`n💾 Syncing to GitHub..." -ForegroundColor Cyan
 git add -A
 $msg = "[$((Get-Date).ToString('yyyy-MM-dd HH:mm'))] Studio session end"
 git commit -m $msg 2>$null
