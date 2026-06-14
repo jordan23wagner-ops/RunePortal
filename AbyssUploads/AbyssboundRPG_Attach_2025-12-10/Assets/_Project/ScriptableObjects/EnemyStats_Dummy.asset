@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 567e03d9b3d94b34bb5f0ba6dffc0839, type: 3}
+  m_Name: EnemyStats_Dummy
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
+  maxHealth: 30
+  contactDamage: 5

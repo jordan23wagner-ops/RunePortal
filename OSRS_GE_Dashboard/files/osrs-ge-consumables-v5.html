@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OSRS GE Consumables Terminal v5</title>
+    <style>
+        :root{--acc:#e8930a;--grn:#1f8a56;--red:#b83232;--ylw:#9a6d00;--blu:#1a6fa8;--mono:'Courier New',monospace;--bg:#0d0d0f;--bg2:#141417;--bg3:#1c1c21;--border:#2a2a32;--text:#d4d4e0;--text2:#8888a0;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg);color:var(--text);padding:20px;}
+        .container{max-width:1400px;margin:auto;}
+        .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+        .htitle{font-size:1.3em;font-weight:600;color:var(--acc);}
+        .hsub{font-size:0.75em;color:var(--text2);font-family:var(--mono);margin-top:3px;}
+        .sdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
+        .s-live{background:var(--grn);}.s-load{background:var(--ylw);}.s-err{background:var(--red);}
+        .clk{font-family:var(--mono);font-size:0.8em;color:var(--text2);}
+        .mode-toggle{display:flex;gap:0;margin-bottom:15px;border:1px solid var(--border);border-radius:4px;overflow:hidden;width:fit-content;}
+        .mode-btn{padding:8px 20px;font-size:0.85em;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text2);transition:all 0.15s;}
+        .mode-btn.active{background:var(--acc);color:#000;}
+        .mode-btn:hover:not(.active){background:var(--bg3);}
+        .cat-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:15px;}
+        .cat-btn{padding:5px 14px;font-size:0.78em;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);border-radius:4px;transition:all 0.15s;}
+        .cat-btn.active{border-color:var(--acc);color:var(--acc);background:rgba(232,147,10,0.1);}
+        .goal-box{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:15px 20px;margin-bottom:15px;}
+        .goal-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+        .goal-lbl{font-size:0.8em;color:var(--text2);}
+        .goal-amt{font-size:1.1em;font-weight:600;font-family:var(--mono);}
+        .goal-bar-bg{height:7px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:6px;border:1px solid var(--border);}
+        .goal-bar-fill{height:100%;background:var(--acc);border-radius:3px;transition:width 0.4s;}
+        .goal-sub{display:flex;justify-content:space-between;font-size:0.78em;color:var(--text2);}
+        .ginputs{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;}
+        .ginputs label{font-size:0.78em;color:var(--text2);white-space:nowrap;}
+        .ginputs input{font-size:0.85em;padding:5px 10px;width:150px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;}
+        .bxs{font-size:0.78em;padding:5px 12px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);border-radius:4px;}
+        .bacc{background:var(--acc);color:#000;border-color:var(--acc);font-weight:600;}
+        .ctrls{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;background:var(--bg2);padding:15px;border-radius:6px;border:1px solid var(--border);margin-bottom:15px;}
+        .cg label{display:block;font-size:0.72em;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;text-transform:uppercase;}
+        .cg input,.cg select{width:100%;font-size:0.85em;padding:6px 10px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;}
+        .bref{width:100%;padding:9px;font-size:0.85em;font-weight:600;cursor:pointer;background:var(--acc);color:#000;border:none;border-radius:4px;margin-top:20px;letter-spacing:1px;}
+        .bref:hover{background:#d4820a;}.bref:disabled{opacity:0.5;cursor:not-allowed;}
+        .slots-box{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--acc);border-radius:6px;padding:15px 20px;margin-bottom:15px;}
+        .slots-title{font-size:0.82em;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;color:var(--text);}
+        .slots-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+        .slot-card{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;}
+        .slot-num{font-size:0.7em;color:var(--text2);margin-bottom:3px;}
+        .slot-name{font-size:0.8em;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .slot-cap{font-size:0.72em;font-family:var(--mono);color:var(--acc);}
+        .slot-pot{font-size:0.72em;font-family:var(--mono);color:var(--grn);}
+        .slot-cyc{font-size:0.72em;font-family:var(--mono);color:var(--blu);}
+        .slot-empty{color:var(--text2);font-size:0.8em;font-style:italic;}
+        .on-box{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:6px;padding:15px 20px;margin-bottom:15px;}
+        .wl-hdr{font-size:0.82em;font-weight:600;color:var(--acc);margin:15px 0 8px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+        .wl-empty{font-size:0.82em;color:var(--text2);padding:8px 0;font-style:italic;}
+        .shdr{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:4px;margin:15px 0 6px;cursor:pointer;border:1px solid var(--border);background:var(--bg2);}
+        .shdr:hover{background:var(--bg3);}
+        .stitle{font-size:0.82em;font-weight:700;letter-spacing:1px;}
+        .ssub{font-size:0.75em;color:var(--text2);}
+        .scnt{margin-left:auto;font-size:0.78em;font-family:var(--mono);color:var(--text2);}
+        .sarr{font-size:0.7em;color:var(--text2);transition:transform 0.2s;}
+        .sarr.open{transform:rotate(90deg);}
+        .cat-tag{font-size:0.68em;padding:1px 6px;border-radius:3px;font-weight:700;margin-left:5px;}
+        .cat-rune{background:rgba(26,111,168,0.2);color:#4db8ff;}
+        .cat-food{background:rgba(31,138,86,0.2);color:#39d98a;}
+        .cat-pot{background:rgba(232,147,10,0.2);color:var(--acc);}
+        .cat-ammo{background:rgba(184,50,50,0.2);color:#ff6b6b;}
+        .cat-other{background:rgba(136,136,160,0.15);color:var(--text2);}
+        table{width:100%;border-collapse:collapse;margin-top:5px;}
+        th{font-size:0.72em;color:var(--acc);padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);letter-spacing:0.5px;}
+        td{padding:8px 10px;border-bottom:1px solid rgba(42,42,50,0.5);font-size:0.85em;vertical-align:middle;}
+        tr:hover td{background:rgba(255,255,255,0.02);}
+        .iname{font-weight:600;color:var(--text);}
+        .ilim{font-size:0.72em;color:var(--text2);font-family:var(--mono);}
+        .mono{font-family:var(--mono);}
+        .cg2{color:#39d98a;font-weight:600;}
+        .ca{color:var(--acc);}
+        .cb{color:#4db8ff;}
+        .badge{font-size:0.72em;padding:2px 8px;border-radius:3px;font-family:var(--mono);white-space:nowrap;border:1px solid;}
+        .bf{color:#39d98a;border-color:#39d98a;background:rgba(57,217,138,0.08);}
+        .bm{color:#ffd166;border-color:#ffd166;background:rgba(255,209,102,0.08);}
+        .bs{color:#ff4d6a;border-color:#ff4d6a;background:rgba(255,77,106,0.08);}
+        .risk-low{color:#39d98a;font-size:0.78em;font-weight:700;}
+        .risk-med{color:#ffd166;font-size:0.78em;font-weight:700;}
+        .risk-high{color:#ff4d6a;font-size:0.78em;font-weight:700;}
+        .star{background:none;border:none;cursor:pointer;font-size:1em;padding:0 3px;opacity:0.3;transition:opacity 0.15s;}
+        .star:hover{opacity:0.7;}.star.on{opacity:1;}
+        .empty{text-align:center;color:var(--text2);font-size:0.85em;padding:20px;font-style:italic;}
+        .tip{font-size:0.78em;color:var(--text2);background:var(--bg2);border-left:3px solid #4db8ff;padding:8px 14px;border-radius:0 4px 4px 0;margin-bottom:15px;line-height:1.7;}
+        .proj-total{margin-top:10px;font-size:0.82em;color:var(--grn);font-family:var(--mono);font-weight:600;}
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="hdr">
+        <div>
+            <div class="htitle">⚔ GE CONSUMABLES TERMINAL v5</div>
+            <div class="hsub" id="hsub">Potions · Food · Runes · Ammo · High volume only</div>
+        </div>
+        <div style="text-align:right">
+            <div style="font-size:0.85em"><span class="sdot s-load" id="sdot"></span><span id="stxt">Loading...</span></div>
+            <div class="clk" id="clk">--:--:--</div>
+        </div>
+    </div>
+
+    <div class="mode-toggle">
+        <button class="mode-btn active" id="mb-active" onclick="setMode('active')">Active Flipping</button>
+        <button class="mode-btn" id="mb-overnight" onclick="setMode('overnight')">Overnight Orders</button>
+    </div>
+
+    <div class="cat-filters">
+        <span style="font-size:0.78em;color:var(--text2);line-height:28px;">Filter:</span>
+        <button class="cat-btn active" onclick="toggleCat('all',this)">All</button>
+        <button class="cat-btn" onclick="toggleCat('rune',this)">Runes</button>
+        <button class="cat-btn" onclick="toggleCat('food',this)">Food</button>
+        <button class="cat-btn" onclick="toggleCat('pot',this)">Potions</button>
+        <button class="cat-btn" onclick="toggleCat('ammo',this)">Ammo</button>
+        <button class="cat-btn" onclick="toggleCat('other',this)">Other</button>
+    </div>
+
+    <div class="goal-box">
+        <div class="goal-row">
+            <span class="goal-lbl">Daily goal — 10M GP</span>
+            <span class="goal-amt" id="gdsp" style="color:var(--acc)">0 / 10,000,000</span>
+        </div>
+        <div class="goal-bar-bg"><div class="goal-bar-fill" id="gfill" style="width:0%"></div></div>
+        <div class="goal-sub"><span id="gpct">0% complete</span><span id="grem">10,000,000 remaining</span></div>
+        <div class="ginputs">
+            <label>GP earned today:</label>
+            <input type="text" id="gpin" value="0">
+            <button class="bxs bacc" onclick="updateGoal()">Update</button>
+            <button class="bxs" onclick="resetGoal()">Reset</button>
+        </div>
+    </div>
+
+    <div class="ctrls">
+        <div class="cg"><label>Capital (GP)</label><input type="text" id="cap" value="265,000,000" onchange="renderAll()"></div>
+        <div class="cg"><label>Min Margin %</label><input type="number" id="minM" value="1" step="0.1" onchange="renderAll()"></div>
+        <div class="cg"><label>Min 24h Volume</label><input type="number" id="minV" value="5000" onchange="renderAll()"></div>
+        <div class="cg"><label>Max Item Price</label><input type="text" id="maxP" value="50,000" onchange="renderAll()"></div>
+        <div class="cg"><label>Min Profit/ea</label><input type="number" id="minNet" value="50" onchange="renderAll()"></div>
+        <div class="cg"><label>Min Buy Limit</label><input type="number" id="minLim" value="100" onchange="renderAll()"></div>
+        <div class="cg"><label>Sort By</label>
+            <select id="sortBy" onchange="renderAll()">
+                <option value="cycles">Cycles/day</option>
+                <option value="potential">Profit potential</option>
+                <option value="efficiency">Capital efficiency</option>
+                <option value="fill">Fill speed</option>
+                <option value="roi">ROI %</option>
+            </select>
+        </div>
+        <div class="cg"><button class="bref" id="rfbtn" onclick="fetchData()">⟳ REFRESH MARKET</button></div>
+    </div>
+
+    <div class="tip"><strong style="color:#4db8ff">Consumables strategy:</strong> These items trade 24/7. Thin margins are fine — volume and cycle speed are everything. Target items with 3x+ cycles/day for maximum GP/hr. Always margin check 1 item before committing full capital.</div>
+
+    <div id="slot-alloc" style="display:none"></div>
+    <div id="on-advice" style="display:none"></div>
+
+    <div class="wl-hdr">⭐ Watchlist <span style="font-size:0.82em;font-weight:400;color:var(--text2)">(star items to track active flips)</span></div>
+    <div id="wlbody"><div class="wl-empty">No items starred yet.</div></div>
+
+    <div id="results"></div>
+</div>
+
+<script>
+const GOAL=10_000_000,NAT_ID=561;
+let natPrice=200,allItems=[],watchlist=[],gpEarned=0,mode='active',activeCat='all';
+let openSec={quick:true,bulk:true,overnight:true};
+try{watchlist=JSON.parse(localStorage.getItem('ge5_wl')||'[]');}catch(e){}
+try{gpEarned=parseInt(localStorage.getItem('ge5_gp')||'0')||0;}catch(e){}
+
+const CATEGORIES={
+    rune:{label:'Rune',cls:'cat-rune',keys:['rune','essence','talisman','tiara'],names:['air rune','water rune','earth rune','fire rune','mind rune','body rune','cosmic rune','chaos rune','nature rune','death rune','blood rune','soul rune','astral rune','law rune','wrath rune','pure essence','rune essence']},
+    food:{label:'Food',cls:'cat-food',keys:['shark','lobster','swordfish','tuna','salmon','trout','bass','monkfish','anglerfish','manta ray','dark crab','karambwan','wine','jug of wine','beer','stew','cake','pie','bread','pizza','kebab','curry','peach']},
+    pot:{label:'Potion',cls:'cat-pot',keys:['potion','brew','(1)','(2)','(3)','(4)','mix','super attack','super strength','super defence','super combat','ranging','prayer potion','restore','antipoison','antidote','stamina','energy','saradomin brew','zamorak brew','bastion','battlemage','divine','absorption','combat potion','antifire']},
+    ammo:{label:'Ammo',cls:'cat-ammo',keys:['arrow','bolt','dart','cannonball','javelin','knife','ballista']},
+    other:{label:'Other',cls:'cat-other',keys:['herb','seed','coal','ore','bar','feather','flax','string','vial','bucket','bone','ash','plank','leather','hide','wool','silk','molten glass','seaweed','swamp tar']}
+};
+
+function getCategory(name){
+    const l=name.toLowerCase();
+    for(const[key,cat]of Object.entries(CATEGORIES)){
+        if(cat.names&&cat.names.some(n=>l===n))return key;
+        if(cat.keys.some(k=>l.includes(k)))return key;
+    }
+    return null;
+}
+
+function fmt(n){return Math.round(n).toLocaleString();}
+function fmtM(n){return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':fmt(n);}
+function parseGP(id){return parseInt((document.getElementById(id)||{}).value?.replace(/,/g,'')||'0')||0;}
+
+setInterval(()=>{const e=document.getElementById('clk');if(e)e.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});},1000);
+
+function setMode(m){mode=m;document.getElementById('mb-active').classList.toggle('active',m==='active');document.getElementById('mb-overnight').classList.toggle('active',m==='overnight');renderAll();}
+function toggleCat(cat,btn){activeCat=cat;document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAll();}
+
+function renderGoal(){
+    const pct=Math.min((gpEarned/GOAL)*100,100),rem=Math.max(GOAL-gpEarned,0);
+    const f=document.getElementById('gfill'),d=document.getElementById('gdsp'),p=document.getElementById('gpct'),r=document.getElementById('grem');
+    if(f)f.style.width=pct+'%';
+    if(d){d.textContent=fmt(gpEarned)+' / '+fmt(GOAL);d.style.color=pct>=100?'#39d98a':'var(--acc)';}
+    if(p)p.textContent=pct.toFixed(1)+'% complete';
+    if(r)r.textContent=rem>0?fmt(rem)+' remaining':'🎉 GOAL REACHED!';
+    const g=document.getElementById('gpin');if(g)g.value=gpEarned.toLocaleString();
+}
+function updateGoal(){gpEarned=parseGP('gpin');try{localStorage.setItem('ge5_gp',gpEarned);}catch(e){}renderGoal();}
+function resetGoal(){gpEarned=0;try{localStorage.setItem('ge5_gp',0);}catch(e){}renderGoal();}
+renderGoal();
+
+function tax(s){if(s<100)return 0;return Math.min(Math.floor(s*0.02),5000000);}
+function net(b,s){return s-b-tax(s);}
+function fillTime(vol,lim){
+    if(!lim||lim<=0)return{l:'unknown',c:'bm',s:5};
+    const f=vol/lim;
+    if(f>=24)return{l:'< 5 min',c:'bf',s:1};
+    if(f>=8)return{l:'~15 min',c:'bf',s:2};
+    if(f>=4)return{l:'~30 min',c:'bf',s:3};
+    if(f>=2)return{l:'~2 hrs',c:'bm',s:4};
+    if(f>=1)return{l:'~4 hrs',c:'bm',s:5};
+    return{l:'Overnight+',c:'bs',s:6};
+}
+function cyclesPerDay(vol,lim){if(!lim||lim<=0)return 0;return Math.min(vol/lim,6);}
+function tier(vol,lim){const f=fillTime(vol,lim);if(f.s<=3)return'quick';if(f.s<=5)return'bulk';return'overnight';}
+function riskScore(item){
+    let score=0;
+    const vpd=item.vol/item.limit;
+    if(vpd<2)score+=3;else if(vpd<4)score+=2;else if(vpd<8)score+=1;
+    if(item.roi<1)score+=2;else if(item.roi<1.5)score+=1;
+    if(item.buy>20000)score+=1;
+    const sr=(item.sell-item.buy)/item.sell;
+    if(sr<0.02)score+=2;else if(sr<0.03)score+=1;
+    if(score<=1)return{l:'Low',c:'risk-low',s:1};
+    if(score<=3)return{l:'Med',c:'risk-med',s:2};
+    return{l:'High',c:'risk-high',s:3};
+}
+function capitalEfficiency(item){if(!item.capNeeded||item.capNeeded===0)return 0;return(item.potential/item.capNeeded)*item.cycles;}
+function setStatus(txt,cls){const d=document.getElementById('sdot'),s=document.getElementById('stxt');if(d)d.className='sdot '+cls;if(s)s.textContent=txt;}
+
+async function fetchData(){
+    const btn=document.getElementById('rfbtn');if(btn)btn.disabled=true;
+    setStatus('Fetching data...','s-load');
+    try{
+        const[mR,pR,vR]=await Promise.all([fetch('https://prices.runescape.wiki/api/v1/osrs/mapping'),fetch('https://prices.runescape.wiki/api/v1/osrs/latest'),fetch('https://prices.runescape.wiki/api/v1/osrs/24h')]);
+        const mapping=await mR.json(),latest=(await pR.json()).data,daily=(await vR.json()).data;
+        if(latest[NAT_ID]?.low)natPrice=latest[NAT_ID].low;
+        processData(mapping,latest,daily);
+        setStatus('● LIVE DATA','s-live');
+        const h=document.getElementById('hsub');if(h)h.textContent='Consumables only · updated '+new Date().toLocaleTimeString();
+    }catch(e){
+        setStatus('● ERROR','s-err');
+        const r=document.getElementById('results');if(r)r.innerHTML='<div class="empty">Failed to load market data. Make sure the launcher is running.</div>';
+    }finally{if(btn)btn.disabled=false;}
+}
+
+function processData(mapping,latest,daily){
+    const cap=parseGP('cap'),minM=parseFloat(document.getElementById('minM')?.value||'1'),minV=parseInt(document.getElementById('minV')?.value||'5000'),maxP=parseGP('maxP'),minNet=parseInt(document.getElementById('minNet')?.value||'50'),minLim=parseInt(document.getElementById('minLim')?.value||'100');
+    allItems=mapping.map(item=>{
+        const p=latest[item.id],d=daily[item.id];
+        if(!p||!p.high||!p.low||!d)return null;
+        const cat=getCategory(item.name);
+        if(!cat)return null;
+        const vol=(d.highPriceVolume||0)+(d.lowPriceVolume||0);
+        const n=net(p.low,p.high),roi=(n/p.low)*100;
+        const lim=item.limit||1;
+        const potential=n*lim,capNeeded=p.low*lim;
+        const ft=fillTime(vol,lim),t=tier(vol,lim);
+        const cycles=cyclesPerDay(vol,lim);
+        if(vol<minV||roi<minM||p.low>maxP||n<minNet||lim<minLim)return null;
+        const it={id:item.id,name:item.name,cat,buy:p.low,sell:p.high,net:n,roi,vol,limit:lim,ft,tier:t,potential,capNeeded,cycles};
+        it.risk=riskScore(it);it.efficiency=capitalEfficiency(it);
+        return it;
+    }).filter(Boolean);
+    renderAll();
+}
+
+function getFiltered(){const sorted=getSorted();if(activeCat==='all')return sorted;return sorted.filter(i=>i.cat===activeCat);}
+function getSorted(){
+    const sortBy=document.getElementById('sortBy')?.value||'cycles';
+    return[...allItems].sort((a,b)=>{
+        if(sortBy==='roi')return b.roi-a.roi;if(sortBy==='potential')return b.potential-a.potential;if(sortBy==='fill')return a.ft.s-b.ft.s;if(sortBy==='efficiency')return b.efficiency-a.efficiency;return b.cycles-a.cycles;
+    });
+}
+
+function renderSlotAllocator(items){
+    const cap=parseGP('cap'),el=document.getElementById('slot-alloc');if(!el)return;
+    const candidates=items.filter(i=>i.risk.s===1).sort((a,b)=>b.efficiency-a.efficiency).slice(0,8);
+    while(candidates.length<8)candidates.push(null);
+    const slotCap=Math.floor(cap/8);let totalProj=0;
+    let h=`<div class="slots-box"><div class="slots-title"><span>8-Slot Allocation — ${fmtM(cap)} total · ${fmtM(slotCap)}/slot · Low risk only</span></div><div class="slots-grid">`;
+    candidates.forEach((item,i)=>{
+        if(!item){h+=`<div class="slot-card"><div class="slot-num">Slot ${i+1}</div><div class="slot-empty">Open</div></div>`;return;}
+        const qty=Math.min(item.limit,Math.floor(slotCap/item.buy));const proj=qty*item.net*Math.max(1,Math.floor(item.cycles));totalProj+=proj;
+        h+=`<div class="slot-card"><div class="slot-num">Slot ${i+1} <span class="cat-tag ${CATEGORIES[item.cat]?.cls||'cat-other'}">${CATEGORIES[item.cat]?.label||item.cat}</span></div><div class="slot-name" title="${item.name}">${item.name}</div><div class="slot-cap">${fmtM(item.buy*qty)} · ${fmt(qty)} ea</div><div class="slot-pot">+${fmtM(proj)}/day</div><div class="slot-cyc">${item.cycles.toFixed(1)}x cycles/day</div></div>`;
+    });
+    h+=`</div><div class="proj-total">Projected daily profit: +${fmtM(totalProj)}</div></div>`;
+    el.innerHTML=h;el.style.display='block';
+}
+
+function renderOvernightAdvice(){
+    const el=document.getElementById('on-advice');if(!el)return;
+    const h=new Date().getHours(),t=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    let msg='';
+    if(h>=22||h<3)msg=`It's ${t} — late. Stick to Low-risk runes and food only. Avoid potions overnight as margins shift.`;
+    else if(h>=18)msg=`It's ${t} — evening peak. High player activity. Best window for overnight consumable orders.`;
+    else msg=`It's ${t} — good time to place orders. Nature runes, death runes, sharks and anglerfish are safest overnight.`;
+    el.innerHTML=`<div class="on-box"><div style="font-size:0.85em;font-weight:700;margin-bottom:6px;color:var(--acc)">Overnight Consumables Strategy</div><div style="font-size:0.8em;color:var(--text2);line-height:1.7;">${msg}<br><br><strong style="color:var(--text)">Safest overnight picks:</strong> Nature runes · Death runes · Chaos runes · Shark · Anglerfish · Super combat (4) · Prayer potion (4)</div></div>`;
+    el.style.display='block';
+}
+
+function renderAll(){
+    const filtered=getFiltered();
+    const quick=filtered.filter(i=>i.tier==='quick').slice(0,25);
+    const bulk=filtered.filter(i=>i.tier==='bulk').slice(0,20);
+    const overnight=filtered.filter(i=>i.tier==='overnight').slice(0,15);
+    const sa=document.getElementById('slot-alloc'),oa=document.getElementById('on-advice');
+    if(mode==='active'){
+        if(oa)oa.style.display='none';
+        renderSlotAllocator([...quick,...bulk]);
+        const r=document.getElementById('results');
+        if(r)r.innerHTML=renderSection('quick','QUICK FLIPS','Fills in 30 min or less',quick,'#39d98a')+renderSection('bulk','BULK FILLS','2-4 hour fills — place and collect',bulk,'#ffd166');
+    }else{
+        if(sa)sa.style.display='none';
+        renderOvernightAdvice();
+        const r=document.getElementById('results');
+        if(r)r.innerHTML=renderSection('overnight','OVERNIGHT ORDERS','Low risk consumables only',overnight,'#ff6b6b');
+    }
+    watchlist.forEach(w=>document.querySelectorAll(`.star[data-id="${w.id}"]`).forEach(b=>b.classList.add('on')));
+    renderWatchlist();
+}
+
+function renderSection(key,title,sub,items,color){
+    const isOpen=openSec[key]!==false;
+    let h=`<div class="shdr" onclick="toggleSec('${key}')"><span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;"></span><span class="stitle" style="color:${color}">${title}</span><span class="ssub">&nbsp;— ${sub}</span><span class="scnt">${items.length} items</span><span class="sarr${isOpen?' open':''}">▶</span></div>`;
+    if(!isOpen)return h;
+    h+=`<table><thead><tr><th></th><th>ITEM</th><th>BUY</th><th>SELL</th><th>NET/EA</th><th>ROI</th><th>POTENTIAL</th><th>VOL/DAY</th><th>LIMIT</th><th>CYCLES/DAY</th><th>FILL</th><th>RISK</th></tr></thead><tbody>`;
+    if(!items.length){h+=`<tr><td colspan="12" class="empty">No items match current filters. Try lowering min volume or min profit/ea.</td></tr>`;}
+    else items.forEach(item=>{
+        const starred=watchlist.some(w=>w.id===item.id);
+        const catTag=`<span class="cat-tag ${CATEGORIES[item.cat]?.cls||'cat-other'}">${CATEGORIES[item.cat]?.label||item.cat}</span>`;
+        const rw=item.risk.s===3?'<span style="font-size:0.9em;margin-left:2px">⚠</span>':'';
+        h+=`<tr><td><button class="star${starred?' on':''}" data-id="${item.id}" onclick="toggleStar(${item.id},'${item.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${item.buy},${item.sell},${item.net})">⭐</button></td><td><div class="iname">${item.name}${catTag}</div><div class="ilim">${fmtM(item.capNeeded)} to fill limit</div></td><td class="mono">${fmt(item.buy)}</td><td class="mono">${fmt(item.sell)}</td><td class="mono cg2">${fmt(item.net)}</td><td class="mono ca">${item.roi.toFixed(1)}%</td><td class="mono cg2" style="font-weight:700">${fmtM(item.potential)}</td><td class="mono cb">${fmtM(item.vol)}</td><td class="mono">${fmt(item.limit)}</td><td class="mono cb">${item.cycles.toFixed(1)}x</td><td><span class="badge ${item.ft.c}">${item.ft.l}</span></td><td><span class="${item.risk.c}">${item.risk.l}</span>${rw}</td></tr>`;
+    });
+    h+=`</tbody></table>`;return h;
+}
+
+function toggleSec(key){openSec[key]=!openSec[key];renderAll();}
+function toggleStar(id,name,buy,sell,n){
+    const idx=watchlist.findIndex(w=>w.id===id);
+    if(idx>=0)watchlist.splice(idx,1);else watchlist.push({id,name,buy,sell,net:n});
+    try{localStorage.setItem('ge5_wl',JSON.stringify(watchlist));}catch(e){}
+    document.querySelectorAll(`.star[data-id="${id}"]`).forEach(b=>b.classList.toggle('on',watchlist.some(w=>w.id===id)));
+    renderWatchlist();
+}
+function renderWatchlist(){
+    const el=document.getElementById('wlbody');if(!el)return;
+    if(!watchlist.length){el.innerHTML='<div class="wl-empty">No items starred yet.</div>';return;}
+    let h='<table><thead><tr><th>ITEM</th><th>BUY</th><th>SELL</th><th>NET/EA</th><th>CYCLES/DAY</th><th>POTENTIAL</th><th></th></tr></thead><tbody>';
+    watchlist.forEach(w=>{
+        const item=allItems.find(i=>i.id===w.id);
+        const cyc=item?item.cycles.toFixed(1)+'x':'—';const pot=item?fmtM(item.potential):'—';
+        h+=`<tr><td class="iname">${w.name}</td><td class="mono">${fmt(w.buy)}</td><td class="mono">${fmt(w.sell)}</td><td class="mono cg2">${fmt(w.net)}</td><td class="mono cb">${cyc}</td><td class="mono cg2">${pot}</td><td><button class="star on" data-id="${w.id}" onclick="toggleStar(${w.id},'${w.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}',${w.buy},${w.sell},${w.net})">⭐</button></td></tr>`;
+    });
+    h+='</tbody></table>';el.innerHTML=h;
+}
+
+window.addEventListener('load',fetchData);
+</script>
+</body>
+</html>

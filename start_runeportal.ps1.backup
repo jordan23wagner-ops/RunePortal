@@ -1,7 +1,7 @@
 ﻿# RunePortal Dev Startup — syncs repo, runs studio
 
 $repoPath = "C:\Users\Jordon\OneDrive\Desktop"
-$studioScript = "C:\Users\Jordon\runeportal_studio.py"
+$studioScript = "$repoPath\runeportal_studio.py"
 
 Set-Location $repoPath
 

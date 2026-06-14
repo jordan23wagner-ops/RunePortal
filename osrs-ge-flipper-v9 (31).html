@@ -1,0 +1,2792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OSRS GE Flip Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --bg2: #181818;
+    --bg3: #222;
+    --bg4: #2a2a2a;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f0;
+    --text2: #999;
+    --text3: #666;
+    --green: #4ade80;
+    --green-bg: rgba(74,222,128,0.1);
+    --green-border: rgba(74,222,128,0.25);
+    --yellow: #facc15;
+    --yellow-bg: rgba(250,204,21,0.1);
+    --yellow-border: rgba(250,204,21,0.25);
+    --red: #f87171;
+    --red-bg: rgba(248,113,113,0.1);
+    --red-border: rgba(248,113,113,0.25);
+    --blue: #60a5fa;
+    --blue-bg: rgba(96,165,250,0.1);
+    --blue-border: rgba(96,165,250,0.25);
+    --orange: #fb923c;
+    --orange-bg: rgba(251,146,60,0.1);
+    --orange-border: rgba(251,146,60,0.25);
+    --gold: #f59e0b;
+    --accent: #d97706;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+
+  html { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+  body { min-height: 100vh; }
+
+  /* ─── Layout ─── */
+  .app { max-width: 1400px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  /* ─── Header ─── */
+  .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .header-left {}
+  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--gold), var(--accent)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  .logo-text { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+  .logo-text span { color: var(--gold); }
+  .header-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  .header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .cash-wrap { display: flex; align-items: center; gap: 8px; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 6px 12px; }
+  .cash-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .cash-input { background: transparent; border: none; outline: none; font-size: 14px; font-weight: 600; color: var(--gold); width: 90px; font-family: inherit; }
+  .cash-input::placeholder { color: var(--text3); }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 12px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text2); cursor: pointer; transition: all 0.15s; font-family: inherit; white-space: nowrap; }
+  .btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+  .btn.spinning i { animation: spin 0.8s linear infinite; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .last-updated { font-size: 11px; color: var(--text3); }
+
+  /* ─── Sector chips ─── */
+  .sector-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .sector-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 2px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 9px; border-radius: 100px; border: 0.5px solid var(--border); background: var(--bg3); color: var(--text2); }
+  .chip.up { border-color: var(--green-border); background: var(--green-bg); color: var(--green); }
+  .chip.down { border-color: var(--red-border); background: var(--red-bg); color: var(--red); }
+  .chip.flat { border-color: var(--border); background: var(--bg3); color: var(--text3); }
+
+  /* ─── Summary cards ─── */
+  .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .sum-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .sum-card-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .sum-card-val { font-size: 22px; font-weight: 700; color: var(--text); }
+  .sum-card-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .sum-card-val.gold { color: var(--gold); }
+  .sum-card-val.green { color: var(--green); }
+
+  /* ─── Tabs ─── */
+  .tabs { display: flex; border-bottom: 0.5px solid var(--border); margin-bottom: 16px; gap: 0; overflow-x: auto; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 8px 16px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap; background: transparent; border-top: none; border-left: none; border-right: none; font-family: inherit; }
+  .tab.active { color: var(--text); border-bottom-color: var(--gold); font-weight: 600; }
+  .tab:hover:not(.active) { color: var(--text); }
+  .tab-count { display: inline-flex; align-items: center; justify-content: center; font-size: 10px; background: var(--bg3); border-radius: 100px; min-width: 18px; height: 16px; padding: 0 5px; color: var(--text3); }
+  .tab.active .tab-count { background: var(--gold); color: #000; font-weight: 700; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ─── Filter row ─── */
+  .filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-label { font-size: 11px; color: var(--text3); }
+  .search-box { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 5px 10px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; width: 180px; }
+  .search-box:focus { border-color: var(--border2); }
+  .search-box::placeholder { color: var(--text3); }
+  .sort-sel { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 5px 8px; color: var(--text2); font-size: 12px; cursor: pointer; font-family: inherit; outline: none; }
+  .sort-sel:focus { border-color: var(--border2); }
+
+  /* ─── Table ─── */
+  .table-wrap { overflow-x: auto; border: 0.5px solid var(--border); border-radius: var(--radius-lg); }
+  table { width: 100%; border-collapse: collapse; min-width: 820px; }
+  thead { background: var(--bg2); }
+  th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; border-bottom: 0.5px solid var(--border); cursor: pointer; user-select: none; }
+  th:hover { color: var(--text2); }
+  th.sorted { color: var(--gold); }
+  td { padding: 9px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr.data-row:hover td { background: var(--bg3); cursor: pointer; }
+  tr.detail-row td { background: var(--bg2); padding: 0; }
+
+  .item-name { font-weight: 600; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .item-name:hover { color: var(--gold); }
+
+  /* ─── Badges ─── */
+  .badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; letter-spacing: 0.3px; }
+  .badge-buy { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
+  .badge-hold { background: var(--yellow-bg); color: var(--yellow); border: 0.5px solid var(--yellow-border); }
+  .badge-dodge { background: var(--red-bg); color: var(--red); border: 0.5px solid var(--red-border); }
+  .badge-dump { background: var(--red-bg); color: var(--red); border: 0.5px solid var(--red-border); }
+  .badge-cap { background: var(--blue-bg); color: var(--blue); border: 0.5px solid var(--blue-border); font-size: 9px; margin-left: 4px; }
+  .badge-stale { background: var(--bg3); color: var(--text3); border: 0.5px solid var(--border); font-size: 9px; margin-left: 4px; }
+  .badge-cycle { background: var(--orange-bg); color: var(--orange); border: 0.5px solid var(--orange-border); font-size: 9px; margin-left: 4px; }
+
+  /* ─── Confidence bar ─── */
+  .conf-wrap { display: flex; align-items: center; gap: 6px; }
+  .conf-bar { width: 48px; height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+  .conf-fill { height: 100%; border-radius: 2px; }
+  .conf-high { background: var(--green); }
+  .conf-mid { background: var(--yellow); }
+  .conf-low { background: var(--red); }
+  .conf-num { font-size: 12px; color: var(--text3); min-width: 26px; }
+
+  /* ─── Age colors ─── */
+  .fresh { color: var(--green); }
+  .ok { color: var(--yellow); }
+  .stale { color: var(--red); }
+
+  .profit { color: var(--green); font-weight: 600; }
+  .roi-small { font-size: 11px; color: var(--text3); }
+
+  /* ─── Star button ─── */
+  .star-btn { background: transparent; border: none; cursor: pointer; color: var(--text3); font-size: 16px; padding: 2px 4px; transition: color 0.15s; line-height: 1; }
+  .star-btn:hover { color: var(--gold); }
+  .star-btn.on { color: var(--gold); }
+
+  /* ─── Detail drawer ─── */
+  .detail-drawer { padding: 16px; background: var(--bg2); border-top: 0.5px solid var(--border); }
+  .detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .detail-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .detail-close { background: transparent; border: none; cursor: pointer; color: var(--text3); font-size: 18px; padding: 2px; }
+  .detail-close:hover { color: var(--text); }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .det-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .det-lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .det-val { font-size: 16px; font-weight: 700; color: var(--text); }
+  .det-val.green { color: var(--green); }
+  .det-val.gold { color: var(--gold); }
+  .calc-section { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0 0; border-top: 0.5px solid var(--border); }
+  .calc-label { font-size: 12px; color: var(--text3); }
+  .calc-in { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 5px 10px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; width: 90px; }
+  .calc-in:focus { border-color: var(--border2); }
+  .calc-result { font-size: 16px; font-weight: 700; color: var(--green); }
+  .tip-text { font-size: 11px; color: var(--text3); margin-top: 8px; line-height: 1.5; }
+
+  /* ─── Empty / loading ─── */
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 14px; }
+  .loading { text-align: center; padding: 2rem 1rem; color: var(--text3); font-size: 13px; }
+  .error-msg { text-align: center; padding: 2rem; color: var(--red); font-size: 13px; background: var(--red-bg); border-radius: var(--radius); border: 0.5px solid var(--red-border); }
+
+  /* ─── Pager ─── */
+  .footer-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; flex-wrap: wrap; gap: 8px; }
+  .footer-note { font-size: 11px; color: var(--text3); }
+  .pager { display: flex; gap: 4px; }
+  .pager-btn { font-size: 12px; padding: 3px 9px; background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); color: var(--text3); cursor: pointer; font-family: inherit; transition: all 0.1s; }
+  .pager-btn:hover { color: var(--text); border-color: var(--border2); }
+  .pager-btn.on { background: var(--bg4); color: var(--gold); border-color: var(--gold); font-weight: 700; }
+
+  /* ─── Watchlist empty ─── */
+  .wl-empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 14px; }
+
+  /* ─── Trade log ─── */
+  .pl-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .pl-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+  .pl-lbl { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .pl-val { font-size: 20px; font-weight: 700; }
+  .pl-val.g { color: var(--green); }
+  .pl-val.r { color: var(--red); }
+  .log-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .log-form select, .log-form input { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 6px 10px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; }
+  .log-form input { width: 130px; }
+  .log-form input:focus, .log-form select:focus { border-color: var(--border2); }
+  .log-form input::placeholder { color: var(--text3); }
+  .log-btn { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 6px 12px; color: var(--text2); font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .log-btn:hover { background: var(--bg4); color: var(--text); }
+  .log-btn.danger:hover { color: var(--red); border-color: var(--red-border); }
+  .log-entry { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-type-buy { color: var(--green); font-weight: 700; font-size: 11px; width: 32px; }
+  .log-type-sell { color: var(--red); font-weight: 700; font-size: 11px; width: 32px; }
+  .log-item { flex: 1; font-weight: 600; }
+  .log-qty { color: var(--text3); font-size: 12px; }
+  .log-gp { font-weight: 700; color: var(--gold); }
+  .log-ts { font-size: 11px; color: var(--text3); }
+  .log-del { background: transparent; border: none; cursor: pointer; color: var(--text3); font-size: 14px; }
+  .log-del:hover { color: var(--red); }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+  /* ─── Tooltip ─── */
+  [data-tip] { position: relative; cursor: help; }
+  [data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: var(--bg4); border: 0.5px solid var(--border2); color: var(--text); font-size: 11px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; z-index: 999; pointer-events: none; }
+
+  @media (max-width: 640px) {
+    .header { flex-direction: column; }
+    .summary-row { grid-template-columns: 1fr 1fr; }
+  }
+
+/* ── Quest/Step Tooltips ── */
+.tt-wrap { display:inline-flex; align-items:center; gap:5px; }
+.tt-icon {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:15px; height:15px; border-radius:50%;
+  background:var(--gold); color:#111;
+  font-size:9px; font-weight:800; cursor:help; flex-shrink:0;
+  line-height:1; user-select:none; vertical-align:middle;
+}
+.tt-box {
+  position:fixed; z-index:9999;
+  width:280px; background:#1a1510; border:1px solid var(--gold);
+  border-radius:8px; padding:10px 12px; font-size:12px;
+  line-height:1.55; color:var(--text);
+  opacity:0; pointer-events:none;
+  transition:opacity .15s ease, visibility .15s ease;
+  visibility:hidden;
+  box-shadow:0 6px 24px rgba(0,0,0,.7);
+  top:0; left:0;
+}
+.tt-box.tt-visible { opacity:1; pointer-events:auto; visibility:visible; }
+.tt-title { font-weight:700; color:var(--gold); margin-bottom:6px; font-size:13px; }
+.tt-row { display:flex; gap:6px; margin-bottom:3px; }
+.tt-lbl { color:var(--text2); min-width:52px; flex-shrink:0; font-size:11px; }
+.tt-val { color:var(--text); font-size:12px; }
+.tt-xp  { color:var(--green); }
+.tt-time{ color:#87ceeb; }
+.tt-lock{ color:var(--yellow); }
+.tt-note{ color:#9a8060; font-size:11px; }
+.tt-hr  { border:none; border-top:1px solid rgba(255,255,255,0.07); margin:5px 0; }
+
+
+/* ── Quest Guide Cards ── */
+.guide-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); margin-bottom:8px; overflow:hidden; }
+.guide-card.done { opacity:0.6; }
+.guide-card-header { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; cursor:pointer; gap:8px; }
+.guide-card-header:hover { background:var(--bg3); }
+.guide-card-name { font-size:13px; font-weight:600; color:var(--text); }
+.guide-card-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.guide-chevron { font-size:13px; color:var(--text3); transition:transform .2s; }
+.guide-body { border-top:0.5px solid var(--border); padding:12px; }
+.guide-wrap { font-size:12px; }
+.guide-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:6px; gap:8px; }
+.guide-title { font-size:13px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.guide-links { display:flex; gap:6px; flex-wrap:wrap; }
+.guide-link { font-size:11px; padding:2px 8px; border-radius:4px; text-decoration:none; border:0.5px solid; display:inline-block; }
+.guide-link-wiki { color:var(--text2); border-color:var(--border2); }
+.guide-link-wiki:hover { color:var(--text); border-color:var(--text3); }
+.guide-link-yt { color:#ff4444; border-color:#ff444455; }
+.guide-link-yt:hover { background:#ff444411; }
+.guide-pct { font-size:13px; font-weight:700; color:var(--text3); flex-shrink:0; }
+.guide-pct.progress { color:var(--yellow); }
+.guide-pct.done { color:var(--green); }
+.guide-prog-bar { height:3px; background:var(--bg3); border-radius:2px; margin-bottom:10px; }
+.guide-prog-fill { height:100%; background:var(--gold); border-radius:2px; transition:width .3s; }
+.guide-done-msg { color:var(--green); font-size:12px; padding:4px 0; }
+.guide-phase { margin-bottom:12px; }
+.guide-phase-label { font-size:12px; font-weight:700; color:var(--text2); margin-bottom:4px; }
+.guide-phase-sub { font-size:11px; color:var(--text3); margin-bottom:8px; }
+.guide-phase-final { border-top:0.5px solid var(--border); padding-top:10px; }
+.guide-skill-row { display:flex; align-items:center; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--bg3); gap:8px; }
+.guide-skill-info { display:flex; align-items:center; gap:8px; }
+.guide-skill-name { font-weight:600; color:var(--text); min-width:80px; }
+.guide-skill-gap { font-size:11px; }
+.unmet-gap { color:var(--orange); }
+.guide-boost { color:var(--text3); }
+.guide-skill-links { display:flex; gap:4px; flex-shrink:0; }
+.guide-quest-row { display:flex; align-items:center; padding:5px 0; border-bottom:0.5px solid var(--bg3); gap:8px; }
+.guide-quest-row.done .guide-quest-name { color:var(--text3); text-decoration:line-through; }
+.guide-quest-check { width:13px; height:13px; border-radius:3px; border:1.5px solid var(--border2); flex-shrink:0; cursor:pointer; }
+.guide-quest-check:hover { border-color:var(--green); background:rgba(100,200,100,0.1); }
+.guide-quest-check.on { background:var(--green); border-color:var(--green); }
+.guide-quest-check.on::after { content:'✓'; display:flex; align-items:center; justify-content:center; color:#000; font-size:9px; font-weight:700; height:100%; }
+.guide-quest-info { flex:1; display:flex; align-items:center; gap:6px; min-width:0; }
+.guide-quest-name { color:var(--text2); font-size:12px; }
+.guide-quest-done-tag { font-size:10px; color:var(--green); flex-shrink:0; }
+.guide-quest-links { display:flex; gap:4px; flex-shrink:0; }
+.guide-remove-btn { font-size:12px; color:#cc3333; cursor:pointer; padding:2px 5px; border-radius:3px; transition:color .12s,background .12s; flex-shrink:0; }
+.guide-remove-btn:hover { color:#ff4444; background:#cc333322; }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ─── Header ─── -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon">💰</div>
+        <div class="logo-text">OSRS <span>GE</span> Tracker</div>
+      </div>
+      <div class="header-sub">Live margins · 2% tax included · OSRS Wiki Real-Time API · Data updates every 60s</div>
+    </div>
+    <div class="header-right">
+      <div class="cash-wrap">
+        <span class="cash-label">Cash stack</span>
+        <input class="cash-input" type="text" id="cashInput" value="" placeholder="e.g. 300M" />
+        <i class="ti ti-coin" style="color:var(--gold);font-size:15px" aria-hidden="true"></i>
+      </div>
+      <button class="btn" id="refreshBtn" onclick="loadAll()">
+        <i class="ti ti-refresh" id="refreshIcon" style="font-size:14px" aria-hidden="true"></i>Refresh
+      </button>
+      <span class="last-updated" id="lastUpdated">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ─── Sector health ─── -->
+  <div class="sector-row" id="sectorRow">
+    <span class="sector-label">Sectors</span>
+    <span class="chip">Loading…</span>
+  </div>
+
+  <!-- ─── Summary cards ─── -->
+  <div class="summary-row" id="summaryRow">
+    <div class="sum-card"><div class="sum-card-label">Quick flips</div><div class="sum-card-val gold" id="s-quick">–</div><div class="sum-card-sub">Available now</div></div>
+    <div class="sum-card"><div class="sum-card-label">Spread plays</div><div class="sum-card-val gold" id="s-spread">–</div><div class="sum-card-sub">≥200k net/unit</div></div>
+    <div class="sum-card"><div class="sum-card-label">Overnight</div><div class="sum-card-val gold" id="s-overnight">–</div><div class="sum-card-sub">Set &amp; forget</div></div>
+    <div class="sum-card"><div class="sum-card-label">Safe flips</div><div class="sum-card-val green" id="s-safe">–</div><div class="sum-card-sub">Conf≥70 · AFK ready</div></div>
+    <div class="sum-card"><div class="sum-card-label">Best quick GP</div><div class="sum-card-val green" id="s-topgp">–</div><div class="sum-card-sub">Max/cycle</div></div>
+    <div class="sum-card"><div class="sum-card-label">Best spread GP</div><div class="sum-card-val green" id="s-topspread">–</div><div class="sum-card-sub">Net/unit</div></div>
+  </div>
+
+  <!-- ─── Tabs ─── -->
+  <div class="tabs">
+    <button class="tab active" id="tab-quick" onclick="switchTab('quick')">
+      <i class="ti ti-bolt" style="font-size:13px" aria-hidden="true"></i>Quick flips
+      <span class="tab-count" id="cnt-quick">–</span>
+    </button>
+    <button class="tab" id="tab-spread" onclick="switchTab('spread')">
+      <i class="ti ti-trending-up" style="font-size:13px" aria-hidden="true"></i>Spread plays
+      <span class="tab-count" id="cnt-spread">–</span>
+    </button>
+    <button class="tab" id="tab-overnight" onclick="switchTab('overnight')">
+      <i class="ti ti-moon" style="font-size:13px" aria-hidden="true"></i>Overnight
+      <span class="tab-count" id="cnt-overnight">–</span>
+    </button>
+    <button class="tab" id="tab-safe" onclick="switchTab('safe')">
+      <i class="ti ti-shield-check" style="font-size:13px" aria-hidden="true"></i>Safe flips
+      <span class="tab-count" id="cnt-safe">–</span>
+    </button>
+    <button class="tab" id="tab-watchlist" onclick="switchTab('watchlist')">
+      <i class="ti ti-star" style="font-size:13px" aria-hidden="true"></i>Watchlist
+      <span class="tab-count" id="cnt-watch">0</span>
+    </button>
+    <button class="tab" id="tab-log" onclick="switchTab('log')">
+      <i class="ti ti-list-details" style="font-size:13px" aria-hidden="true"></i>Trade log
+    </button>
+    <button class="tab" id="tab-companion" onclick="switchTab('companion')">
+      <i class="ti ti-map" style="font-size:13px" aria-hidden="true"></i>Quest Guide
+    </button>
+  </div>
+
+  <!-- ─── Quick Flips ─── -->
+  <div class="panel active" id="panel-quick">
+    <div class="filter-row">
+      <i class="ti ti-search" style="color:var(--text3);font-size:14px" aria-hidden="true"></i>
+      <input class="search-box" type="text" id="srch-quick" placeholder="Search items…" oninput="renderTable('quick')" />
+      <span class="filter-label">Sort:</span>
+      <select class="sort-sel" id="sort-quick" onchange="renderTable('quick')">
+        <option value="confidence">Confidence</option>
+        <option value="max_gp">Max GP/cycle</option>
+        <option value="roi">ROI %</option>
+        <option value="net">Net/unit</option>
+        <option value="vol">Volume</option>
+      </select>
+      <span class="filter-label">Vol:</span>
+      <select class="sort-sel" id="vol-win" onchange="processItems()">
+        <option value="1h">1h actual</option>
+        <option value="1d">1d estimate</option>
+      </select>
+      <span class="filter-label">Min conf:</span>
+      <select class="sort-sel" id="minconf" onchange="renderTable('quick')">
+        <option value="0">All</option>
+        <option value="35">35+ (BUY/HOLD)</option>
+        <option value="60">60+ (BUY only)</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th></th>
+          <th>Item</th>
+          <th>Signal</th>
+          <th data-tip="Last instant-buy price — your sell target">Buy price</th>
+          <th data-tip="Last instant-sell price — your buy offer price">Sell price</th>
+          <th data-tip="Profit per unit after 2% GE tax">Net/unit</th>
+          <th>ROI %</th>
+          <th>Limit</th>
+          <th data-tip="Max GP for one full 4-hour cycle at your cash stack">Max GP</th>
+          <th data-tip="Composite score: volume(40%) + freshness(10%) + spread quality(20%) + balance(30%)">Confidence</th>
+          <th data-tip="1h actual trade volume (buy side + sell side)">Volume</th>
+          <th data-tip="Buy/sell volume balance. 1.0 = perfect. &lt;0.2 = one-sided dump">Balance</th>
+          <th data-tip="Time since last buy transaction / last sell transaction">Ages (hi/lo)</th>
+        </tr></thead>
+        <tbody id="body-quick"><tr><td colspan="13" class="loading"><i class="ti ti-loader" style="animation:spin 1s linear infinite;font-size:18px" aria-hidden="true"></i><br>Loading live data…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="footer-row">
+      <span class="footer-note" id="note-quick"></span>
+      <div class="pager" id="pager-quick"></div>
+    </div>
+  </div>
+
+  <!-- ─── Spread Plays ─── -->
+  <div class="panel" id="panel-spread">
+    <div class="filter-row">
+      <i class="ti ti-search" style="color:var(--text3);font-size:14px" aria-hidden="true"></i>
+      <input class="search-box" type="text" id="srch-spread" placeholder="Search items…" oninput="renderTable('spread')" />
+      <span class="filter-label">Sort:</span>
+      <select class="sort-sel" id="sort-spread" onchange="renderTable('spread')">
+        <option value="max_gp">Max GP/cycle</option>
+        <option value="net">Net/unit</option>
+        <option value="roi">ROI %</option>
+        <option value="confidence">Confidence</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th></th>
+          <th>Item</th>
+          <th>Signal</th>
+          <th>Buy price</th>
+          <th>Sell price</th>
+          <th>Net/unit</th>
+          <th>ROI %</th>
+          <th>Limit</th>
+          <th>Max GP</th>
+          <th>Confidence</th>
+          <th>1h Volume</th>
+          <th data-tip="% of your cash stack this flip requires at full limit">Capital %</th>
+          <th>Ages (hi/lo)</th>
+        </tr></thead>
+        <tbody id="body-spread"><tr><td colspan="13" class="loading"><i class="ti ti-loader" style="animation:spin 1s linear infinite;font-size:18px" aria-hidden="true"></i><br>Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="footer-row">
+      <span class="footer-note" id="note-spread"></span>
+      <div class="pager" id="pager-spread"></div>
+    </div>
+  </div>
+
+  <!-- ─── Overnight ─── -->
+  <div class="panel" id="panel-overnight">
+    <div class="filter-row">
+      <i class="ti ti-search" style="color:var(--text3);font-size:14px" aria-hidden="true"></i>
+      <input class="search-box" type="text" id="srch-overnight" placeholder="Search items…" oninput="renderTable('overnight')" />
+      <span class="filter-label">Sort:</span>
+      <select class="sort-sel" id="sort-overnight" onchange="renderTable('overnight')">
+        <option value="net">Net/unit</option>
+        <option value="max_gp">Max GP/cycle</option>
+        <option value="roi">ROI %</option>
+        <option value="confidence">Confidence</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th></th>
+          <th>Item</th>
+          <th>Signal</th>
+          <th>Buy price</th>
+          <th>Sell price</th>
+          <th>Net/unit</th>
+          <th>ROI %</th>
+          <th>Limit</th>
+          <th>Max GP</th>
+          <th>Confidence</th>
+          <th>1h Volume</th>
+          <th>Ages (hi/lo)</th>
+        </tr></thead>
+        <tbody id="body-overnight"><tr><td colspan="13" class="loading"><i class="ti ti-loader" style="animation:spin 1s linear infinite;font-size:18px" aria-hidden="true"></i><br>Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="footer-row">
+      <span class="footer-note" id="note-overnight"></span>
+      <div class="pager" id="pager-overnight"></div>
+    </div>
+  </div>
+
+  <!-- ─── Watchlist ─── -->
+  <div class="panel" id="panel-safe">
+    <div style="background:var(--green-bg);border:0.5px solid var(--green-border);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:8px;">
+      <i class="ti ti-shield-check" style="font-size:15px" aria-hidden="true"></i>
+      <span><strong>Safe Flips</strong> — Confidence ≥70 · Volume ≥5× limit · Both sides traded in the last 2h · Balanced market · ROI 0.5–15% · No dump signal. Place these and go do literally anything else.</span>
+    </div>
+    <div class="filter-row">
+      <i class="ti ti-search" style="color:var(--text3);font-size:14px" aria-hidden="true"></i>
+      <input class="search-box" type="text" id="srch-safe" placeholder="Search items…" oninput="renderTable('safe')" />
+      <span class="filter-label">Sort:</span>
+      <select class="sort-sel" id="sort-safe" onchange="renderTable('safe')">
+        <option value="confidence">Confidence</option>
+        <option value="max_gp">Max GP/cycle</option>
+        <option value="roi">ROI %</option>
+        <option value="net">Net/unit</option>
+        <option value="vol">Volume</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th></th>
+          <th>Item</th>
+          <th>Signal</th>
+          <th>Buy price</th>
+          <th>Sell price</th>
+          <th>Net/unit</th>
+          <th>ROI %</th>
+          <th>Limit</th>
+          <th>Max GP</th>
+          <th>Confidence</th>
+          <th>Volume</th>
+          <th>Balance</th>
+          <th>Ages (hi/lo)</th>
+        </tr></thead>
+        <tbody id="body-safe"><tr><td colspan="13" class="loading"><i class="ti ti-loader" style="animation:spin 1s linear infinite;font-size:18px" aria-hidden="true"></i><br>Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="footer-row">
+      <span class="footer-note" id="note-safe"></span>
+      <div class="pager" id="pager-safe"></div>
+    </div>
+  </div>
+
+  <!-- ─── Watchlist ─── -->
+  <div class="panel" id="panel-watchlist">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th></th><th>Item</th><th>Signal</th><th>Buy</th><th>Sell</th>
+          <th>Net/unit</th><th>ROI %</th><th>Limit</th><th>Max GP</th>
+          <th>Confidence</th><th>Ages (hi/lo)</th>
+        </tr></thead>
+        <tbody id="body-watchlist"><tr><td colspan="11" class="wl-empty">Star any item from the other tabs to track it here.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─── Trade Log ─── -->
+  <div class="panel" id="panel-log">
+    <div class="pl-row" id="pl-summary"></div>
+    <div class="log-form">
+      <select id="logType"><option value="buy">Buy</option><option value="sell">Sell</option></select>
+      <input type="text" id="logItem" placeholder="Item name" style="width:160px" />
+      <input type="number" id="logPrice" placeholder="Price (gp)" />
+      <input type="number" id="logQty" placeholder="Qty" />
+      <button class="log-btn" onclick="addLog()">
+        <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i> Add trade
+      </button>
+      <button class="log-btn danger" onclick="clearLog()">
+        <i class="ti ti-trash" style="font-size:13px" aria-hidden="true"></i> Clear all
+      </button>
+    </div>
+    <div id="log-list"></div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+'use strict';
+const API = 'https://prices.runescape.wiki/api/v1/osrs';
+const UA  = {'User-Agent': 'osrs-ge-flipper-standalone/1.0 - personal use'};
+const TAX_CAP = 5_000_000;
+const PER_PAGE = 30;
+
+let mapping={}, latest={}, vol1h={};
+let allItems={quick:[],spread:[],overnight:[],safe:[]};
+let watchlist = new Set(JSON.parse(localStorage.getItem('osrs_wl')||'[]'));
+let tradeLog   = JSON.parse(localStorage.getItem('osrs_log')||'[]');
+let pages={quick:1,spread:1,overnight:1,safe:1};
+let cashStack  = 0;
+let openDetail = null;
+let autoTimer  = null;
+
+// Items excluded from flipping — bonds require a 10% conversion fee not reflected in GE spread
+const BLACKLIST_IDS = new Set(['13190']); // Old school bond
+const BLACKLIST_NAMES = ['old school bond','bond'];
+
+/* ─── Helpers ─── */
+function parseCash(s){
+  s=(s||'').replace(/,/g,'').toUpperCase().trim();
+  if(s.endsWith('B')) return parseFloat(s)*1e9;
+  if(s.endsWith('M')) return parseFloat(s)*1e6;
+  if(s.endsWith('K')) return parseFloat(s)*1e3;
+  return parseFloat(s)||0;
+}
+function fmtGP(n){
+  if(n===null||n===undefined||isNaN(n)) return '–';
+  const a=Math.abs(n);
+  if(a>=1e9) return (n/1e9).toFixed(2)+'B';
+  if(a>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(a>=10000) return (n/1e3).toFixed(1)+'K';
+  // Under 10k: always show exact number with comma formatting
+  return Math.round(n).toLocaleString();
+}
+function fmtAge(h){
+  if(!h&&h!==0) return '?';
+  if(h<0.1) return '<6m';
+  if(h<1) return Math.round(h*60)+'m';
+  return h.toFixed(1)+'h';
+}
+function ageClass(h){ return h<1?'fresh':h<4?'ok':'stale'; }
+function signalBadge(conf,isDump){
+  if(isDump) return '<span class="badge badge-dump">DUMP</span>';
+  if(conf>=60) return '<span class="badge badge-buy">BUY</span>';
+  if(conf>=35) return '<span class="badge badge-hold">HOLD</span>';
+  return '<span class="badge badge-dodge">DODGE</span>';
+}
+async function gFetch(url){
+  const r=await fetch(url,{headers:UA}); return r.json();
+}
+
+/* ─── Load ─── */
+async function loadAll(){
+  const btn=document.getElementById('refreshBtn');
+  const icon=document.getElementById('refreshIcon');
+  btn.disabled=true; icon.className='ti ti-refresh spinning';
+  cashStack=parseCash(document.getElementById('cashInput').value)||0;
+
+  try {
+    const [mapRaw,latRaw,v1hRaw]=await Promise.all([
+      gFetch(`${API}/mapping`),
+      gFetch(`${API}/latest`),
+      gFetch(`${API}/1h`)
+    ]);
+    mapping={};
+    mapRaw.forEach(i=>{ mapping[String(i.id)]=i; });
+    latest=latRaw.data||{};
+    vol1h=v1hRaw.data||{};
+    processItems();
+    renderSectors();
+    const now=new Date();
+    document.getElementById('lastUpdated').textContent='Updated '+now.toLocaleTimeString();
+  } catch(e){
+    document.getElementById('lastUpdated').textContent='⚠ API error — check internet connection';
+  }
+  btn.disabled=false; icon.className='ti ti-refresh';
+
+  if(autoTimer) clearTimeout(autoTimer);
+  autoTimer=setTimeout(loadAll,60000);
+}
+
+/* ─── Process ─── */
+function processItems(){
+  const now=Date.now()/1000;
+  const volWin=document.getElementById('vol-win')?.value||'1h';
+  const q=[],sp=[],on=[],sf=[];
+
+  for(const [iid,pd] of Object.entries(latest)){
+    const meta=mapping[iid]; if(!meta) continue;
+    const limit=meta.limit; if(!limit||limit===0) continue;
+
+    // Exclude blacklisted items (bonds etc — hidden fees not in spread)
+    if(BLACKLIST_IDS.has(iid)) continue;
+    const nameLower=(meta.name||'').toLowerCase();
+    if(BLACKLIST_NAMES.some(b=>nameLower===b)) continue;
+
+    const lo=pd.low,hi=pd.high;
+    if(!lo||!hi||lo<=0||hi<=0) continue;
+    if(lo>cashStack) continue;
+
+    const hiAge=(now-(pd.highTime||0))/3600;
+    const loAge=(now-(pd.lowTime||0))/3600;
+
+    let tax=Math.min(hi*0.02,TAX_CAP);
+    if(hi<50) tax=Math.floor(hi*0.02);
+    const net=hi-lo-tax;
+    if(net<=0) continue;
+
+    const roi=(net/lo)*100;
+    const ve=vol1h[iid]||{};
+    const vh=(ve.highPriceVolume||0);
+    const vl=(ve.lowPriceVolume||0);
+    const baseVol=vh+vl;
+    const totalVol=volWin==='1d'?baseVol*24:baseVol;
+
+    if(roi>15&&baseVol<20) continue;
+
+    const balance=(vh>0&&vl>0)?Math.min(vh,vl)/Math.max(vh,vl):0;
+    const isDump=balance<0.15&&vl>vh*3;
+
+    const affordable=Math.min(limit,Math.floor(cashStack/lo));
+    const maxGP=Math.round(net*affordable);
+    const capitalPct=Math.round(lo*limit/cashStack*100);
+
+    const vScore=Math.min(baseVol/Math.max(limit,1)/10,1)*40;
+    const fHi=Math.max(0,1-hiAge/4),fLo=Math.max(0,1-loAge/4);
+    const freshScore=(fHi+fLo)/2*10;
+    const spr=(net/lo)*100;
+    const spreadScore=(spr>=2&&spr<=8)?20:(spr<2?(spr/2*20):Math.max(0,20-(spr-8)*2));
+    const balScore=balance*30;
+    const conf=Math.min(100,Math.round(vScore+freshScore+spreadScore+balScore));
+
+    const e={
+      id:iid, name:meta.name||'?', lo, hi,
+      net:Math.round(net), roi:Math.round(roi*100)/100,
+      limit, maxGP, affordable, conf, totalVol, baseVol,
+      balance:Math.round(balance*100)/100,
+      hiAge:Math.round(hiAge*10)/10, loAge:Math.round(loAge*10)/10,
+      capitalPct, isDump, members:meta.members
+    };
+
+    const freshBoth=hiAge<4&&loAge<4;
+    const freshOver=hiAge<24&&loAge<24;
+
+    // SAFE FLIPS: strict criteria for set-and-forget slots
+    // conf>=70, balance>=0.4, both sides <2h old, vol>=5x limit, roi 0.5-15%, not a dump
+    const isSafe = (
+      conf >= 70 &&
+      balance >= 0.4 &&
+      hiAge < 2 && loAge < 2 &&
+      baseVol >= limit * 5 &&
+      roi >= 0.5 && roi <= 15 &&
+      !isDump
+    );
+
+    if(net>=200_000&&freshBoth&&baseVol>=Math.max(4,Math.floor(limit/10))){
+      sp.push(e);
+    } else if(freshBoth&&baseVol>=limit*2&&roi>=0.5&&limit>=100){
+      q.push(e);
+    } else if(freshOver&&net>=50_000&&limit>=8){
+      on.push(e);
+    }
+    // Safe flips can overlap with any category — separate list
+    if(isSafe) sf.push(e);
+  }
+
+  allItems={quick:q,spread:sp,overnight:on,safe:sf};
+  document.getElementById('cnt-quick').textContent=q.length;
+  document.getElementById('cnt-spread').textContent=sp.length;
+  document.getElementById('cnt-overnight').textContent=on.length;
+  document.getElementById('cnt-safe').textContent=sf.length;
+  document.getElementById('cnt-watch').textContent=watchlist.size;
+
+  document.getElementById('s-quick').textContent=q.length;
+  document.getElementById('s-spread').textContent=sp.length;
+  document.getElementById('s-overnight').textContent=on.length;
+  document.getElementById('s-safe').textContent=sf.length;
+  const topQ=q.slice().sort((a,b)=>b.maxGP-a.maxGP)[0];
+  const topS=sp.slice().sort((a,b)=>b.net-a.net)[0];
+  document.getElementById('s-topgp').textContent=topQ?fmtGP(topQ.maxGP):'–';
+  document.getElementById('s-topspread').textContent=topS?fmtGP(topS.net):' –';
+
+  ['quick','spread','overnight','safe'].forEach(t=>{pages[t]=1;renderTable(t);});
+  renderWatchlist();
+}
+
+/* ─── Sectors ─── */
+function renderSectors(){
+  const defs={
+    Runes:['560','561','562','563','564','565','566'],
+    Potions:['2434','3024','6685','12695'],
+    Bones:['536','22124'],
+    Ammo:['11230','21316','9244','9243'],
+    Gear:['4151','11832','11834','13576'],
+    Food:['385','13441','391'],
+  };
+  const now=Date.now()/1000;
+  let html='<span class="sector-label">Market</span>';
+  for(const [name,ids] of Object.entries(defs)){
+    const pts=ids.map(id=>{
+      const pd=latest[id]; if(!pd) return null;
+      const hi=pd.high,lo=pd.low; if(!hi||!lo) return null;
+      return {mid:(hi+lo)/2, age:(now-(pd.highTime||0))/3600};
+    }).filter(Boolean);
+    if(pts.length<2){html+=`<span class="chip flat">${name}</span>`;continue;}
+    const freshPts=pts.filter(p=>p.age<2);
+    const cls=freshPts.length>0?'up':'flat';
+    const arrow=cls==='up'?'ti-arrow-up':'ti-arrow-right';
+    html+=`<span class="chip ${cls}"><i class="ti ${arrow}" style="font-size:10px" aria-hidden="true"></i>${name}</span>`;
+  }
+  document.getElementById('sectorRow').innerHTML=html;
+}
+
+/* ─── Tables ─── */
+function getSorted(type){
+  const key=document.getElementById('sort-'+type)?.value||(type==='quick'||type==='safe'?'confidence':'max_gp');
+  const srch=(document.getElementById('srch-'+type)?.value||'').toLowerCase();
+  const minConf=parseInt(document.getElementById('minconf')?.value||'0');
+  let items=[...allItems[type]];
+  if(srch) items=items.filter(e=>e.name.toLowerCase().includes(srch));
+  if(type==='quick'&&minConf>0) items=items.filter(e=>e.conf>=minConf);
+  items.sort((a,b)=>{
+    if(key==='confidence') return b.conf-a.conf;
+    if(key==='max_gp')     return b.maxGP-a.maxGP;
+    if(key==='roi')        return b.roi-a.roi;
+    if(key==='net')        return b.net-a.net;
+    if(key==='vol')        return b.totalVol-a.totalVol;
+    return b.maxGP-a.maxGP;
+  });
+  return items;
+}
+
+function renderTable(type){
+  const items=getSorted(type);
+  const pg=pages[type];
+  const start=(pg-1)*PER_PAGE;
+  const page=items.slice(start,start+PER_PAGE);
+  const tbody=document.getElementById('body-'+type);
+  const isSpread=type==='spread';
+  const isQuick=type==='quick';
+  const isSafe=type==='safe';
+
+  if(!page.length){
+    tbody.innerHTML=`<tr><td colspan="13" class="empty">No items match your current filters.</td></tr>`;
+    renderPager(type,0); document.getElementById('note-'+type).textContent=''; return;
+  }
+
+  tbody.innerHTML=page.map(e=>{
+    const starred=watchlist.has(e.id);
+    const cfCls=e.conf>=60?'conf-high':e.conf>=35?'conf-mid':'conf-low';
+    const capBadge=isSpread&&e.capitalPct>75?'<span class="badge badge-cap">High cap</span>':'';
+    const staleBadge=(isSpread&&(e.hiAge>2||e.loAge>2))?'<span class="badge badge-stale">Stale</span>':'';
+    const isOpen=openDetail===e.id;
+    const extraCols=isSpread
+      ?`<td>${e.capitalPct}%</td>`
+      :(isQuick||isSafe)?`<td>${e.balance.toFixed(2)}</td>`:''
+
+    return `<tr class="data-row${isOpen?' active':''}" onclick="toggleDetail('${e.id}','${type}')">
+      <td onclick="event.stopPropagation()">
+        <button class="star-btn${starred?' on':''}" onclick="toggleWatch('${e.id}')" aria-label="${starred?'Unstar':'Star'} ${e.name}">
+          <i class="ti ti-star${starred?'-filled':''}" aria-hidden="true"></i>
+        </button>
+      </td>
+      <td>
+        <span class="item-name" title="${e.name}">${e.name}</span>
+        ${capBadge}${staleBadge}
+      </td>
+      <td>${signalBadge(e.conf,e.isDump)}</td>
+      <td>${fmtGP(e.lo)}</td>
+      <td>${fmtGP(e.hi)}</td>
+      <td class="profit">+${fmtGP(e.net)}</td>
+      <td><span class="roi-small">${e.roi.toFixed(2)}%</span></td>
+      <td>${e.limit.toLocaleString()}</td>
+      <td class="profit">+${fmtGP(e.maxGP)}</td>
+      <td>
+        <div class="conf-wrap">
+          <div class="conf-bar"><div class="conf-fill ${cfCls}" style="width:${e.conf}%"></div></div>
+          <span class="conf-num">${e.conf}</span>
+        </div>
+      </td>
+      <td>${e.totalVol.toLocaleString()}</td>
+      ${extraCols}
+      <td>
+        <span class="${ageClass(e.hiAge)}">${fmtAge(e.hiAge)}</span>/<span class="${ageClass(e.loAge)}">${fmtAge(e.loAge)}</span>
+      </td>
+    </tr>
+    ${isOpen?`<tr class="detail-row"><td colspan="13">${buildDetail(e)}</td></tr>`:''}`
+  }).join('');
+
+  renderPager(type,items.length);
+  const end=Math.min(start+PER_PAGE,items.length);
+  document.getElementById('note-'+type).textContent=`Showing ${start+1}–${end} of ${items.length} items`;
+}
+
+function buildDetail(e){
+  const tax=Math.min(e.hi*0.02,TAX_CAP);
+  const initQty=Math.min(e.affordable,e.limit);
+  return `<div class="detail-drawer">
+    <div class="detail-header">
+      <div class="detail-title">${e.name} — Flip Calculator</div>
+      <button class="detail-close" onclick="closeDetail()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+    <div class="detail-grid">
+      <div class="det-card"><div class="det-lbl">Place buy offer at</div><div class="det-val gold">${fmtGP(e.lo+1)} gp</div></div>
+      <div class="det-card"><div class="det-lbl">Place sell offer at</div><div class="det-val gold">${fmtGP(e.hi-1)} gp</div></div>
+      <div class="det-card"><div class="det-lbl">GE tax per unit</div><div class="det-val">${fmtGP(Math.round(tax))} gp</div></div>
+      <div class="det-card"><div class="det-lbl">Net profit/unit</div><div class="det-val green">+${fmtGP(e.net)}</div></div>
+      <div class="det-card"><div class="det-lbl">Buy limit</div><div class="det-val">${e.limit.toLocaleString()}</div></div>
+      <div class="det-card"><div class="det-lbl">You can afford</div><div class="det-val">${e.affordable.toLocaleString()}</div></div>
+      <div class="det-card"><div class="det-lbl">Max GP / cycle</div><div class="det-val green">+${fmtGP(e.maxGP)}</div></div>
+      <div class="det-card"><div class="det-lbl">Confidence score</div><div class="det-val">${e.conf} / 100</div></div>
+    </div>
+    <div class="calc-section">
+      <span class="calc-label">Qty to flip:</span>
+      <input class="calc-in" type="number" id="cq-${e.id}" value="${initQty}" min="1" max="${e.limit}" oninput="calcP('${e.id}',${e.net})" />
+      <span style="color:var(--text3)">→</span>
+      <span class="calc-result" id="cr-${e.id}">+${fmtGP(e.net*initQty)}</span>
+      <span class="calc-label">GP profit</span>
+    </div>
+    <div class="tip-text">
+      💡 Buy at <strong>${fmtGP(e.lo+1)}</strong> (1 gp above insta-sell) · Sell at <strong>${fmtGP(e.hi-1)}</strong> (1 gp below insta-buy) · Tax applies on sell only · Limit resets every 4 hours
+    </div>
+  </div>`;
+}
+
+function calcP(id,netPer){
+  const qty=parseInt(document.getElementById('cq-'+id)?.value)||0;
+  const el=document.getElementById('cr-'+id);
+  if(el) el.textContent='+'+fmtGP(Math.round(netPer*qty));
+}
+
+function toggleDetail(id,type){
+  openDetail=openDetail===id?null:id;
+  ['quick','spread','overnight','safe'].forEach(t=>{ if(t===type||openDetail===null) renderTable(t); });
+}
+
+function closeDetail(){ openDetail=null; ['quick','spread','overnight','safe'].forEach(renderTable); }
+
+function renderPager(type,total){
+  const tp=Math.ceil(total/PER_PAGE);
+  const el=document.getElementById('pager-'+type);
+  if(tp<=1){el.innerHTML='';return;}
+  let h='';
+  const cur=pages[type];
+  if(cur>1) h+=`<button class="pager-btn" onclick="goPage('${type}',${cur-1})"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>`;
+  for(let i=Math.max(1,cur-2);i<=Math.min(tp,cur+2);i++){
+    h+=`<button class="pager-btn${i===cur?' on':''}" onclick="goPage('${type}',${i})">${i}</button>`;
+  }
+  if(cur<tp) h+=`<button class="pager-btn" onclick="goPage('${type}',${cur+1})"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>`;
+  el.innerHTML=h;
+}
+
+function goPage(type,n){ pages[type]=n; openDetail=null; renderTable(type); }
+
+/* ─── Tabs ─── */
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('panel-'+t).classList.add('active');
+  if(t==='log') renderLog();
+}
+
+/* ─── Watchlist ─── */
+function toggleWatch(id){
+  if(watchlist.has(id)) watchlist.delete(id);
+  else watchlist.add(id);
+  localStorage.setItem('osrs_wl',JSON.stringify([...watchlist]));
+  document.getElementById('cnt-watch').textContent=watchlist.size;
+  renderWatchlist();
+  ['quick','spread','overnight','safe'].forEach(renderTable);
+}
+
+function renderWatchlist(){
+  const tbody=document.getElementById('body-watchlist');
+  document.getElementById('cnt-watch').textContent=watchlist.size;
+  if(!watchlist.size){
+    tbody.innerHTML='<tr><td colspan="11" class="wl-empty">Star items from any tab to track them here.</td></tr>';
+    return;
+  }
+  const all=[...allItems.quick,...allItems.spread,...allItems.overnight,...allItems.safe];
+  // Show ALL watchlist IDs — live data if available, stub row if not
+  const liveMap=Object.fromEntries(all.map(e=>[e.id,e]));
+  const rows=[...watchlist].map(id=>({ e:liveMap[id]||null, id }));
+  tbody.innerHTML=rows.map(({e,id})=>{
+    if(!e) return `<tr class="data-row">
+      <td><button class="star-btn on" onclick="event.stopPropagation();toggleWatch('${id}')" title="Remove from watchlist" style="color:#cc3333;font-size:14px">✕</button></td>
+      <td colspan="10" style="color:var(--text3);font-size:12px">No margin data right now. <span style="color:#cc3333;cursor:pointer;text-decoration:underline" onclick="toggleWatch('${id}')">Remove</span></td>
+    </tr>`;
+    const cfCls=e.conf>=60?'conf-high':e.conf>=35?'conf-mid':'conf-low';
+    return `<tr class="data-row" onclick="switchTab('quick')">
+      <td><button class="star-btn on" onclick="event.stopPropagation();toggleWatch('${e.id}')" title="Remove from watchlist" style="color:#cc3333;font-size:14px">✕</button></td>
+      <td><span class="item-name">${e.name}</span></td>
+      <td>${signalBadge(e.conf,e.isDump)}</td>
+      <td>${fmtGP(e.lo)}</td><td>${fmtGP(e.hi)}</td>
+      <td class="profit">+${fmtGP(e.net)}</td>
+      <td><span class="roi-small">${e.roi.toFixed(2)}%</span></td>
+      <td>${e.limit.toLocaleString()}</td>
+      <td class="profit">+${fmtGP(e.maxGP)}</td>
+      <td><div class="conf-wrap"><div class="conf-bar"><div class="conf-fill ${cfCls}" style="width:${e.conf}%"></div></div><span class="conf-num">${e.conf}</span></div></td>
+      <td><span class="${ageClass(e.hiAge)}">${fmtAge(e.hiAge)}</span>/<span class="${ageClass(e.loAge)}">${fmtAge(e.loAge)}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── Trade Log ─── */
+function addLog(){
+  const type=document.getElementById('logType').value;
+  const item=document.getElementById('logItem').value.trim();
+  const price=parseInt(document.getElementById('logPrice').value)||0;
+  const qty=parseInt(document.getElementById('logQty').value)||0;
+  if(!item||!price||!qty) return;
+  tradeLog.unshift({id:Date.now(),type,item,price,qty,ts:new Date().toLocaleString()});
+  localStorage.setItem('osrs_log',JSON.stringify(tradeLog));
+  document.getElementById('logItem').value='';
+  document.getElementById('logPrice').value='';
+  document.getElementById('logQty').value='';
+  renderLog();
+}
+
+function removeLog(id){
+  tradeLog=tradeLog.filter(e=>e.id!==id);
+  localStorage.setItem('osrs_log',JSON.stringify(tradeLog));
+  renderLog();
+}
+
+function clearLog(){
+  if(!confirm('Clear all trade log entries?')) return;
+  tradeLog=[]; localStorage.setItem('osrs_log','[]'); renderLog();
+}
+
+function renderLog(){
+  const list=document.getElementById('log-list');
+  const sumEl=document.getElementById('pl-summary');
+  if(!tradeLog.length){
+    sumEl.innerHTML=''; list.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text3)">No trades logged yet. Add buys and sells above to track your P&amp;L.</div>';
+    return;
+  }
+  let gpIn=0,gpOut=0,pl=0,count=0;
+  tradeLog.forEach(e=>{
+    const gp=e.price*e.qty; count++;
+    if(e.type==='buy'){ gpIn+=gp; pl-=gp; }
+    else { const tax=Math.min(e.price*0.02,TAX_CAP); const net=(e.price-tax)*e.qty; gpOut+=net; pl+=net; }
+  });
+  sumEl.innerHTML=`
+    <div class="pl-card"><div class="pl-lbl">GP invested</div><div class="pl-val">${fmtGP(gpIn)}</div></div>
+    <div class="pl-card"><div class="pl-lbl">GP returned</div><div class="pl-val">${fmtGP(gpOut)}</div></div>
+    <div class="pl-card"><div class="pl-lbl">Net P&L</div><div class="pl-val ${pl>=0?'g':'r'}">${pl>=0?'+':''}${fmtGP(pl)}</div></div>
+    <div class="pl-card"><div class="pl-lbl">Trades</div><div class="pl-val">${count}</div></div>`;
+  list.innerHTML=tradeLog.map(e=>`
+    <div class="log-entry">
+      <span class="${e.type==='buy'?'log-type-buy':'log-type-sell'}">${e.type.toUpperCase()}</span>
+      <span class="log-item">${e.item}</span>
+      <span class="log-qty">${e.qty.toLocaleString()} × ${fmtGP(e.price)}</span>
+      <span class="log-gp">${fmtGP(e.price*e.qty)}</span>
+      <span class="log-ts">${e.ts}</span>
+      <button class="log-del" onclick="removeLog(${e.id})" aria-label="Remove"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>`).join('');
+}
+
+/* ─── Cash input ─── */
+document.getElementById('cashInput').addEventListener('change',()=>{
+  cashStack=parseCash(document.getElementById('cashInput').value)||0;
+  processItems();
+});
+document.getElementById('cashInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){cashStack=parseCash(e.target.value)||0;processItems();} });
+
+/* ─── Boot ─── */
+renderLog();
+loadAll();
+</script>
+
+<!-- COMPANION QUEST GUIDE -->
+<style>
+.cmp-wrap { padding: 0; }
+.cmp-intro { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px; font-size: 13px; color: var(--text2); line-height: 1.6; }
+.cmp-intro strong { color: var(--gold); }
+.cmp-goal-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+.cmp-goal-btn { font-size: 12px; padding: 5px 12px; border-radius: 100px; border: 0.5px solid var(--border); background: var(--bg3); color: var(--text2); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.cmp-goal-btn:hover { color: var(--text); border-color: var(--border2); }
+.cmp-goal-btn.active { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 700; }
+.cmp-goal-remove { font-size: 11px; margin-left: 4px; opacity: 0.6; cursor: pointer; border: none; background: transparent; color: inherit; padding: 0; line-height: 1; }
+.cmp-goal-remove:hover { opacity: 1; }
+.cmp-goal-add-btn { font-size: 12px; padding: 5px 10px; border-radius: 100px; border: 0.5px dashed var(--border2); background: transparent; color: var(--text3); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.cmp-goal-add-btn:hover { color: var(--text); border-color: var(--gold); }
+.cmp-picker-item { font-size: 11px; padding: 4px 10px; border-radius: 100px; border: 0.5px solid var(--border); background: var(--bg3); color: var(--text2); cursor: pointer; transition: all 0.15s; }
+.cmp-picker-item:hover { border-color: var(--gold); color: var(--text); }
+.cmp-picker-item.added { border-color: var(--green-border); background: var(--green-bg); color: var(--green); cursor: default; }
+.cmp-progress { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; }
+.cmp-progress-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+.cmp-prog-bar { height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.cmp-prog-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--gold), var(--green)); transition: width 0.4s; }
+.cmp-prog-text { font-size: 12px; color: var(--text2); }
+.cmp-prog-text span { color: var(--green); font-weight: 600; }
+.cmp-phase { margin-bottom: 20px; }
+.cmp-phase-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer; user-select: none; }
+.cmp-phase-header:hover { border-color: var(--border2); }
+.cmp-phase-num { width: 24px; height: 24px; border-radius: 50%; background: var(--bg4); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text3); flex-shrink: 0; }
+.cmp-phase-num.done { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-border); }
+.cmp-phase-num.active-phase { background: var(--gold); color: #000; }
+.cmp-phase-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+.cmp-phase-sub { font-size: 11px; color: var(--text3); }
+.cmp-phase-chevron { font-size: 14px; color: var(--text3); transition: transform 0.2s; }
+.cmp-phase-chevron.open { transform: rotate(180deg); }
+.cmp-steps { padding-left: 4px; display: none; }
+.cmp-steps.open { display: block; }
+.cmp-step { display: flex; gap: 10px; padding: 8px 14px; border-left: 2px solid var(--border); margin-left: 12px; margin-bottom: 2px; transition: border-color 0.15s; }
+.cmp-step:hover { border-left-color: var(--border2); background: var(--bg3); border-radius: 0 var(--radius) var(--radius) 0; }
+.cmp-step.step-done { border-left-color: var(--green); opacity: 0.6; }
+.cmp-step.step-done .cmp-step-title { text-decoration: line-through; color: var(--text3); }
+.cmp-step.step-blocked { border-left-color: var(--red); }
+.cmp-step-check { width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid var(--border2); background: transparent; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: 1px; transition: all 0.15s; }
+.cmp-step-check:hover { border-color: var(--green); }
+.cmp-step-check.checked { background: var(--green); border-color: var(--green); }
+.cmp-step-check.checked::after { content: '✓'; color: #000; font-size: 11px; font-weight: 700; }
+.cmp-step-body { flex: 1; }
+.cmp-step-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.cmp-step-detail { font-size: 12px; color: var(--text3); line-height: 1.5; }
+.cmp-step-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.cmp-tag { font-size: 10px; padding: 1px 7px; border-radius: 100px; border: 0.5px solid; }
+.cmp-tag-quest { border-color: var(--blue-border); background: var(--blue-bg); color: var(--blue); }
+.cmp-tag-skill { border-color: var(--orange-border); background: var(--orange-bg); color: var(--orange); }
+.cmp-tag-warn { border-color: var(--red-border); background: var(--red-bg); color: var(--red); }
+.cmp-tag-tip { border-color: var(--green-border); background: var(--green-bg); color: var(--green); }
+.cmp-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px; }
+.cmp-stat-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+.cmp-stat-name { font-size: 11px; color: var(--text3); margin-bottom: 2px; }
+.cmp-stat-val input { background: transparent; border: none; outline: none; font-size: 18px; font-weight: 700; color: var(--gold); width: 50px; font-family: inherit; }
+.cmp-stat-need { font-size: 10px; margin-top: 2px; }
+.cmp-stat-need.met { color: var(--green); }
+.cmp-stat-need.unmet { color: var(--red); }
+.cmp-section-title { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+.cmp-import-row { display: flex; gap: 8px; align-items: center; background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.cmp-import-row label { font-size: 12px; color: var(--text3); white-space: nowrap; }
+.cmp-import-input { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 5px 10px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; flex: 1; min-width: 140px; }
+.cmp-import-input:focus { border-color: var(--border2); }
+.cmp-import-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 5px 12px; background: var(--gold); color: #000; border: none; border-radius: var(--radius); cursor: pointer; font-family: inherit; font-weight: 700; white-space: nowrap; }
+.cmp-import-btn:hover { opacity: 0.85; }
+.cmp-import-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cmp-import-status { font-size: 11px; color: var(--text3); }
+.cmp-import-status.ok { color: var(--green); }
+.cmp-import-status.err { color: var(--red); }
+.cmp-quest-search { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 5px 10px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; width: 100%; margin-bottom: 10px; }
+.cmp-quest-search:focus { border-color: var(--border2); }
+.cmp-quest-groups { display: flex; flex-direction: column; gap: 2px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
+.cmp-quest-group-header { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 4px 4px; }
+.cmp-quest-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius); cursor: default; transition: background 0.1s; }
+.cmp-quest-item:hover { background: var(--bg3); }
+.cmp-quest-check { width: 15px; height: 15px; border-radius: 3px; border: 1.5px solid var(--border2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.1s; cursor: pointer; }
+.cmp-quest-check:hover { border-color: var(--green); background: rgba(100,200,100,0.1); }
+.cmp-quest-check.on { background: var(--green); border-color: var(--green); }
+.cmp-quest-check.on::after { content: '✓'; color: #000; font-size: 10px; font-weight: 700; }
+.cmp-quest-name { font-size: 12px; color: var(--text2); flex: 1; min-width: 0; }
+.cmp-quest-item.done .cmp-quest-name { color: var(--text3); text-decoration: line-through; }
+.cmp-quest-goal { font-size: 13px; color: var(--text3); cursor: pointer; flex-shrink:0; padding: 0 2px; line-height:1; transition: color .1s, transform .1s; }
+.cmp-quest-goal:hover { color: var(--gold); transform: scale(1.2); }
+.cmp-quest-goal.active { color: var(--gold); }
+.cmp-quest-progress { font-size: 11px; color: var(--text3); margin-bottom: 8px; }
+.cmp-quest-progress span { color: var(--gold); font-weight: 600; }
+.cmp-starred-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:8px 10px; margin-bottom:6px; }
+.cmp-starred-card.done { opacity:0.5; }
+.cmp-starred-header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.cmp-starred-name { font-size:12px; font-weight:600; color:var(--text); }
+.cmp-starred-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.cmp-starred-unstar { font-size:11px; color:var(--text3); cursor:pointer; }
+.cmp-starred-unstar:hover { color:var(--gold); }
+.cmp-starred-meta { font-size:11px; color:var(--text3); margin-top:3px; }
+.cmp-starred-xp  { font-size:11px; color:var(--green); margin-top:2px; }
+</style>
+
+<div class="panel" id="panel-companion">
+  <div class="cmp-wrap">
+    <div class="cmp-intro">
+      <strong>Goal Companion</strong><br>
+      Enter your RSN to auto-import skill levels. Check off quests in the Quest List tab. Progress saves locally.
+    </div>
+    <div class="cmp-import-row">
+      <label><i class="ti ti-user" style="font-size:13px;vertical-align:-1px" aria-hidden="true"></i> RSN</label>
+      <input class="cmp-import-input" type="text" id="cmpUsername" placeholder="Enter RSN…" />
+      <button class="cmp-import-btn" id="cmpImportBtn" onclick="importStats()">
+        <i class="ti ti-download" style="font-size:13px" aria-hidden="true"></i> Import Stats
+      </button>
+      <span class="cmp-import-status" id="cmpImportStatus"></span>
+    </div>
+    <div class="cmp-section-title" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between" onclick="toggleStatsPanel()">
+      <span>Your Stats</span>
+      <span id="statsToggleIcon" style="font-size:11px;color:var(--text3)">▲ hide</span>
+    </div>
+    <div class="cmp-stat-grid" id="cmpStatGrid" style="display:grid"></div>
+    <div class="cmp-section-title">Goals <span style="font-size:11px;color:var(--text3);font-weight:400">— star quests in Quest List to add</span></div>
+    <div id="cmpStarredGoals" style="margin-bottom:12px"></div>
+
+    <div id="cmpProgressArea" class="cmp-progress" style="display:none">
+      <div class="cmp-progress-label">Overall Progress</div>
+      <div class="cmp-prog-bar"><div class="cmp-prog-fill" id="cmpProgFill" style="width:0%"></div></div>
+      <div class="cmp-prog-text" id="cmpProgText">Loading…</div>
+    </div>
+    <div id="cmpQuestPanel" style="display:none">
+      <div style="display:flex;gap:0;border-bottom:0.5px solid var(--border);margin-bottom:12px;">
+        <button id="qst-btn-quests" class="tab active" style="font-size:12px;padding:6px 14px" onclick="setQuestSubTab('quests')"><i class="ti ti-scroll" style="font-size:12px" aria-hidden="true"></i> Quests</button>
+        <button id="qst-btn-miniquests" class="tab" style="font-size:12px;padding:6px 14px" onclick="setQuestSubTab('miniquests')"><i class="ti ti-puzzle" style="font-size:12px" aria-hidden="true"></i> Miniquests</button>
+        <button id="qst-btn-diaries" class="tab" style="font-size:12px;padding:6px 14px" onclick="setQuestSubTab('diaries')"><i class="ti ti-book" style="font-size:12px" aria-hidden="true"></i> Diaries</button>
+      </div>
+      <input class="cmp-quest-search" type="text" placeholder="Search…" id="cmpQuestSearch" oninput="renderQuestList()" />
+      <div class="cmp-quest-progress" id="cmpQuestProgress"></div>
+      <div class="cmp-quest-groups" id="cmpQuestGroups"></div>
+    </div>
+    <div id="cmpPhasesArea"></div>
+  </div>
+</div>
+<script>
+// ═══════════════════════════════════════════════════════
+// COMPANION JS — all in one clean block
+// ═══════════════════════════════════════════════════════
+
+const CMP_STORAGE_KEY = 'osrs_cmp_checks';
+const CMP_STATS_KEY   = 'osrs_cmp_stats';
+
+const DEFAULT_STATS = {
+  // All skills start at 1 — import your stats via RSN or edit manually
+  Attack:1,Strength:1,Defence:1,Hitpoints:10,Ranged:1,Prayer:1,Magic:1,
+  Mining:1,Fishing:1,Woodcutting:1,Hunter:1,Farming:1,
+  Smithing:1,Crafting:1,Fletching:1,Herblore:1,Cooking:1,
+  Firemaking:1,Construction:1,Runecraft:1,
+  Agility:1,Thieving:1,Slayer:1,
+  Sailing:1
+};
+
+// Merge stored stats with DEFAULT_STATS — ensures new skills always have a sensible default
+// even if the user has an old localStorage save that's missing those keys
+let cmpStats = { ...DEFAULT_STATS, ...(JSON.parse(localStorage.getItem(CMP_STATS_KEY) || 'null') || {}) };
+let cmpChecks = JSON.parse(localStorage.getItem(CMP_STORAGE_KEY)|| '{}');
+let cmpGoal   = 'quests';
+
+
+// ─── Built-in goal data ───────────────────────────────
+const GOALS = {
+  sotn: {
+    label:'Secrets of the North',
+    phases:[
+      { id:'sotn_p1',title:'Phase 1 — Cold War',sub:'No prereqs. Zero blockers. Do this now.',
+        steps:[{id:'cw1',title:'Cold War',isQuest:true,detail:'Talk to Larry at Ardougne Zoo. ~30 min. Skill reqs all met (Hunter 10✅ Agility 30✅ Crafting 30✅ Construction 34✅ Thieving 15✅).',tags:['quest','~30min'],skillReqs:[]}]},
+      { id:'sotn_p2',title:'Phase 2 — Creature of Fenkenstrain',sub:'Needed for Garden of Tranquility → Swan Song.',
+        steps:[{id:'fens1',title:'Creature of Fenkenstrain',isQuest:true,detail:'Fenkenstrain\'s Castle in Morytania. Prereqs: Priest in Peril, Restless Ghost. No skill reqs. ~45 min.',tags:['quest','~45min'],skillReqs:[]}]},
+      { id:'sotn_p3',title:'Phase 3 — Garden of Tranquility',sub:'Prereq for Swan Song.',
+        steps:[{id:'got1',title:'Garden of Tranquility',isQuest:true,detail:'Talk to Queen Ellamaria in Varrock Castle. Prereq: Creature of Fenkenstrain. ~1 hr.',tags:['quest','~1hr'],skillReqs:[]}]},
+      { id:'sotn_p4',title:'Phase 4 — Fishing 52 → 62',sub:'Swan Song requires 62 Fishing (boostable with Admiral Pie +5).',
+        steps:[
+          {id:'fish1',title:'Fishing 52 → 62',detail:'Fly fishing at Barbarian Village ~30k XP/hr, or Barbarian Fishing at Otto\'s Grotto ~30–35k XP/hr at 52 scaling to ~50k/hr at 58+ (also gives Str/Agility XP). ~10–14 hrs. Admiral Pie boosts +5 if you prefer.',tags:['skill','~8-10hrs'],skillReqs:[{skill:'Fishing',need:62,boostable:true}]}]},
+      { id:'sotn_p5',title:'Phase 5 — Swan Song',sub:'Requires Garden of Tranquility + One Small Favour.',
+        steps:[{id:'ss1',title:'Swan Song',isQuest:true,detail:'Piscatoris Fishing Colony. Reqs: 100 QP✅ Magic 66✅ Cooking 62✅ Fishing 62 (after phase 4) Smithing 45✅ FM 42✅ Crafting 40✅. ~1–2 hrs.',tags:['quest','~1-2hrs'],skillReqs:[{skill:'Fishing',need:62,boostable:true}]}]},
+      { id:'sotn_p6',title:'Phase 6 — Agility 64 → 69',sub:'Hard requirement. NOT boostable.',
+        steps:[
+          {id:'agi1',title:'Agility 64→69 — Seers\' Rooftop (best available)',detail:'~55–56k XP/hr with Kandarin Hard Diary teleport. 5 levels ≈ 160k XP ≈ 3 hrs. Wear Graceful.',tags:['skill','~3hrs','best active'],skillReqs:[{skill:'Agility',need:69,boostable:false}]},
+          {id:'agi2',title:'Agility 64→69 — Wilderness Course (alt)',detail:'~50–55k XP/hr, slightly slower. Risk: PKers. Bring nothing valuable.',tags:['skill','risky'],skillReqs:[]}]},
+      { id:'sotn_p7',title:'Phase 7 — Devious Minds',sub:'RC 50 needed but boostable. Smithing 65✅ Fletching 50✅.',
+        steps:[
+          {id:'rc1',title:'Runecraft 32 → 46 then boost to 50',detail:'Mushroom Pie gives +4 RC. At 46 you can boost to 50. Training to 46: ~15 hrs via Lava Runes or ZMI. Minimises the RC grind for this quest.',tags:['skill','~15hrs','boostable'],skillReqs:[{skill:'Runecraft',need:50,boostable:true}]},
+          {id:'dm1',title:'Devious Minds',isQuest:true,detail:'Paterdomus Temple east of Varrock. Reqs: Smithing 65✅ RC 50 (boost from 46+) Fletching 50✅. Prereq: Wanted! — verify complete. ~45 min.',tags:['quest','~45min'],skillReqs:[{skill:'Runecraft',need:50,boostable:true}]}]},
+      { id:'sotn_p8',title:'Phase 8 — Making Friends with My Arm',sub:'Swan Song + Cold War must be done. FM 66 is the hard gate.',
+        steps:[
+          {id:'fm1',title:'Firemaking 60 → 66',detail:'Wintertodt from 50+. Semi-AFK ~80–100k XP/hr. 6 levels ≈ 65k XP ≈ 1–2 hrs. Passive Herblore/Farming/WC/Crafting XP from crates.',tags:['skill','~1.5hrs','semi-afk'],skillReqs:[{skill:'Firemaking',need:66,boostable:false}]},
+          {id:'mfma1',title:'Making Friends with My Arm',isQuest:true,detail:'Troll Stronghold kitchen. Hard reqs: FM 66✅ (after above). Boostable: Mining 72 (you\'re 69, need +3 — Dwarven Stout m gives +2) Agility 68 (you\'ll be 69✅). ~1–2 hrs.',tags:['quest','~1-2hrs'],skillReqs:[{skill:'Firemaking',need:66,boostable:false},{skill:'Mining',need:72,boostable:true}]}]},
+      { id:'sotn_p9',title:'Phase 9 — Secrets of the North ✨',sub:'All prereqs done.',
+        steps:[{id:'sotn1',title:'Secrets of the North',isQuest:true,detail:'Carnillean Mansion, East Ardougne. Bring lockpick, tinderbox, combat gear. Boss: level 262 Assassin (Protect from Melee/Ranged). Rewards: 50k Thieving XP, 40k Hunter XP, 60k Agility XP, 2 QP.',tags:['quest','grandmaster','GOAL'],skillReqs:[]}]}
+    ]
+  },
+  dt2: {
+    label:'Desert Treasure II',
+    phases:[
+      { id:'dt2_sotn',title:'Phases 1–9 — Complete Secrets of the North first',sub:'DT2 requires Secrets of the North as a prereq.',
+        steps:[{id:'dt2_sotn_check',title:'Complete all Secrets of the North phases',detail:'Switch to the Secrets of the North goal and work through all 9 phases. Return here when done.',tags:['prereq'],skillReqs:[]}]},
+      { id:'dt2_p10',title:'Phase 10 — Thieving 64 → 70',sub:'NOT boostable. 6 levels needed.',
+        steps:[
+          {id:'th1',title:'Blackjacking Menaphite Thugs (fastest)',detail:'Pollnivneach. ~200–250k XP/hr. Need The Feud done. 6 levels ≈ 220k XP ≈ 1–2 hrs. Very click-intensive. Bring food.',tags:['skill','~1-2hrs','click-intensive'],skillReqs:[{skill:'Thieving',need:70,boostable:false}]},
+          {id:'th2',title:'Ardougne Knights (semi-AFK alt)',detail:'~105k XP/hr. More relaxed, profitable. Medium Ardougne diary for best rates. ~2–3 hrs.',tags:['skill','semi-afk','profitable'],skillReqs:[]}]},
+      { id:'dt2_p11',title:'Phase 11 — Firemaking 60 → 75',sub:'NOT boostable. 15 levels needed.',
+        steps:[{id:'fm2',title:'Wintertodt 60 → 75',detail:'Semi-AFK ~80–100k XP/hr. 15 levels ≈ 840k XP ≈ 8–10 hrs. Passive Herblore/Farming/WC/Crafting XP from crates helps Herblore grind. Bring food, warm clothing.',tags:['skill','~8-10hrs','semi-afk','gives herb xp'],skillReqs:[{skill:'Firemaking',need:75,boostable:false}]}]},
+      { id:'dt2_p12',title:'Phase 12 — Herblore 52 → 62',sub:'NOT boostable. 10 levels needed.',
+        steps:[{id:'herb1',title:'Herblore 52 → 62',detail:'Make Ranging potions or Sara brews. Costs ~8–12M GP. ~3–5 hrs. Wintertodt crates chip away at this passively during Phase 11.',tags:['skill','~4hrs','costs 8-12M'],skillReqs:[{skill:'Herblore',need:62,boostable:false}]}]},
+      { id:'dt2_p13',title:'Phase 13 — Runecraft 32 → 60 ⚠️',sub:'NOT boostable. Biggest single grind on the path.',
+        steps:[
+          {id:'rc2',title:'Lava Runes (fastest ~50k XP/hr)',detail:'Earth runes on fire altar. Binding necklace + Magic Imbue from Lunar Diplomacy. 32→60 ≈ 1.3M XP ≈ 26 hrs.',tags:['skill','~26hrs','click-intensive'],skillReqs:[{skill:'Runecraft',need:60,boostable:false}]},
+          {id:'rc3',title:'Guardians of the Rift (semi-AFK)',detail:'Minigame, ~26–40k XP/hr. More engaging. Rewards RC outfit which speeds up future training. ~35–50 hrs for 32→60.',tags:['skill','~40hrs','semi-afk'],skillReqs:[]}]},
+      { id:'dt2_p14',title:'Phase 14 — Desert Treasure II ✨',sub:'All requirements met.',
+        steps:[{id:'dt21',title:'Desert Treasure II — The Fallen Empire',isQuest:true,detail:'Ancient Vault north-east of Nardah. 4 boss fights: Vardorvis, Duke Sucellus, The Leviathan, The Whisperer. Rewards: Ancient rings (30–80M each), Virtus robes, Soulreaper axe, 5 QP.',tags:['quest','grandmaster','GOAL'],skillReqs:[]}]}
+    ]
+  }
+};
+
+// ─── Custom goals ─────────────────────────────────────
+const CUSTOM_GOAL_DEFS = {
+  ds2:{label:'Dragon Slayer II',phases:[
+    {id:'ds2_p1',title:'Skill Requirements',sub:'70 Smithing, 68 Mining, 62 Crafting, 60 Agility, 60 Thieving, 50 Construction, 75 Magic.',steps:[
+      {id:'ds2_s1',title:'Smithing 70',detail:'You\'re at 71 ✅',tags:['skill'],skillReqs:[{skill:'Smithing',need:70,boostable:false}]},
+      {id:'ds2_s2',title:'Mining 68',detail:'You\'re at 69 ✅',tags:['skill'],skillReqs:[{skill:'Mining',need:68,boostable:false}]},
+      {id:'ds2_s3',title:'Agility 60',detail:'You\'re at 64 ✅',tags:['skill'],skillReqs:[{skill:'Agility',need:60,boostable:false}]},
+      {id:'ds2_s4',title:'Thieving 60',detail:'You\'re at 64 ✅',tags:['skill'],skillReqs:[{skill:'Thieving',need:60,boostable:false}]},
+      {id:'ds2_s5',title:'Crafting 62',detail:'You\'re at 70 ✅',tags:['skill'],skillReqs:[{skill:'Crafting',need:62,boostable:false}]},
+      {id:'ds2_s6',title:'Magic 75',detail:'You\'re at 95 ✅',tags:['skill'],skillReqs:[{skill:'Magic',need:75,boostable:false}]}]},
+    {id:'ds2_p2',title:'Quest Prereqs',sub:'Legends\' Quest, Dream Mentor, Animal Magnetism, Ghosts Ahoy, Bone Voyage, Client of Kourend.',steps:[
+      {id:'ds2_q1',title:'Legends\' Quest',isQuest:true,detail:'Long quest with many prereqs including Heroes\' Quest.',tags:['quest'],skillReqs:[]},
+      {id:'ds2_q2',title:'Dream Mentor',isQuest:true,detail:'Requires Lunar Diplomacy, Eadgar\'s Ruse, Shilo Village. Level 85+ combat recommended.',tags:['quest'],skillReqs:[]},
+      {id:'ds2_q3',title:'Animal Magnetism',isQuest:true,detail:'Requires Restless Ghost, Ernest the Chicken, Priest in Peril.',tags:['quest'],skillReqs:[]},
+      {id:'ds2_q4',title:'Ghosts Ahoy',isQuest:true,detail:'Requires Priest in Peril, Nature Spirit.',tags:['quest'],skillReqs:[]},
+      {id:'ds2_q5',title:'Bone Voyage',isQuest:true,detail:'Requires The Dig Site. Unlocks Fossil Island.',tags:['quest'],skillReqs:[]},
+      {id:'ds2_q6',title:'Client of Kourend',isQuest:true,detail:'No prereqs. Unlocks Kourend quest chain.',tags:['quest','~30min'],skillReqs:[]}]},
+    {id:'ds2_p3',title:'Dragon Slayer II ✨',sub:'',steps:[{id:'ds2_fin',title:'Dragon Slayer II',isQuest:true,detail:'Start from Alec Kincade outside Legends\' Guild. Rewards: Vorkath access, Ava\'s Assembler, Ferocious Gloves (with MM2 done), Mythical Cape.',tags:['quest','grandmaster','GOAL'],skillReqs:[]}]}
+  ]},
+  sote:{label:'Song of the Elves',phases:[
+    {id:'sote_p1',title:'All 8 Skills to 70',sub:'Agility, Construction, Farming, Herblore, Hunter, Mining, Smithing, Woodcutting all need 70.',steps:[
+      {id:'sote_s1',title:'Agility 70',detail:'Seers\' rooftop or Hallowed Sepulchre.',tags:['skill'],skillReqs:[{skill:'Agility',need:70,boostable:false}]},
+      {id:'sote_s2',title:'Construction 70',detail:'You\'re at 83 ✅',tags:['skill'],skillReqs:[{skill:'Construction',need:70,boostable:false}]},
+      {id:'sote_s3',title:'Farming 70',detail:'Tithe Farm or tree/herb runs.',tags:['skill'],skillReqs:[{skill:'Farming',need:70,boostable:false}]},
+      {id:'sote_s4',title:'Herblore 70',detail:'18 levels from 52. ~15–20M GP.',tags:['skill'],skillReqs:[{skill:'Herblore',need:70,boostable:false}]},
+      {id:'sote_s5',title:'Hunter 70',detail:'Red salamanders (67) or red chins (73).',tags:['skill'],skillReqs:[{skill:'Hunter',need:70,boostable:false}]},
+      {id:'sote_s6',title:'Mining 70',detail:'1 level from 69. Granite or gem rocks.',tags:['skill'],skillReqs:[{skill:'Mining',need:70,boostable:false}]},
+      {id:'sote_s7',title:'Smithing 70',detail:'You\'re at 71 ✅',tags:['skill'],skillReqs:[{skill:'Smithing',need:70,boostable:false}]},
+      {id:'sote_s8',title:'Woodcutting 70',detail:'9 levels from 61. Teak trees or Sulliuscep.',tags:['skill'],skillReqs:[{skill:'Woodcutting',need:70,boostable:false}]}]},
+    {id:'sote_p2',title:'Elf Quest Chain',sub:'Mourning\'s End I & II required. Needs Underground Pass → Regicide → Roving Elves first.',steps:[
+      {id:'sote_q1',title:'Underground Pass',isQuest:true,detail:'Requires Biohazard → Plague City first. Difficult quest.',tags:['quest'],skillReqs:[]},
+      {id:'sote_q2',title:'Regicide',isQuest:true,detail:'Requires Underground Pass. Very long with tough combat.',tags:['quest'],skillReqs:[]},
+      {id:'sote_q3',title:'Roving Elves',isQuest:true,detail:'Short follow-up to Regicide.',tags:['quest'],skillReqs:[]},
+      {id:'sote_q4',title:'Mourning\'s End Part I',isQuest:true,detail:'Requires Roving Elves. Difficult light puzzle.',tags:['quest'],skillReqs:[]},
+      {id:'sote_q5',title:'Mourning\'s End Part II',isQuest:true,detail:'Death altar puzzle. One of the hardest quests.',tags:['quest'],skillReqs:[]}]},
+    {id:'sote_p3',title:'Song of the Elves ✨',sub:'Unlocks Prifddinas, Crystal equipment, Zalcano, Gauntlet.',steps:[{id:'sote_fin',title:'Song of the Elves',isQuest:true,detail:'Start from Eluned in Lletya. Grandmaster. One of the best quest rewards in the game.',tags:['quest','grandmaster','GOAL'],skillReqs:[]}]}
+  ]},
+  mm2:{label:'Monkey Madness II',phases:[
+    {id:'mm2_p1',title:'Requirements',sub:'Agility 55, Thieving 55, Slayer 69, Crafting 70, Hunter 60, Firemaking 60.',steps:[
+      {id:'mm2_s1',title:'Slayer 69',detail:'You\'re at 70 ✅',tags:['skill'],skillReqs:[{skill:'Slayer',need:69,boostable:false}]},
+      {id:'mm2_s2',title:'Agility 55',detail:'You\'re at 64 ✅',tags:['skill'],skillReqs:[{skill:'Agility',need:55,boostable:false}]},
+      {id:'mm2_s3',title:'Thieving 55',detail:'You\'re at 64 ✅',tags:['skill'],skillReqs:[{skill:'Thieving',need:55,boostable:false}]},
+      {id:'mm2_s4',title:'Crafting 70',detail:'You\'re at 70 ✅',tags:['skill'],skillReqs:[{skill:'Crafting',need:70,boostable:false}]},
+      {id:'mm2_s5',title:'Hunter 60',detail:'Red salamanders unlock at 59.',tags:['skill'],skillReqs:[{skill:'Hunter',need:60,boostable:false}]},
+      {id:'mm2_s6',title:'Firemaking 60',detail:'You\'re at 60 ✅',tags:['skill'],skillReqs:[{skill:'Firemaking',need:60,boostable:false}]}]},
+    {id:'mm2_p2',title:'Monkey Madness II ✨',sub:'Rewards: Zenyte Shard → BIS jewelry (torture/anguish/bracelet).',steps:[{id:'mm2_fin',title:'Monkey Madness II',isQuest:true,detail:'Start from Narnode Shareen in the Grand Tree. Grandmaster. Rewards Zenyte shard via Demonic Gorilla drops.',tags:['quest','grandmaster','GOAL'],skillReqs:[]}]}
+  ]},
+  questcape:{label:'Quest Cape',phases:[
+    {id:'qc_p1',title:'Complete All 180 Quests',sub:'335 Quest Points required. Use Quest List tab to track.',steps:[
+      {id:'qc_s1',title:'Track via Quest List tab',detail:'Switch to Quest List goal and check off each quest. QP cape requires all 180 complete.',tags:['tip'],skillReqs:[]},
+      {id:'qc_s2',title:'High-skill bottlenecks to plan for',detail:'Song of the Elves (70 in 8 skills), DT2 (60 RC, 62 Herblore, 75 FM), Dragon Slayer II (70 Smithing), While Guthix Sleeps (55 in many skills).',tags:['tip'],skillReqs:[]},
+      {id:'qc_fin',title:'Buy Quest Point Cape from Wise Old Man ✨',detail:'Draynor Village. One of the most respected capes in OSRS.',tags:['GOAL'],skillReqs:[]}]}
+  ]},
+  inferno:{label:'Inferno Cape',phases:[
+    {id:'inf_p1',title:'Combat Stats',sub:'90+ Ranged recommended. Prayer 77+. Rigour unlock is huge.',steps:[
+      {id:'inf_s1',title:'Ranged 90+',detail:'You\'re at 88. 2 levels to go. Red chins at Ape Atoll or MM2 tunnels.',tags:['skill'],skillReqs:[{skill:'Ranged',need:90,boostable:false}]},
+      {id:'inf_s2',title:'Prayer 77',detail:'You\'re at 77 ✅. Rigour (74 Prayer + CoX reward) is critical.',tags:['skill'],skillReqs:[{skill:'Prayer',need:77,boostable:false}]}]},
+    {id:'inf_p2',title:'Preparation',sub:'Learn wave strategy. Rigour is the biggest damage upgrade.',steps:[
+      {id:'inf_s3',title:'Unlock Rigour',detail:'+20% Ranged damage/accuracy. Requires 74 Prayer + Chambers of Xeric completion.',tags:['tip'],skillReqs:[]},
+      {id:'inf_s4',title:'Study the wave guide',detail:'Waves 1–68 with practice. Wave 69 (Jad + healers) is the classic wipe. Zuk on wave 69 is a patience check. Watch Woox or Faux guides on YouTube.',tags:['tip'],skillReqs:[]}]},
+    {id:'inf_p3',title:'Inferno Cape ✨',sub:'',steps:[{id:'inf_fin',title:'Complete the TzHaar Inferno',detail:'Costs an Onyx (~2M) to enter. 1.5–3 hrs per attempt. Cape grants access to Jad task and is BIS melee/ranged cape slot.',tags:['GOAL','~2-3hrs'],skillReqs:[]}]}
+  ]},
+  wgs:{label:'While Guthix Sleeps',phases:[
+    {id:'wgs_p1',title:'Skill Requirements',sub:'Many skills at 55+. Most notable: Slayer 55, Agility 55, Thieving 55, Herblore 55.',steps:[
+      {id:'wgs_s1',title:'Slayer 55',detail:'You\'re at 70 ✅',tags:['skill'],skillReqs:[{skill:'Slayer',need:55,boostable:false}]},
+      {id:'wgs_s2',title:'Agility 55',detail:'You\'re at 64 ✅',tags:['skill'],skillReqs:[{skill:'Agility',need:55,boostable:false}]},
+      {id:'wgs_s3',title:'Thieving 55',detail:'You\'re at 64 ✅',tags:['skill'],skillReqs:[{skill:'Thieving',need:55,boostable:false}]},
+      {id:'wgs_s4',title:'Herblore 55',detail:'3 levels from 52. Very quick.',tags:['skill'],skillReqs:[{skill:'Herblore',need:55,boostable:false}]}]},
+    {id:'wgs_p2',title:'Key Quest Prereqs',sub:'Temple of Ikov, Wanted!, One Small Favour, Legends\' Quest among many.',steps:[
+      {id:'wgs_q1',title:'Temple of Ikov',isQuest:true,detail:'No skill reqs. Pick your side carefully.',tags:['quest'],skillReqs:[]},
+      {id:'wgs_q2',title:'Wanted!',isQuest:true,detail:'Requires Recruitment Drive, Lost Tribe, Priest in Peril, Troll Stronghold.',tags:['quest'],skillReqs:[]},
+      {id:'wgs_q3',title:'Legends\' Quest',isQuest:true,detail:'Long quest, many prereqs.',tags:['quest'],skillReqs:[]}]},
+    {id:'wgs_p3',title:'While Guthix Sleeps ✨',sub:'Unlocks Tormented Demons and Stone of Jas lore.',steps:[{id:'wgs_fin',title:'While Guthix Sleeps',isQuest:true,detail:'Start from Sommik in Edgeville. Grandmaster. Rewards huge XP lamps and one of the most prestigious completions.',tags:['quest','grandmaster','GOAL'],skillReqs:[]}]}
+  ]}
+};
+
+Object.assign(GOALS, CUSTOM_GOAL_DEFS);
+
+// ─── Hiscores import ──────────────────────────────────
+const HISCORE_SKILLS = [
+  'Overall','Attack','Defence','Strength','Hitpoints','Ranged','Prayer','Magic',
+  'Cooking','Woodcutting','Fletching','Fishing','Firemaking','Crafting','Smithing',
+  'Mining','Herblore','Agility','Thieving','Slayer','Farming','Runecraft','Hunter',
+  'Construction','Sailing'
+];
+
+async function importStats() {
+  const rsn = document.getElementById('cmpUsername')?.value?.trim();
+  if (!rsn) { setImportStatus('Enter a username first','err'); return; }
+  const btn = document.getElementById('cmpImportBtn');
+  btn.disabled = true; setImportStatus('Fetching…','');
+  try {
+    const encoded = encodeURIComponent(rsn.replace(/ /g,'+'));
+    const hsUrl = `https://secure.runescape.com/m=hiscore_oldschool/index_lite.ws?player=${encoded}`;
+    const proxies = [
+      () => fetch(hsUrl, {mode:'cors'}),
+      () => fetch(`https://corsproxy.io/?${hsUrl}`),
+      () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(hsUrl)}`),
+      () => fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(hsUrl)}`),
+    ];
+    let raw = '';
+    for (const proxy of proxies) {
+      try {
+        const r = await proxy();
+        const text = await r.text();
+        // Validate: hiscores returns lines like '12345,99,200000000'
+        if (text && /^\d+,\d+/.test(text.trim())) { raw = text; break; }
+      } catch(e) { /* try next proxy */ }
+    }
+    if (!raw) {
+      setImportStatus(`Could not reach hiscores — all proxies failed. Enter stats manually.`,'err');
+      btn.disabled=false; return;
+    }
+    const lines = raw.trim().split('\n');
+    let imported = 0;
+    HISCORE_SKILLS.forEach((skill,i) => {
+      if (skill==='Overall') return;
+      const parts = (lines[i]||'').split(',');
+      const level = parseInt(parts[1]);
+      if (level > 0) { cmpStats[skill]=level; imported++; } // no hasOwnProperty gate — import all skills
+    });
+    localStorage.setItem(CMP_STATS_KEY, JSON.stringify(cmpStats));
+    localStorage.setItem('osrs_cmp_rsn', rsn);
+    setImportStatus(`✅ Imported ${imported} skills for "${rsn}"`,'ok');
+    renderCompanion();
+  } catch(e) { setImportStatus('Import failed — check username or try again','err'); }
+  btn.disabled = false;
+}
+
+function setImportStatus(msg,cls) {
+  const el = document.getElementById('cmpImportStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'cmp-import-status'+(cls?' '+cls:'');
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp = document.getElementById('cmpUsername');
+  if (inp) {
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') importStats(); });
+    const saved = localStorage.getItem('osrs_cmp_rsn');
+    if (saved) inp.value = saved;
+  }
+});
+
+// ─── Goal management ──────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+//  QUEST PREREQ MAP + GUIDE ENGINE
+//  Direct prereqs only — resolver walks recursively.
+//  Skills: {skill, need, boostable}
+//  Quests: string array of OSRS Wiki quest names
+// ══════════════════════════════════════════════════════════════════
+const QUEST_PREREQS = {
+  // ── Core chain quests ────────────────────────────────────────
+  'Cold War':                     { skills:[{s:'Agility',n:30},{s:'Crafting',n:30},{s:'Construction',n:34,b:true},{s:'Hunter',n:15},{s:'Thieving',n:15}], quests:[] },
+  'Creature of Fenkenstrain':     { skills:[], quests:['Priest in Peril','The Restless Ghost'] },
+  'Garden of Tranquility':        { skills:[{s:'Farming',n:25}], quests:['Creature of Fenkenstrain'] },
+  'One Small Favour':             { skills:[{s:'Agility',n:36},{s:'Crafting',n:25},{s:'Herblore',n:18},{s:'Smithing',n:30}], quests:['Rune Mysteries','Shilo Village'] },
+  'Swan Song':                    { skills:[{s:'Magic',n:66},{s:'Fishing',n:62,b:true},{s:'Smithing',n:45},{s:'Firemaking',n:42},{s:'Cooking',n:62},{s:'Crafting',n:40}], quests:['One Small Favour','Garden of Tranquility','Priest in Peril'] },
+  'Wanted!':                      { skills:[], quests:['Recruitment Drive','Lost City','Priest in Peril','The Lost Tribe','Troll Stronghold'] },
+  'Devious Minds':                { skills:[{s:'Smithing',n:65},{s:'Fletching',n:50},{s:'Runecraft',n:50,b:true}], quests:['Wanted!','Troll Stronghold','Enter the Abyss'] },
+  'Troll Stronghold':             { skills:[{s:'Agility',n:15}], quests:['Death Plateau'] },
+  'Death Plateau':                { skills:[], quests:[] },
+  'My Arm\'s Big Adventure':      { skills:[{s:'Farming',n:29},{s:'Herblore',n:29}], quests:['Eadgar\'s Ruse','Jungle Potion'] },
+  'Eadgar\'s Ruse':               { skills:[{s:'Herblore',n:31}], quests:['Troll Stronghold','Druidic Ritual'] },
+  'Making Friends with My Arm':   { skills:[{s:'Firemaking',n:66},{s:'Mining',n:72,b:true},{s:'Agility',n:68,b:true}], quests:['Swan Song','My Arm\'s Big Adventure','Making History'] },
+  'Making History':               { skills:[], quests:['Priest in Peril','The Restless Ghost'] },
+  'Secrets of the North':         { skills:[{s:'Agility',n:69},{s:'Thieving',n:64},{s:'Hunter',n:56}], quests:['Cold War','Swan Song','Devious Minds','Making Friends with My Arm','The General\'s Shadow'] },
+  'The General\'s Shadow':        { skills:[], quests:['Curse of the Empty Lord'] },
+  'Curse of the Empty Lord':      { skills:[], quests:[] },
+  'Desert Treasure I':            { skills:[{s:'Magic',n:53},{s:'Thieving',n:53},{s:'Firemaking',n:50},{s:'Slayer',n:10}], quests:['The Dig Site','Priest in Peril','Temple of Ikov','Tourist Trap','Waterfall Quest','Icthlarins Little Helper'] },
+  'Icthlarins Little Helper':     { skills:[], quests:['Gertrude\'s Cat'] },
+  'The Dig Site':                 { skills:[{s:'Agility',n:10},{s:'Herblore',n:10},{s:'Thieving',n:25}], quests:['The Restless Ghost'] },
+  'Azzanadra\'s Quest':           { skills:[{s:'Prayer',n:50}], quests:['Desert Treasure I'] },
+  'Temple at Senntisten':         { skills:[], quests:['Azzanadra\'s Quest'] },
+  'Beneath Cursed Sands':         { skills:[{s:'Agility',n:62},{s:'Firemaking',n:55}], quests:['Icthlarins Little Helper','Gertrude\'s Cat','Contact!'] },
+  'Contact!':                     { skills:[], quests:['Icthlarins Little Helper'] },
+  'Garden of Death':              { skills:[{s:'Herblore',n:30},{s:'Farming',n:17}], quests:['Icthlarins Little Helper','Beneath Cursed Sands'] },
+  'The Curse of Arrav':           { skills:[{s:'Agility',n:61},{s:'Strength',n:61},{s:'Thieving',n:61},{s:'Ranged',n:61}], quests:['Desert Treasure I'] },
+  'Sins of the Father':           { skills:[{s:'Woodcutting',n:62},{s:'Fletching',n:60},{s:'Crafting',n:56},{s:'Agility',n:52},{s:'Attack',n:60},{s:'Slayer',n:50}], quests:['A Taste of Hope','Darkness of Hallowvale'] },
+  'A Taste of Hope':              { skills:[{s:'Agility',n:45},{s:'Attack',n:40},{s:'Crafting',n:48},{s:'Slayer',n:38}], quests:['Darkness of Hallowvale'] },
+  'Darkness of Hallowvale':       { skills:[{s:'Agility',n:40},{s:'Thieving',n:40},{s:'Construction',n:5},{s:'Mining',n:20},{s:'Ranged',n:20},{s:'Strength',n:22}], quests:['In Aid of the Myreque'] },
+  'In Aid of the Myreque':        { skills:[{s:'Crafting',n:25},{s:'Magic',n:7},{s:'Mining',n:15},{s:'Smithing',n:15}], quests:['In Search of the Myreque'] },
+  'In Search of the Myreque':     { skills:[{s:'Agility',n:25}], quests:['Priest in Peril'] },
+  'Desert Treasure II - The Fallen Empire': { skills:[{s:'Magic',n:75},{s:'Firemaking',n:70},{s:'Thieving',n:70},{s:'Herblore',n:62},{s:'Runecraft',n:60}], quests:['Desert Treasure I','Secrets of the North','Temple at Senntisten','Beneath Cursed Sands','Garden of Death','The Curse of Arrav','Sins of the Father'] },
+
+  // ── Dragon Slayer II ─────────────────────────────────────────
+  'Legends\' Quest':              { skills:[{s:'Agility',n:50},{s:'Crafting',n:50},{s:'Herblore',n:45},{s:'Magic',n:56},{s:'Mining',n:52},{s:'Prayer',n:42},{s:'Smithing',n:52},{s:'Strength',n:50},{s:'Thieving',n:50},{s:'Woodcutting',n:50}], quests:['Family Crest','Heroes\' Quest','Shilo Village','Underground Pass','Waterfall Quest'] },
+  'Heroes\' Quest':              { skills:[{s:'Cooking',n:53},{s:'Fishing',n:53},{s:'Herblore',n:25},{s:'Mining',n:50},{s:'Smithing',n:50}], quests:['Shield of Arrav','Lost City','Merlin\'s Crystal','Dragon Slayer I','Druidic Ritual'] },
+  'Dream Mentor':                 { skills:[{s:'Agility',n:65},{s:'Crafting',n:61},{s:'Defence',n:60},{s:'Magic',n:65},{s:'Mining',n:55},{s:'Ranged',n:61},{s:'Slayer',n:61}], quests:['Lunar Diplomacy','Eadgar\'s Ruse','Shilo Village'] },
+  'Lunar Diplomacy':              { skills:[{s:'Crafting',n:61},{s:'Defence',n:40},{s:'Firemaking',n:49},{s:'Herblore',n:5},{s:'Magic',n:65},{s:'Mining',n:60},{s:'Runecraft',n:5},{s:'Woodcutting',n:55}], quests:['The Fremennik Trials','Lost City','Rune Mysteries','Shilo Village'] },
+  'Bone Voyage':                  { skills:[], quests:['The Dig Site'] },
+  'Client of Kourend':            { skills:[], quests:[] },
+  'Animal Magnetism':             { skills:[{s:'Crafting',n:19},{s:'Fletching',n:30},{s:'Ranged',n:30},{s:'Woodcutting',n:35}], quests:['Priest in Peril','The Restless Ghost','Ernest the Chicken'] },
+  'Ghosts Ahoy':                  { skills:[{s:'Agility',n:25},{s:'Cooking',n:20}], quests:['Priest in Peril','Nature Spirit'] },
+  'Nature Spirit':                { skills:[{s:'Crafting',n:18}], quests:['Priest in Peril','The Restless Ghost'] },
+  'Dragon Slayer II':             { skills:[{s:'Agility',n:60},{s:'Mining',n:68},{s:'Smithing',n:70},{s:'Thieving',n:60},{s:'Construction',n:50},{s:'Magic',n:75},{s:'Crafting',n:62}], quests:['Legends\' Quest','Dream Mentor','Animal Magnetism','Ghosts Ahoy','Bone Voyage','Client of Kourend'] },
+
+  // ── Song of the Elves ────────────────────────────────────────
+  'Plague City':                  { skills:[], quests:[] },
+  'Biohazard':                    { skills:[], quests:['Plague City'] },
+  'Underground Pass':             { skills:[{s:'Ranged',n:25}], quests:['Biohazard'] },
+  'Regicide':                     { skills:[{s:'Agility',n:56},{s:'Crafting',n:10}], quests:['Underground Pass'] },
+  'Roving Elves':                 { skills:[{s:'Agility',n:56}], quests:['Regicide','Waterfall Quest'] },
+  'Mourning\'s End Part I':       { skills:[{s:'Ranged',n:60},{s:'Agility',n:60}], quests:['Roving Elves','Big Chompy Bird Hunting','Sheep Herder'] },
+  'Mourning\'s End Part II':      { skills:[], quests:['Mourning\'s End Part I'] },
+  'Monkey Madness I':             { skills:[], quests:['The Grand Tree','Tree Gnome Village'] },
+  'Song of the Elves':            { skills:[{s:'Agility',n:70},{s:'Construction',n:70},{s:'Farming',n:70},{s:'Herblore',n:70},{s:'Hunter',n:70},{s:'Mining',n:70},{s:'Smithing',n:70},{s:'Woodcutting',n:70}], quests:['Mourning\'s End Part II','Making History','Monkey Madness I','Roving Elves'] },
+
+  // ── Monkey Madness II ────────────────────────────────────────
+  'Monkey Madness II':            { skills:[{s:'Agility',n:55},{s:'Thieving',n:55},{s:'Slayer',n:69},{s:'Crafting',n:70},{s:'Hunter',n:60},{s:'Firemaking',n:60}], quests:['Monkey Madness I','The Fremennik Trials','Enlightened Journey','The Slug Menace'] },
+  'The Fremennik Trials':         { skills:[{s:'Crafting',n:40},{s:'Firemaking',n:40},{s:'Fletching',n:25},{s:'Smithing',n:40},{s:'Woodcutting',n:40}], quests:[] },
+  'Enlightened Journey':          { skills:[{s:'Farming',n:30},{s:'Firemaking',n:20},{s:'Crafting',n:36}], quests:[] },
+  'The Slug Menace':              { skills:[{s:'Crafting',n:30},{s:'Runecraft',n:30},{s:'Slayer',n:30},{s:'Thieving',n:30}], quests:['Recruitment Drive','Sea Slug'] },
+
+  // ── While Guthix Sleeps ──────────────────────────────────────
+  'While Guthix Sleeps':          { skills:[{s:'Agility',n:55},{s:'Herblore',n:55},{s:'Magic',n:55},{s:'Ranged',n:55},{s:'Slayer',n:55},{s:'Strength',n:55},{s:'Thieving',n:55},{s:'Woodcutting',n:55}], quests:['Legends\' Quest','Wanted!','One Small Favour','Temple of Ikov','The Chosen Commander'] },
+  'The Chosen Commander':         { skills:[], quests:['Another Slice of H.A.M.'] },
+  'Another Slice of H.A.M.':     { skills:[], quests:['Death to the Dorgeshuun'] },
+  'Death to the Dorgeshuun':      { skills:[{s:'Agility',n:23},{s:'Thieving',n:23}], quests:['The Lost Tribe'] },
+  'The Lost Tribe':               { skills:[{s:'Agility',n:13},{s:'Mining',n:17},{s:'Thieving',n:13}], quests:['Goblin Diplomacy','Rune Mysteries'] },
+  'Temple of Ikov':               { skills:[{s:'Fletching',n:40},{s:'Ranged',n:40}], quests:[] },
+
+  // ── Shared prereqs ───────────────────────────────────────────
+  'Priest in Peril':              { skills:[], quests:[] },
+  'The Restless Ghost':           { skills:[], quests:[] },
+  'Waterfall Quest':              { skills:[], quests:[] },
+  'Druidic Ritual':               { skills:[], quests:[] },
+  'Lost City':                    { skills:[{s:'Crafting',n:31},{s:'Woodcutting',n:36}], quests:[] },
+  'Merlin\'s Crystal':            { skills:[], quests:[] },
+  'Dragon Slayer I':              { skills:[], quests:[] },
+  'Shilo Village':                { skills:[{s:'Crafting',n:20},{s:'Agility',n:32}], quests:['Jungle Potion','Druidic Ritual'] },
+  'Jungle Potion':                { skills:[], quests:['Druidic Ritual'] },
+  'Recruitment Drive':            { skills:[], quests:['Black Knights\' Fortress','Druidic Ritual'] },
+  'Black Knights\' Fortress':    { skills:[], quests:[] },
+  'Sea Slug':                     { skills:[{s:'Firemaking',n:30}], quests:[] },
+  'Ernest the Chicken':           { skills:[], quests:[] },
+  'Enter the Abyss':              { skills:[], quests:['Rune Mysteries'] },
+  'Rune Mysteries':               { skills:[], quests:[] },
+  'Gertrude\'s Cat':              { skills:[], quests:[] },
+  'Family Crest':                 { skills:[{s:'Crafting',n:40},{s:'Magic',n:59},{s:'Mining',n:40},{s:'Smithing',n:40}], quests:[] },
+  'Tourist Trap':                 { skills:[{s:'Smithing',n:20}], quests:[] },
+  'Shield of Arrav':              { skills:[], quests:[] },
+  'Tree Gnome Village':           { skills:[], quests:[] },
+  'The Grand Tree':               { skills:[{s:'Agility',n:25}], quests:['Tree Gnome Village'] },
+  'Big Chompy Bird Hunting':      { skills:[{s:'Cooking',n:30},{s:'Fletching',n:5},{s:'Ranged',n:30}], quests:['Druidic Ritual'] },
+  'Sheep Herder':                 { skills:[], quests:[] },
+  'Goblin Diplomacy':             { skills:[], quests:[] },
+};
+
+// YouTube guides — Slayermusiq1 is the gold standard for OSRS quests
+// Verified channel: youtube.com/@Slayermusiq1
+const QUEST_GUIDES = {
+  'Desert Treasure II - The Fallen Empire': { yt:'https://www.youtube.com/watch?v=qqBXG0LGhT8', ytLabel:'Full DT2 Guide (2024)' },
+  'Secrets of the North':         { yt:'https://www.youtube.com/results?search_query=osrs+secrets+of+the+north+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Dragon Slayer II':             { yt:'https://www.youtube.com/results?search_query=osrs+dragon+slayer+2+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Song of the Elves':            { yt:'https://www.youtube.com/results?search_query=osrs+song+of+the+elves+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Monkey Madness II':            { yt:'https://www.youtube.com/watch?v=D5MaAAHnaJQ', ytLabel:'Updated MM2 Guide (2024)' },
+  'While Guthix Sleeps':         { yt:'https://www.youtube.com/results?search_query=osrs+while+guthix+sleeps+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Making Friends with My Arm':   { yt:'https://www.youtube.com/results?search_query=osrs+making+friends+with+my+arm+quest+guide', ytLabel:'Quest Guide' },
+  'Sins of the Father':           { yt:'https://www.youtube.com/results?search_query=osrs+sins+of+the+father+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Desert Treasure I':            { yt:'https://www.youtube.com/results?search_query=osrs+desert+treasure+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Mourning\'s End Part II':      { yt:'https://www.youtube.com/results?search_query=osrs+mourning+end+part+2+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+  'Legends\' Quest':             { yt:'https://www.youtube.com/results?search_query=osrs+legends+quest+guide+slayermusiq1', ytLabel:'Slayermusiq1 Guide' },
+};
+
+// Skill training links — wiki + best method video
+const SKILL_GUIDES = {
+  Agility:     { wiki:'https://oldschool.runescape.wiki/w/Agility/Training',     yt:'https://www.youtube.com/results?search_query=osrs+agility+training+guide+2024+theoatrix' },
+  Thieving:    { wiki:'https://oldschool.runescape.wiki/w/Thieving/Training',    yt:'https://www.youtube.com/results?search_query=osrs+thieving+training+guide+2024' },
+  Runecraft:   { wiki:'https://oldschool.runescape.wiki/w/Runecraft/Training',   yt:'https://www.youtube.com/results?search_query=osrs+runecrafting+training+guide+2024+gotr' },
+  Firemaking:  { wiki:'https://oldschool.runescape.wiki/w/Firemaking/Training',  yt:'https://www.youtube.com/results?search_query=osrs+firemaking+training+guide+wintertodt+2024' },
+  Mining:      { wiki:'https://oldschool.runescape.wiki/w/Mining/Training',      yt:'https://www.youtube.com/results?search_query=osrs+mining+training+guide+2024+fastest' },
+  Herblore:    { wiki:'https://oldschool.runescape.wiki/w/Herblore/Training',    yt:'https://www.youtube.com/results?search_query=osrs+herblore+training+guide+2024+fastest+cheapest' },
+  Fishing:     { wiki:'https://oldschool.runescape.wiki/w/Fishing/Training',     yt:'https://www.youtube.com/results?search_query=osrs+fishing+training+guide+2024+barbarian' },
+  Smithing:    { wiki:'https://oldschool.runescape.wiki/w/Smithing/Training',    yt:'https://www.youtube.com/results?search_query=osrs+smithing+training+guide+2024+blast+furnace' },
+  Crafting:    { wiki:'https://oldschool.runescape.wiki/w/Crafting/Training',    yt:'https://www.youtube.com/results?search_query=osrs+crafting+training+guide+2024+fastest+cheapest' },
+  Fletching:   { wiki:'https://oldschool.runescape.wiki/w/Fletching/Training',   yt:'https://www.youtube.com/results?search_query=osrs+fletching+training+guide+2024+fastest' },
+  Magic:       { wiki:'https://oldschool.runescape.wiki/w/Magic/Training',       yt:'https://www.youtube.com/results?search_query=osrs+magic+training+guide+2024+fastest+cheapest' },
+  Woodcutting: { wiki:'https://oldschool.runescape.wiki/w/Woodcutting/Training', yt:'https://www.youtube.com/results?search_query=osrs+woodcutting+training+guide+2024' },
+  Farming:     { wiki:'https://oldschool.runescape.wiki/w/Farming/Training',     yt:'https://www.youtube.com/results?search_query=osrs+farming+training+guide+2024' },
+  Slayer:      { wiki:'https://oldschool.runescape.wiki/w/Slayer/Training',      yt:'https://www.youtube.com/results?search_query=osrs+slayer+training+guide+2024+fastest' },
+  Hunter:      { wiki:'https://oldschool.runescape.wiki/w/Hunter/Training',      yt:'https://www.youtube.com/results?search_query=osrs+hunter+training+guide+2024' },
+  Construction:{ wiki:'https://oldschool.runescape.wiki/w/Construction/Training',yt:'https://www.youtube.com/results?search_query=osrs+construction+training+guide+2024+fastest' },
+  Prayer:      { wiki:'https://oldschool.runescape.wiki/w/Prayer/Training',      yt:'https://www.youtube.com/results?search_query=osrs+prayer+training+guide+2024+fastest' },
+  Ranged:      { wiki:'https://oldschool.runescape.wiki/w/Ranged/Training',      yt:'https://www.youtube.com/results?search_query=osrs+ranged+training+guide+2024+fastest' },
+  Strength:    { wiki:'https://oldschool.runescape.wiki/w/Strength/Training',    yt:'https://www.youtube.com/results?search_query=osrs+strength+training+guide+2024+fastest' },
+  Attack:      { wiki:'https://oldschool.runescape.wiki/w/Attack/Training',      yt:'https://www.youtube.com/results?search_query=osrs+attack+training+guide+2024+fastest' },
+};
+
+// ── Guide resolver ────────────────────────────────────────────────
+function resolveGuide(targetName) {
+  const completedQuests = new Set(
+    Object.keys(questChecks).filter(k => questChecks[k]).map(k => k.replace(/^q_/, ''))
+  );
+
+  // Recursively collect all missing quest prereqs (topological order)
+  const visited = new Set();
+  const orderedQuests = []; // prereq quests in order, excluding already done
+
+  function walk(name) {
+    if (visited.has(name)) return;
+    visited.add(name);
+    const p = QUEST_PREREQS[name];
+    if (p) p.quests.forEach(q => walk(q));
+    if (!completedQuests.has(name) && name !== targetName) {
+      orderedQuests.push(name);
+    }
+  }
+  walk(targetName);
+
+  // Collect ALL skill requirements across the full chain (missing only)
+  const skillGaps = {}; // skill -> {need, boostable}
+  const allInChain = [...orderedQuests, targetName];
+  allInChain.forEach(qName => {
+    const p = QUEST_PREREQS[qName];
+    if (!p) return;
+    p.skills.forEach(({s, n, b}) => {
+      const have = cmpStats[s] || 0;
+      if (have < n) {
+        // Track highest requirement per skill
+        if (!skillGaps[s] || skillGaps[s].need < n) {
+          skillGaps[s] = { need: n, have, boostable: !!b };
+        }
+      }
+    });
+  });
+
+  return { orderedQuests, skillGaps, completedQuests };
+}
+
+// ── Guide renderer ────────────────────────────────────────────────
+function renderQuestGuide(name) {
+  const { orderedQuests, skillGaps, completedQuests } = resolveGuide(name);
+  const guides = QUEST_GUIDES[name] || {};
+  const wikiSlug = name.replace(/ /g,'_').replace(/'/g,'%27');
+  const wikiUrl  = `https://oldschool.runescape.wiki/w/${wikiSlug}`;
+  const targetPrereqs = QUEST_PREREQS[name];
+  const targetDone = completedQuests.has(name);
+
+  const missingSkills = Object.entries(skillGaps);
+  const missingQuests = orderedQuests.filter(q => !completedQuests.has(q));
+  const prereqQuestsDone = orderedQuests.filter(q => completedQuests.has(q));
+  const totalSteps = missingSkills.length + missingQuests.length + 1;
+  const doneSteps  = prereqQuestsDone.length + (targetDone ? 1 : 0);
+  const pct = Math.round(doneSteps / totalSteps * 100);
+
+  let html = `<div class="guide-wrap">`;
+
+  // ── Header ──────────────────────────────────────────────────
+  html += `<div class="guide-header">
+    <div>
+      <div class="guide-title">${name}</div>
+      <div class="guide-links">
+        <a href="${wikiUrl}" target="_blank" class="guide-link guide-link-wiki">📖 Wiki</a>
+        ${guides.yt ? `<a href="${guides.yt}" target="_blank" class="guide-link guide-link-yt">▶ ${guides.ytLabel||'YouTube Guide'}</a>` : `<a href="https://www.youtube.com/results?search_query=osrs+${encodeURIComponent(name)}+quest+guide" target="_blank" class="guide-link guide-link-yt">▶ YouTube</a>`}
+      </div>
+    </div>
+    <div class="guide-pct ${targetDone?'done':pct>50?'progress':''}">
+      ${targetDone ? '✓ Done' : pct+'%'}
+    </div>
+  </div>`;
+
+  // ── Progress bar ────────────────────────────────────────────
+  html += `<div class="guide-prog-bar"><div class="guide-prog-fill" style="width:${pct}%"></div></div>`;
+
+  if (targetDone) {
+    html += `<div class="guide-done-msg">✅ Quest complete! Check it off in the Quest List.</div></div>`;
+    return html;
+  }
+
+  // ── Phase 1: Skill Gaps ──────────────────────────────────────
+  if (missingSkills.length) {
+    html += `<div class="guide-phase">
+      <div class="guide-phase-label">⚔ Phase 1 — Train Skills First</div>
+      <div class="guide-phase-sub">These levels are needed somewhere in the prereq chain.</div>`;
+    missingSkills.forEach(([skill, {need, have, boostable}]) => {
+      const sg = SKILL_GUIDES[skill] || {};
+      const gap = need - have;
+      html += `<div class="guide-skill-row">
+        <div class="guide-skill-info">
+          <span class="guide-skill-name">${skill}</span>
+          <span class="guide-skill-gap">Lvl ${have} → ${need}${boostable?' <span class="guide-boost">(boostable)</span>':''}</span>
+        </div>
+        <div class="guide-skill-links">
+          ${sg.wiki ? `<a href="${sg.wiki}" target="_blank" class="guide-link guide-link-wiki">📖 Wiki</a>` : ''}
+          ${sg.yt   ? `<a href="${sg.yt}"   target="_blank" class="guide-link guide-link-yt">▶ Guide</a>` : ''}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Phase 2: Prereq Quests ───────────────────────────────────
+  if (missingQuests.length) {
+    html += `<div class="guide-phase">
+      <div class="guide-phase-label">📜 Phase 2 — Prerequisite Quests <span style="color:var(--text3);font-weight:400">(${prereqQuestsDone.length}/${orderedQuests.length} done)</span></div>
+      <div class="guide-phase-sub">Complete in order — earlier quests unlock later ones.</div>`;
+    orderedQuests.forEach(q => {
+      const done = completedQuests.has(q);
+      const qWiki = `https://oldschool.runescape.wiki/w/${q.replace(/ /g,'_').replace(/'/g,'%27')}`;
+      const qGuide = QUEST_GUIDES[q];
+      html += `<div class="guide-quest-row${done?' done':''}">
+        <div class="guide-quest-check${done?' on':''}" data-guide-quest="${q.replace(/"/g,'&quot;').replace(/'/g,'&#39;')}"></div>
+        <div class="guide-quest-info">
+          <span class="guide-quest-name">${q}</span>
+          ${done?'<span class="guide-quest-done-tag">✓ Done</span>':''}
+        </div>
+        <div class="guide-quest-links">
+          <a href="${qWiki}" target="_blank" class="guide-link guide-link-wiki">📖</a>
+          ${qGuide?.yt ? `<a href="${qGuide.yt}" target="_blank" class="guide-link guide-link-yt">▶</a>` : `<a href="https://www.youtube.com/results?search_query=osrs+${encodeURIComponent(q)}+quest+guide+slayermusiq1" target="_blank" class="guide-link guide-link-yt">▶</a>`}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Phase 3: The Quest Itself ────────────────────────────────
+  const blockers = missingSkills.filter(([,{boostable}])=>!boostable).length + missingQuests.length;
+  html += `<div class="guide-phase guide-phase-final">
+    <div class="guide-phase-label">🏆 Phase 3 — ${name}</div>
+    ${blockers ? `<div class="guide-phase-sub" style="color:var(--orange)">⚠ ${blockers} blocker(s) remaining before you can start.</div>` : `<div class="guide-phase-sub" style="color:var(--green)">✅ All prereqs met — ready to go!</div>`}
+    <div class="guide-quest-links" style="margin-top:6px">
+      <a href="${wikiUrl}" target="_blank" class="guide-link guide-link-wiki">📖 Full Wiki Guide</a>
+      ${guides.yt ? `<a href="${guides.yt}" target="_blank" class="guide-link guide-link-yt">▶ ${guides.ytLabel}</a>` : `<a href="https://www.youtube.com/results?search_query=osrs+${encodeURIComponent(name)}+quest+guide" target="_blank" class="guide-link guide-link-yt">▶ YouTube Guide</a>`}
+    </div>
+  </div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+// ── Updated renderStarredGoals ────────────────────────────────────
+// ── Miniquest skill requirements (OSRS Wiki, May 2026) ─────────────
+// Only entries with actual skill reqs — all others are freely doable
+const MINIQUEST_REQS = {
+  "Barbarian Training":   { Fishing:48, Herblore:4, Firemaking:35, Smithing:5 },  // starts free, gates during
+  "The Mage Arena II":    { Magic:75 },         // must cast god spells; unboostable
+  "Lair of Tarn Razorlor":{ Slayer:40 },        // Slayer req, Haunted Mine prereq
+  "Alfred Grimhand's Barcrawl": {},              // no skill reqs
+  "Bear Your Soul":       {},
+  "Curse of the Empty Lord": {},                 // needs Priest in Peril for Morytania
+  "Enter the Abyss":      {},                    // needs Rune Mysteries
+  "The General's Shadow": {},                    // needs Curse of the Empty Lord
+  "Hopespear's Will":     {},                    // needs Haunted Mine
+  "In Search of Knowledge": {},
+  "The Mage Arena":       {},                    // Wilderness only, no skill req
+  "Skippy and the Mogres":{},
+  "Stronghold of Security":{},
+  "Volcanic Mine (miniquest)": {},
+  "Waterbirth Island (miniquest)": {},
+  // New miniquests
+  "Daddy's Home":         { Construction:5 },    // build furniture for Varrock, low con
+  "Family Pest":          {},                    // Morytania access needed
+  "The Frozen Door":      { Magic:50 },          // cast Ice magic in GOD Wars area
+  "His Faithful Servants":{},                    // Barrows area access
+};
+
+function renderDiaryGuide(name) {
+  const reqs  = DIARY_REQS[name]  || {};
+  const rew   = DIARY_REWARDS[name] || {};
+  const tier  = name.split(' — ')[1] || '';
+  const region = name.split(' — ')[0] || name;
+  const tierCol = {Easy:'var(--green)',Medium:'var(--yellow)',Hard:'var(--orange)',Elite:'var(--red)'}[tier]||'var(--text)';
+  const wikiSlug = (region.replace(/ /g,'_') + '_Diary');
+  const wikiUrl  = `https://oldschool.runescape.wiki/w/${wikiSlug}`;
+
+  let html = `<div class="guide-wrap">`;
+
+  // Header
+  html += `<div class="guide-header">
+    <div>
+      <div class="guide-title" style="color:${tierCol}">${region} Diary — ${tier}</div>
+      <div class="guide-links" style="margin-top:4px">
+        <a href="${wikiUrl}" target="_blank" class="guide-link guide-link-wiki">📖 Wiki Guide</a>
+      </div>
+    </div>
+  </div>`;
+
+  // Skill requirements
+  const skillList = Object.entries(reqs);
+  if (skillList.length) {
+    html += `<div class="guide-phase">
+      <div class="guide-phase-label">⚔ Skill Requirements</div>`;
+    skillList.forEach(([skill, need]) => {
+      const have = cmpStats[skill] || 0;
+      const met  = have >= need;
+      const sg   = SKILL_GUIDES[skill] || {};
+      html += `<div class="guide-skill-row">
+        <div class="guide-skill-info">
+          <span class="guide-skill-name">${skill}</span>
+          <span class="guide-skill-gap ${met?'':'unmet-gap'}">Lvl ${have} → ${need} ${met?'<span style="color:var(--green)">✅</span>':'<span style="color:var(--orange)">❌</span>'}</span>
+        </div>
+        <div class="guide-skill-links">
+          ${sg.wiki?`<a href="${sg.wiki}" target="_blank" class="guide-link guide-link-wiki">📖</a>`:''}
+          ${sg.yt  ?`<a href="${sg.yt}"   target="_blank" class="guide-link guide-link-yt">▶</a>` :''}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="guide-phase"><div class="guide-phase-sub">No specific skill requirements — check the wiki for quest prereqs.</div></div>`;
+  }
+
+  // Reward
+  if (rew.reward) {
+    html += `<div class="guide-phase" style="border-top:0.5px solid var(--border);padding-top:10px;margin-top:4px">
+      <div class="guide-phase-label">🏆 Reward</div>
+      <div class="guide-phase-sub" style="color:var(--yellow)">${rew.reward}</div>
+      ${rew.lamp?`<div class="guide-phase-sub">🪔 Antique lamp: <span style="color:var(--gold)">${rew.lamp.toLocaleString()} XP</span></div>`:''}
+    </div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function renderMiniquestGuide(name) {
+  const tip  = QUEST_TOOLTIPS[name] || {};
+  const reqs = MINIQUEST_REQS[name]  || {};
+  const wikiSlug = name.replace(/ /g,'_').replace(/'/g,'%27');
+  const wikiUrl  = `https://oldschool.runescape.wiki/w/${wikiSlug}`;
+  const skillList = Object.entries(reqs).filter(([,n])=>n>0);
+
+  // Check all skill reqs met
+  const allMet = skillList.every(([skill,need]) => (cmpStats[skill]||0) >= need);
+  const pct    = skillList.length ? (allMet ? '✅ Ready' : '⚠ Reqs missing') : '✅ No skill reqs';
+  const pctCol = allMet ? 'var(--green)' : 'var(--orange)';
+
+  let html = `<div class="guide-wrap">`;
+
+  // Header
+  html += `<div class="guide-header">
+    <div>
+      <div class="guide-title">${name} <span style="font-size:10px;color:var(--text3);font-weight:400">Miniquest</span></div>
+      <div class="guide-links" style="margin-top:4px">
+        <a href="${wikiUrl}" target="_blank" class="guide-link guide-link-wiki">📖 Wiki</a>
+        <a href="https://www.youtube.com/results?search_query=osrs+${encodeURIComponent(name)}+miniquest+guide" target="_blank" class="guide-link guide-link-yt">▶ YouTube</a>
+      </div>
+    </div>
+    <div class="guide-pct" style="color:${pctCol};font-size:12px">${pct}${tip.t?' · ⏱ '+tip.t:''}</div>
+  </div>`;
+
+  // Skill requirements (same pattern as diary/quest)
+  if (skillList.length) {
+    html += `<div class="guide-phase">
+      <div class="guide-phase-label">⚔ Skill Requirements</div>`;
+    skillList.forEach(([skill, need]) => {
+      const have = cmpStats[skill] || 0;
+      const met  = have >= need;
+      const sg   = SKILL_GUIDES[skill] || {};
+      html += `<div class="guide-skill-row">
+        <div class="guide-skill-info">
+          <span class="guide-skill-name">${skill}</span>
+          <span class="guide-skill-gap">Lvl ${have} → ${need} ${met
+            ? '<span style="color:var(--green)">✅ Req '+need+'</span>'
+            : '<span style="color:var(--orange)">❌ Need '+need+' (have '+have+')</span>'
+          }</span>
+        </div>
+        <div class="guide-skill-links">
+          ${sg.wiki?`<a href="${sg.wiki}" target="_blank" class="guide-link guide-link-wiki">📖</a>`:''}
+          ${sg.yt  ?`<a href="${sg.yt}"   target="_blank" class="guide-link guide-link-yt">▶</a>`:''}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="guide-phase"><div class="guide-phase-sub" style="color:var(--green)">✅ No skill requirements — anyone can complete this.</div></div>`;
+  }
+
+  // XP rewards
+  if (tip.xp && tip.xp.length) {
+    html += `<div class="guide-phase"><div class="guide-phase-label">⭐ XP Rewards</div>`;
+    tip.xp.forEach(x => { html += `<div class="guide-phase-sub tt-xp">• ${x}</div>`; });
+    html += `</div>`;
+  }
+
+  // Unlocks
+  if (tip.unlocks && tip.unlocks.length) {
+    html += `<div class="guide-phase"><div class="guide-phase-label">🔓 Unlocks</div>`;
+    tip.unlocks.forEach(u => { html += `<div class="guide-phase-sub" style="color:var(--yellow);margin-bottom:3px">• ${u}</div>`; });
+    html += `</div>`;
+  }
+
+  if (tip.note) {
+    html += `<div class="guide-phase-sub" style="color:#9a8060;margin-top:4px">ℹ ${tip.note}</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function renderStarredGoals() {
+  const area = document.getElementById('cmpStarredGoals');
+  if (!area) return;
+  const starredQuests  = Object.keys(goalQuests).filter(k=>goalQuests[k]).map(k=>({name:k.replace(/^g_/,''),type:'quest'}));
+  const starredDiaries = Object.keys(diaryGoals).filter(k=>diaryGoals[k]).map(k=>({name:k.replace(/^dg_/,''),type:'diary'}));
+  const starredMinis   = Object.keys(miniGoals).filter(k=>miniGoals[k]).map(k=>({name:k.replace(/^mg_/,''),type:'mini'}));
+  const starred = [...starredQuests,...starredMinis,...starredDiaries];
+  if (!starred.length) {
+    area.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:4px 0">No goals yet — star quests in the Quest List tab.</div>';
+    return;
+  }
+  setTimeout(wireGuideClicks, 0);
+  area.innerHTML = starred.map(({name, type}) => {
+    const isDiary = type === 'diary';
+    const isMini  = type === 'mini';
+    const done = isDiary ? !!diaryChecks['d_'+name]
+               : isMini  ? !!miniChecks['m_'+name]
+               : !!questChecks['q_'+name];
+    // Use encodeURIComponent + decodeURIComponent to safely pass name through HTML attr
+    const safeRemoveName = name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const tier = isDiary ? name.split(' — ')[1] : '';
+    const tierCol = {Easy:'var(--green)',Medium:'var(--yellow)',Hard:'var(--orange)',Elite:'var(--red)'}[tier]||'';
+    const typeTag = isDiary
+      ? `<span style="font-size:10px;color:${tierCol};border:0.5px solid ${tierCol}55;padding:1px 5px;border-radius:3px;margin-left:6px">${tier}</span>`
+      : isMini ? `<span style="font-size:10px;color:var(--text3);border:0.5px solid var(--border2);padding:1px 5px;border-radius:3px;margin-left:6px">Miniquest</span>`
+      : '';
+    const displayName = isDiary ? name.split(' — ')[0] + ' Diary' : name;
+    const doneTag = done ? ' <span style="color:var(--green);font-size:11px">✓</span>' : '';
+    const bodyHtml = (!isDiary && !isMini)
+      ? `<div class="guide-body" style="display:none">${renderQuestGuide(name)}</div>` : '';
+    const clickAttr = (!isDiary && !isMini) ? ' onclick="toggleGuideCard(this)"' : '';
+    const chevron   = (!isDiary && !isMini) ? '<i class="ti ti-chevron-down guide-chevron"></i>' : '';
+    // Remove button lives inside the body to avoid conflicting with header toggle
+    // remove button now in header
+    const fullBody = isDiary
+      ? `<div class="guide-body" style="display:none">${renderDiaryGuide(name)}</div>`
+      : isMini
+      ? `<div class="guide-body" style="display:none">${renderMiniquestGuide(name)}</div>`
+      : `<div class="guide-body" style="display:none">${renderQuestGuide(name)}</div>`;
+    const headerClick = ' onclick="toggleGuideCard(this)"'; // always clickable now
+    return `<div class="guide-card${done?' done':''}">`
+      + `<div class="guide-card-header"${headerClick}>`
+      + `<span class="guide-card-name">${displayName}${typeTag}${doneTag}</span>`
+      + `<span class="guide-card-actions">`
+      + `<span class="guide-remove-btn" data-remove-goal="${safeRemoveName}" data-remove-type="${type}" title="Remove goal">✕</span>`
+      + chevron
+      + `</span></div>`
+      + fullBody
+      + `</div>`;
+  }).join('');
+}
+
+function toggleGuideCard(header) {
+  const body = header.nextElementSibling;
+  const chev = header.querySelector('.guide-chevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+// Delegated listener for guide-area prereq checkboxes
+// Wired once; re-renders only the affected card's body in place
+function wireGuideClicks() {
+  const area = document.getElementById('cmpStarredGoals');
+  if (!area || area._guideWired) return;
+  area._guideWired = true;
+  area.addEventListener('click', e => {
+    const rb = e.target.closest('[data-remove-goal]');
+    if (rb) { e.stopPropagation(); removeGoal(rb.dataset.removeGoal, rb.dataset.removeType); return; }
+    const cb = e.target.closest('[data-guide-quest]');
+    if (!cb) return;
+    e.stopPropagation();
+    const qname = cb.dataset.guideQuest;
+    // Toggle in the same questChecks store the Quest List uses
+    questChecks['q_'+qname] = !questChecks['q_'+qname];
+    localStorage.setItem(QUEST_CHECKS_KEY, JSON.stringify(questChecks));
+    syncQuestToSteps(qname);
+    // Re-render ALL open guide card bodies — so checking a quest in one goal
+    // automatically updates every other goal card that lists the same quest
+    document.querySelectorAll('#cmpStarredGoals .guide-card').forEach(c => {
+      const body = c.querySelector('.guide-body');
+      if (!body || body.style.display === 'none') return; // skip collapsed cards
+      const name = c.querySelector('.guide-card-name')?.textContent?.replace(/✓$/,'').trim();
+      if (name) body.innerHTML = renderQuestGuide(name);
+    });
+    // Refresh Quest List progress counter if visible
+    if (document.getElementById('cmpQuestGroups')?.children.length) renderQuestList();
+  });
+}
+
+// ─── Goal switching ────────────────────────────────────
+function setCmpGoal(goal) {
+  cmpGoal = goal;
+  document.querySelectorAll('.cmp-goal-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('cmpGoal-'+goal)?.classList.add('active');
+  const questPanel   = document.getElementById('cmpQuestPanel');
+  const phasesArea   = document.getElementById('cmpPhasesArea');
+  const progressArea = document.getElementById('cmpProgressArea');
+  if (goal==='quests') {
+    if(questPanel)   questPanel.style.display   = 'block';
+    if(phasesArea)   phasesArea.style.display   = 'none';
+    if(progressArea) progressArea.style.display = 'none';
+    renderQuestList();
+  } else {
+    if(questPanel)   questPanel.style.display   = 'none';
+    if(phasesArea)   phasesArea.style.display   = 'block';
+    if(progressArea) progressArea.style.display = 'block';
+    renderCmpStats();
+    renderCmpPhases();
+  }
+}
+
+// ─── Stats render ──────────────────────────────────────
+function renderCompanion() { renderCmpStats(); renderCmpPhases(); }
+
+function renderCmpStats() {
+  const grid = document.getElementById('cmpStatGrid');
+  if (!grid) return;
+  const relevantSkills = ['Agility','Thieving','Firemaking','Mining','Fishing','Runecraft','Herblore','Fletching','Smithing','Crafting','Magic','Construction','Hunter','Cooking','Farming','Woodcutting','Slayer','Ranged','Prayer'];
+  // Build skill requirements only from starred goals' prereq chains
+  const allReqs = {};
+  const starredNames = Object.keys(goalQuests).filter(k=>goalQuests[k]).map(k=>k.replace(/^g_/,''));
+  // Starred diary skill requirements
+  Object.keys(diaryGoals).filter(k=>diaryGoals[k]).forEach(k=>{
+    const dname = k.replace(/^dg_/,'');
+    const dreqs = DIARY_REQS[dname] || {};
+    Object.entries(dreqs).forEach(([skill,need])=>{ if(!allReqs[skill]||allReqs[skill]<need) allReqs[skill]=need; });
+  });
+  // Starred miniquest skill requirements
+  Object.keys(miniGoals).filter(k=>miniGoals[k]).forEach(k=>{
+    const mname = k.replace(/^mg_/,'');
+    const mreqs = MINIQUEST_REQS[mname] || {};
+    Object.entries(mreqs).forEach(([skill,need])=>{ if(need&&(!allReqs[skill]||allReqs[skill]<need)) allReqs[skill]=need; });
+  });
+  if (starredNames.length) {
+    starredNames.forEach(qname => {
+      // Walk full prereq chain for each starred quest
+      const visited = new Set();
+      function walkReqs(name) {
+        if (visited.has(name)) return;
+        visited.add(name);
+        const p = QUEST_PREREQS[name];
+        if (!p) return;
+        p.quests.forEach(q => walkReqs(q));
+        p.skills.forEach(({s,n}) => { if (!allReqs[s] || allReqs[s] < n) allReqs[s] = n; });
+      }
+      walkReqs(qname);
+    });
+  } // No goals starred → allReqs stays empty, stat cards show levels only
+  const wasOpen = grid.style.display === 'grid';
+  grid.innerHTML = relevantSkills.map(skill=>{
+    const have = cmpStats[skill]||0;
+    const need = allReqs[skill]||0;
+    const met  = !need||have>=need;
+    return `<div class="cmp-stat-card">
+      <div class="cmp-stat-name">${skill}</div>
+      <div class="cmp-stat-val"><input type="number" min="1" max="99" value="${have}" onchange="updateCmpStat('${skill}',this.value)" onclick="event.stopPropagation()" /></div>
+      ${need?`<div class="cmp-stat-need ${met?'met':'unmet'}">${met?'✅ Req '+need:'❌ Need '+need+' (have '+have+')'}</div>`:''}
+    </div>`;
+  }).join('');
+  if (wasOpen) grid.style.display = 'grid';
+}
+
+function toggleStatsPanel() {
+  const grid = document.getElementById('cmpStatGrid');
+  const icon = document.getElementById('statsToggleIcon');
+  if (!grid) return;
+  const open = grid.style.display === 'grid';
+  grid.style.display = open ? 'none' : 'grid';
+  if (icon) icon.textContent = open ? '▼ show' : '▲ hide';
+}
+
+function updateCmpStat(skill,val) {
+  cmpStats[skill] = Math.max(1,Math.min(99,parseInt(val)||1));
+  localStorage.setItem(CMP_STATS_KEY, JSON.stringify(cmpStats));
+  renderCmpPhases();
+}
+
+// ─── Phase render ──────────────────────────────────────
+function renderCmpPhases() {
+  const goal = GOALS[cmpGoal]; if(!goal) return;
+  const phases = goal.phases;
+  let total=0, done=0;
+  phases.forEach(ph=>ph.steps.forEach(st=>{ total++; if(cmpChecks[st.id]) done++; }));
+  const pct = total?Math.round(done/total*100):0;
+  const fill = document.getElementById('cmpProgFill');
+  const txt  = document.getElementById('cmpProgText');
+  if(fill) fill.style.width = pct+'%';
+  if(txt)  txt.innerHTML = `<span>${done}/${total}</span> steps complete — ${pct}% toward ${goal.label}`;
+
+  const area = document.getElementById('cmpPhasesArea');
+  if(!area) return;
+  area.innerHTML = phases.map((ph,idx)=>{
+    const phDone   = ph.steps.every(st=>cmpChecks[st.id]);
+    const phActive = !phDone && (idx===0||phases.slice(0,idx).every(p=>p.steps.every(s=>cmpChecks[s.id])));
+    const isOpen   = phActive||phDone;
+    const numCls   = phDone?'done':phActive?'active-phase':'';
+    const stepsHtml = ph.steps.map(st=>{
+      const isDone    = !!cmpChecks[st.id];
+      const isBlocked = !isDone&&(st.skillReqs||[]).some(r=>(cmpStats[r.skill]||0)<r.need&&!r.boostable);
+      const stepCls   = isDone?'step-done':isBlocked?'step-blocked':'';
+      const checkCls  = isDone?'checked':'';
+      const tags = (st.tags||[]).map(t=>{
+        const cls = t==='quest'?'cmp-tag-quest':t.includes('hrs')||t==='skill'?'cmp-tag-skill':t==='GOAL'?'cmp-tag-tip':'cmp-tag-warn';
+        return `<span class="cmp-tag ${cls}">${t}</span>`;
+      }).join('');
+      const reqBadges = (st.skillReqs||[]).map(r=>{
+        const have = cmpStats[r.skill]||0; const met = have>=r.need;
+        return `<span class="cmp-tag ${met?'cmp-tag-tip':'cmp-tag-warn'}">${r.skill} ${r.need}${r.boostable?' (boostable)':''}: ${met?'✅':('❌ '+have)}</span>`;
+      }).join('');
+      return `<div class="cmp-step ${stepCls}">
+        <div class="cmp-step-check ${checkCls}" onclick="toggleCmpStep('${st.id}')"></div>
+        <div class="cmp-step-body">
+          <div class="cmp-step-title">${wrapWithTooltip(st.title)}</div>
+          <div class="cmp-step-detail">${st.detail}</div>
+          <div class="cmp-step-tags">${tags}${reqBadges}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="cmp-phase">
+      <div class="cmp-phase-header" onclick="toggleCmpPhase('${ph.id}')">
+        <div class="cmp-phase-num ${numCls}">${idx+1}</div>
+        <div><div class="cmp-phase-title">${ph.title}</div><div class="cmp-phase-sub">${ph.sub}</div></div>
+        <i class="ti ti-chevron-down cmp-phase-chevron${isOpen?' open':''}" id="chev-${ph.id}" aria-hidden="true"></i>
+      </div>
+      <div class="cmp-steps${isOpen?' open':''}" id="steps-${ph.id}">${stepsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCmpPhase(id) {
+  const steps = document.getElementById('steps-'+id);
+  const chev  = document.getElementById('chev-'+id);
+  if(!steps) return;
+  const open = steps.classList.toggle('open');
+  chev?.classList.toggle('open',open);
+}
+
+function toggleCmpStep(id) {
+  cmpChecks[id] = !cmpChecks[id];
+  localStorage.setItem(CMP_STORAGE_KEY, JSON.stringify(cmpChecks));
+  renderCmpPhases();
+}
+
+// ─── Quest list data ───────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════
+//  QUEST TOOLTIP DATA
+//  All rewards verified: OSRS Wiki (April–May 2026)
+//  XP rates calibrated to Jordon's actual stats where relevant
+//  Keys match QUEST_LIST quest names exactly where possible
+// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// DIARY_REQS — Highest skill requirement per tier per diary
+// Source: OSRS Wiki individual diary pages (verified April–May 2026)
+// Format: { skill: level, ... } — only skills actually required
+// Wiki URL: https://oldschool.runescape.wiki/w/{Region}_Diary
+// ══════════════════════════════════════════════════════════════════
+const DIARY_REQS = {
+  'Ardougne Diary — Easy':   { Thieving:5, Farming:10 },
+  'Ardougne Diary — Medium': { Magic:31, Ranged:40, Thieving:38, Farming:28, Agility:36, Cooking:30, Crafting:40 },
+  'Ardougne Diary — Hard':   { Magic:66, Thieving:53, Agility:56, Fishing:53, Farming:50, Woodcutting:61, Fletching:60, Ranged:60, Slayer:50 },
+  'Ardougne Diary — Elite':  { Magic:94, Thieving:75, Agility:75, Fishing:96, Crafting:77, Runecraft:82, Smithing:91 },
+
+  'Desert Diary — Easy':     { Thieving:21, Crafting:10, Agility:10, Slayer:10 },
+  'Desert Diary — Medium':   { Agility:30, Slayer:22, Magic:33, Thieving:45, Herblore:36, Firemaking:35 },
+  'Desert Diary — Hard':     { Magic:64, Thieving:65, Agility:70, Slayer:65, Herblore:45, Smithing:60, Fletching:60, Ranged:70 },
+  'Desert Diary — Elite':    { Fletching:95, Firemaking:75, Thieving:83, Herblore:70, Magic:90, Ranged:95, Agility:80 },
+
+  'Falador Diary — Easy':    { Agility:5, Mining:15, Prayer:10, Crafting:13 },
+  'Falador Diary — Medium':  { Agility:42, Mining:40, Thieving:42, Farming:23, Smithing:37, Herblore:30, Crafting:46 },
+  'Falador Diary — Hard':    { Agility:59, Mining:60, Smithing:50, Farming:45, Ranged:70, Prayer:70, Crafting:56, Runecraft:56 },
+  'Falador Diary — Elite':   { Farming:91, Mining:72, Agility:80, Smithing:88, Runecraft:88, Prayer:85, Crafting:85 },
+
+  'Fremennik Diary — Easy':  { Crafting:23, Fishing:24, Agility:35 },
+  'Fremennik Diary — Medium':{ Agility:40, Crafting:40, Mining:50, Magic:40, Fishing:55, Fletching:25, Smithing:40, Woodcutting:40, Thieving:35, Firemaking:40 },
+  'Fremennik Diary — Hard':  { Agility:56, Magic:72, Slayer:60, Mining:60, Herblore:52, Smithing:65, Crafting:65, Woodcutting:55 },
+  'Fremennik Diary — Elite': { Slayer:83, Agility:72, Magic:80, Mining:80, Crafting:80, Herblore:85, Runecraft:82, Smithing:88, Woodcutting:90 },
+
+  'Kandarin Diary — Easy':   { Agility:20, Fishing:16, Cooking:5, Thieving:5, Fletching:5 },
+  'Kandarin Diary — Medium': { Agility:36, Fletching:50, Fishing:55, Magic:45, Thieving:47, Herblore:48, Cooking:43, Woodcutting:30, Smithing:40 },
+  'Kandarin Diary — Hard':   { Agility:60, Fishing:70, Magic:65, Smithing:70, Herblore:59, Fletching:70, Thieving:55, Crafting:66, Farming:68 },
+  'Kandarin Diary — Elite':  { Agility:90, Smithing:90, Fishing:80, Herblore:85, Magic:87, Farming:79, Crafting:90, Fletching:90, Thieving:75, Slayer:80 },
+
+  'Karamja Diary — Easy':    { Agility:15, Fishing:15, Mining:15, Woodcutting:35 },
+  'Karamja Diary — Medium':  { Agility:30, Farming:27, Magic:43, Ranged:42, Mining:40, Crafting:40, Thieving:50 },
+  'Karamja Diary — Hard':    { Agility:53, Fishing:65, Slayer:52, Farming:51, Mining:55, Crafting:50, Magic:59, Herblore:87, Ranged:60, Woodcutting:60 },
+  'Karamja Diary — Elite':   { Agility:80, Runecraft:91, Slayer:65, Fishing:76, Farming:72, Herblore:87 },
+
+  'Kourend & Kebos Diary — Easy':   { Fishing:15, Mining:10, Farming:20, Woodcutting:20, Crafting:10 },
+  'Kourend & Kebos Diary — Medium': { Farming:35, Fishing:38, Slayer:42, Agility:40, Mining:38, Herblore:40, Woodcutting:40, Magic:40, Ranged:50 },
+  'Kourend & Kebos Diary — Hard':   { Slayer:62, Farming:60, Fishing:55, Agility:73, Mining:65, Herblore:70, Magic:82, Crafting:49, Firemaking:50 },
+  'Kourend & Kebos Diary — Elite':  { Slayer:95, Farming:74, Agility:80, Mining:73, Herblore:78, Magic:90, Smithing:75, Crafting:75, Firemaking:85 },
+
+  'Lumbridge & Draynor Diary — Easy':   { Agility:10, Crafting:10, Runecraft:5, Magic:10, Fishing:15, Mining:15, Woodcutting:15 },
+  'Lumbridge & Draynor Diary — Medium': { Agility:30, Crafting:27, Magic:31, Mining:35, Ranged:40, Smithing:30, Slayer:32, Farming:25, Runecraft:27 },
+  'Lumbridge & Draynor Diary — Hard':   { Agility:46, Crafting:46, Magic:56, Mining:53, Runecraft:56, Smithing:50, Slayer:50, Farming:45 },
+  'Lumbridge & Draynor Diary — Elite':  { Agility:70, Magic:66, Runecraft:79, Smithing:88, Farming:70, Woodcutting:80, Slayer:72, Crafting:70 },
+
+  'Morytania Diary — Easy':  { Agility:15, Slayer:15, Fishing:15, Cooking:12 },
+  'Morytania Diary — Medium':{ Agility:25, Slayer:35, Fishing:53, Prayer:43, Crafting:35, Magic:51, Farming:35, Woodcutting:50 },
+  'Morytania Diary — Hard':  { Agility:65, Slayer:50, Fishing:53, Prayer:70, Crafting:61, Magic:60, Farming:72, Woodcutting:50, Ranged:70, Attack:70 },
+  'Morytania Diary — Elite': { Agility:73, Slayer:88, Fishing:96, Prayer:85, Farming:90, Woodcutting:85, Ranged:70, Attack:70 },
+
+  'Varrock Diary — Easy':    { Mining:15, Agility:13, Crafting:8, Thieving:5 },
+  'Varrock Diary — Medium':  { Mining:40, Agility:30, Crafting:36, Magic:25, Herblore:15, Smithing:40, Farming:25 },
+  'Varrock Diary — Hard':    { Mining:55, Agility:51, Magic:54, Crafting:40, Smithing:50, Herblore:46, Farming:65, Slayer:72 },
+  'Varrock Diary — Elite':   { Mining:85, Magic:78, Crafting:66, Smithing:90, Cooking:95, Farming:76, Runecraft:88 },
+
+  'Western Provinces Diary — Easy':   { Ranged:30, Fletching:5, Farming:25, Fishing:27, Woodcutting:35 },
+  'Western Provinces Diary — Medium': { Ranged:44, Agility:48, Fletching:44, Farming:27, Fishing:46, Slayer:40, Woodcutting:40 },
+  'Western Provinces Diary — Hard':   { Ranged:70, Agility:72, Fletching:70, Farming:40, Fishing:72, Slayer:60, Woodcutting:60, Hunter:58, Magic:64 },
+  'Western Provinces Diary — Elite':  { Ranged:90, Agility:85, Fletching:80, Farming:76, Hunter:80, Magic:66, Slayer:80, Woodcutting:80 },
+
+  'Wilderness Diary — Easy':   { Agility:10, Magic:13, Mining:15, Fishing:30, Firemaking:20 },
+  'Wilderness Diary — Medium': { Agility:60, Magic:37, Mining:55, Fishing:55, Slayer:42, Runecraft:44, Crafting:50, Herblore:31 },
+  'Wilderness Diary — Hard':   { Agility:60, Magic:60, Mining:72, Fishing:55, Slayer:52, Runecraft:44, Crafting:50, Herblore:69 },
+  'Wilderness Diary — Elite':  { Agility:60, Magic:96, Mining:85, Slayer:83, Runecraft:91, Crafting:85, Herblore:90, Fishing:55 },
+};
+
+// Rewards summary per diary tier (key unlocks only)
+const DIARY_REWARDS = {
+  'Ardougne Diary — Easy':   { reward:'Ardougne Cloak 1 — unlimited Monastery teles', lamp:1000 },
+  'Ardougne Diary — Medium': { reward:'Cloak 2 — double Ardy Knight pickpocket rate', lamp:5000 },
+  'Ardougne Diary — Hard':   { reward:'Cloak 3 — 25 noted pure essence from Wizard Cromperty daily', lamp:10000 },
+  'Ardougne Diary — Elite':  { reward:'Cloak 4 — unlimited teles, best cape stab bonus in game', lamp:50000 },
+
+  'Desert Diary — Easy':     { reward:'Desert Amulet 1 — free Shantay pass, noted Nardah teles', lamp:1000 },
+  'Desert Diary — Medium':   { reward:'Amulet 2 — Nardah teleport, herb cleaning via Zahur', lamp:5000 },
+  'Desert Diary — Hard':     { reward:'Amulet 3 — unlimited teles, Camulet added', lamp:10000 },
+  'Desert Diary — Elite':    { reward:'Amulet 4 — Zahur makes potions free, Desert Strykewyrm tasks', lamp:50000 },
+
+  'Falador Diary — Easy':    { reward:'Falador Shield 1 — prayer restore at Falador farm', lamp:1000 },
+  'Falador Diary — Medium':  { reward:'Shield 2 — Prospector Percy 10% extra ore, unlimited air teles', lamp:5000 },
+  'Falador Diary — Hard':    { reward:'Shield 3 — White Knight +25 daily battlestaves', lamp:10000 },
+  'Falador Diary — Elite':   { reward:'Shield 4 — Prayer restores unlimited, Tears of Guthix +1 min', lamp:50000 },
+
+  'Fremennik Diary — Easy':  { reward:'Fremennik Sea Boots 1 — free ferry to Misc', lamp:1000 },
+  'Fremennik Diary — Medium':{ reward:'Boots 2 — free Lyre teles, Neitiznot/Jatizso diary access', lamp:5000 },
+  'Fremennik Diary — Hard':  { reward:'Boots 3 — Fossegrimen infinite lyre charges at 600 fish', lamp:10000 },
+  'Fremennik Diary — Elite': { reward:'Boots 4 — 10% more Misc approval when fishing/WC', lamp:50000 },
+
+  'Kandarin Diary — Easy':   { reward:'Kandarin Headgear 1 — Camelot tele to Seers bank', lamp:1000 },
+  'Kandarin Diary — Medium': { reward:'Headgear 2 — flax spinner gives 120 flax daily, coal bag', lamp:5000 },
+  'Kandarin Diary — Hard':   { reward:'Headgear 3 — Seers bank tele improves to full, Sherlock removed', lamp:10000 },
+  'Kandarin Diary — Elite':  { reward:'Headgear 4 — Smithing double coal, Sandy makes tanning free', lamp:50000 },
+
+  'Karamja Diary — Easy':    { reward:'Karamja Gloves 1 — 10% more Agility XP on Brimhaven course', lamp:1000 },
+  'Karamja Diary — Medium':  { reward:'Gloves 2 — unlimited tele to Shilo Village gem rocks', lamp:5000 },
+  'Karamja Diary — Hard':    { reward:'Gloves 3 — Brimhaven free entry, 10% more tickets', lamp:10000 },
+  'Karamja Diary — Elite':   { reward:'Gloves 4 — Infernal eel access, Agility XP boost, free ship to Musa Point', lamp:50000 },
+
+  'Kourend & Kebos Diary — Easy':   { reward:"Rada's Blessing 1 — 2% chance extra fish", lamp:1000 },
+  'Kourend & Kebos Diary — Medium': { reward:"Blessing 2 — antique lamp (2,500 XP), doubled Xeric's talisman chance", lamp:5000 },
+  'Kourend & Kebos Diary — Hard':   { reward:'Blessing 3 — Slayer helm works as Shayzien helm', lamp:10000 },
+  'Kourend & Kebos Diary — Elite':  { reward:'Blessing 4 — 4% extra fish, 50% more lizardman drops', lamp:50000 },
+
+  'Lumbridge & Draynor Diary — Easy':   { reward:"Explorer's Ring 1 — 30 free casts of Low Alchemy daily", lamp:1000 },
+  'Lumbridge & Draynor Diary — Medium': { reward:'Ring 2 — 15 High Alchemy casts daily, Zanaris shortcut', lamp:5000 },
+  'Lumbridge & Draynor Diary — Hard':   { reward:'Ring 3 — unlimited run energy restore 3x daily', lamp:10000 },
+  'Lumbridge & Draynor Diary — Elite':  { reward:'Ring 4 — cabbage-port teleport to Falador farm, casts unlimited', lamp:50000 },
+
+  'Morytania Diary — Easy':  { reward:'Morytania Legs 1 — 50% more prayer XP at Ectofuntus', lamp:1000 },
+  'Morytania Diary — Medium':{ reward:'Legs 2 — Slime and Bonemeal noted from Robin daily', lamp:5000 },
+  'Morytania Diary — Hard':  { reward:'Legs 3 — double Barrows loot chest', lamp:10000 },
+  'Morytania Diary — Elite': { reward:'Legs 4 — 2x Prayer XP at Ectofuntus, Morytania Slayer helm boost', lamp:50000 },
+
+  'Varrock Diary — Easy':    { reward:'Varrock Armour 1 — 10% chance double ore while mining', lamp:1000 },
+  'Varrock Diary — Medium':  { reward:'Armour 2 — Varrock tele reaches GE, 10% double smelting', lamp:5000 },
+  'Varrock Diary — Hard':    { reward:'Armour 3 — Lumberyard tele, Zaff sells 64 battlestaves daily', lamp:10000 },
+  'Varrock Diary — Elite':   { reward:'Armour 4 — Zaff 80 battlestaves daily, double chance to mine gem rocks', lamp:50000 },
+
+  'Western Provinces Diary — Easy':   { reward:'Western Banner 1 — unlimited tele to Chompy fields', lamp:1000 },
+  'Western Provinces Diary — Medium': { reward:'Banner 2 — access to Red Chinchompa hunting ground', lamp:5000 },
+  'Western Provinces Diary — Hard':   { reward:'Banner 3 — access to Private Red Chin area, Void deflector', lamp:10000 },
+  'Western Provinces Diary — Elite':  { reward:'Banner 4 — 5% more exp in Nightmare Zone, Void knight set bonus', lamp:50000 },
+
+  'Wilderness Diary — Easy':   { reward:'Wilderness Sword 1 — free entry to Resource Area', lamp:1000 },
+  'Wilderness Diary — Medium': { reward:'Sword 2 — Slayer tasks 15% more often in Wilderness', lamp:5000 },
+  'Wilderness Diary — Hard':   { reward:'Sword 3 — 50% chance double Rune from Runite rocks in Wilderness', lamp:10000 },
+  'Wilderness Diary — Elite':  { reward:'Sword 4 — Looting bag from any Wilderness monster, Resource Area free', lamp:50000 },
+};
+
+const QUEST_TOOLTIPS = {
+  // ── F2P ─────────────────────────────────────────────────────
+  "Cook's Assistant":{qp:1,xp:['300 Cooking'],unlocks:['Lumbridge kitchen use'],t:'~10 min'},
+  "The Restless Ghost":{qp:1,xp:['1,125 Prayer'],unlocks:['Access to Lumbridge swamp caves path'],t:'~10 min'},
+  "Romeo & Juliet":{qp:5,xp:[],unlocks:['Access to the Varrock sewers teleport shortcut'],t:'~10 min'},
+  "Sheep Shearer":{qp:1,xp:['150 Crafting'],unlocks:[],t:'~5 min'},
+  "Shield of Arrav":{qp:1,xp:['600 Theft / 600 gp reward'],unlocks:['Access to Phoenix Gang or Black Arm Gang loot'],t:'~30 min'},
+  "Demon Slayer":{qp:3,xp:[],unlocks:['Silverlight sword (reqs for Darklight chain)'],t:'~20 min'},
+  "The Corsair Curse":{qp:2,xp:['300 Attack, 300 Strength, 300 Defence, 300 Hitpoints'],unlocks:['Corsair Cove (Ogress Warriors/Shamans early money)'],t:'~15 min'},
+  "Goblin Diplomacy":{qp:5,xp:['200 Crafting'],unlocks:['Goblin Village access'],t:'~10 min'},
+  "Imp Catcher":{qp:1,xp:['875 Magic'],unlocks:[],t:'~15 min (bead farming)'},
+  "Doric's Quest":{qp:1,xp:['1,300 Mining'],unlocks:["Doric's whetstone (Devious Minds req)"],t:'~5 min'},
+  "Ernest the Chicken":{qp:4,xp:[],unlocks:['Access to Draynor Manor area/levers'],t:'~15 min'},
+  "Witch's Potion":{qp:1,xp:['325 Magic'],unlocks:[],t:'~5 min'},
+  "Black Knights' Fortress":{qp:3,xp:[],unlocks:["Access to Black Knights' Fortress"],t:'~15 min'},
+  "The Knight's Sword":{qp:1,xp:['12,725 Smithing'],unlocks:['Good early Smithing boost — 1→29 in one quest'],t:'~30 min'},
+  "Prince Ali Rescue":{qp:3,xp:[],unlocks:['Free Al Kharid toll gate'],t:'~20 min'},
+  "Pirate's Treasure":{qp:2,xp:[],unlocks:['Varrock sword (cosmetic)'],t:'~10 min'},
+  "Rune Mysteries":{qp:1,xp:[],unlocks:['Runecrafting skill unlock','Access to Rune Essence mine'],t:'~15 min'},
+  "Vampyre Slayer":{qp:3,xp:['4,825 Attack'],unlocks:["Access to Draynor Manor vampire area"],t:'~15 min'},
+  "Dragon Slayer I":{qp:2,xp:['18,650 Strength, 18,650 Defence, 18,650 Hitpoints'],unlocks:['Ability to equip Rune platebody/chainbody','Required for many F2P gear upgrades'],t:'~1 hr (hard for new accounts)'},
+  "Misthalin Mystery":{qp:1,xp:['600 Crafting'],unlocks:['Hairdresser location hint'],t:'~15 min'},
+  "X Marks the Spot":{qp:1,xp:[],unlocks:['3 sets of Mysterious old notes (Varlamore chain start)'],t:'~5 min'},
+  "Below Ice Mountain":{qp:1,xp:[],unlocks:["Ruins of Camdozaal (fortis lite content)"],t:'~15 min'},
+  "Learning the Ropes":{qp:1,xp:[],unlocks:['Tutorial completion (new player)'],t:'~10 min'},
+  "The Ides of Milk":{qp:1,xp:[],unlocks:['Varlamore intro quest'],t:'~10 min'},
+
+  // ── Members Novice ───────────────────────────────────────────
+  "Druidic Ritual":{qp:4,xp:[],unlocks:['Herblore skill unlock — required for ALL herblore'],t:'~10 min'},
+  "Lost City":{qp:3,xp:[],unlocks:['Zanaris (fairy ring hub access)','Dragon longsword/dagger access'],t:'~30 min'},
+  "Witch's House":{qp:4,xp:['6,325 Hitpoints'],unlocks:['Slayer unlock for witches'],t:'~20 min'},
+  "Merlin's Crystal":{qp:6,xp:[],unlocks:['Excalibur sword (special restore 20% defence)','Camelot teleport area'],t:'~30 min'},
+  "Heroes' Quest":{qp:1,xp:['3,075 Attack, 3,075 Strength, 3,075 Defence, 3,075 Hitpoints, 3,075 Ranged'],unlocks:["Heroes' Guild access (gem rocks, Dragon battleaxe, Dragon mace)",'Required for many further quests'],t:'~2 hrs'},
+  "Scorpion Catcher":{qp:1,xp:['6,625 Prayer'],unlocks:['Kharazi Jungle access hint','Required for Legends Quest chain'],t:'~30 min'},
+  "Family Crest":{qp:1,xp:['4,900 Smithing, 4,900 Magic, 4,900 Cooking, 4,900 Crafting'],unlocks:['Cooking/Goldsmith/Chaos gauntlets (pick one — Goldsmith is BIS Smithing training)'],t:'~1 hr'},
+  "Fishing Contest":{qp:1,xp:['2,437 Fishing'],unlocks:['Shortcut under White Wolf Mountain','Required for many NW quests'],t:'~20 min'},
+  "Tribal Totem":{qp:1,xp:['5,765 Thieving'],unlocks:["Access to Brimhaven dungeon area"],t:'~20 min'},
+  "Monk's Friend":{qp:1,xp:['2,000 Woodcutting'],unlocks:[],t:'~5 min'},
+  "Clock Tower":{qp:1,xp:['500 gp reward'],unlocks:[],t:'~15 min'},
+  "Holy Grail":{qp:2,xp:['11,000 Prayer, 15,300 Defence'],unlocks:["Fisher King's Realm access",'Required for SW quests'],t:'~30 min'},
+  "Tree Gnome Village":{qp:2,xp:['11,450 Attack'],unlocks:['Gnome glider transport system','Spirit tree transport access'],t:'~30 min'},
+  "Fight Arena":{qp:2,xp:['12,175 Attack, 12,175 Thieving'],unlocks:['Access to General\'s stronghold/Fight Arena Slayer tasks'],t:'~30 min'},
+  "Hazeel Cult":{qp:1,xp:['2,000 Thieving (evil side)'],unlocks:['Hazeel\'s mark unlock path (needed for SotN)'],t:'~15 min'},
+  "Waterfall Quest":{qp:1,xp:['13,750 Attack, 13,750 Strength'],unlocks:['Access to Baxtorian Falls / Glarial\'s tomb','Best early attack/strength quest — boosts 1→30 instantly'],t:'~45 min'},
+  "Murder Mystery":{qp:3,xp:['1,406 Crafting'],unlocks:[],t:'~20 min'},
+  "Jungle Potion":{qp:1,xp:[],unlocks:['Shilo Village (chain req)'],t:'~15 min'},
+  "Biohazard":{qp:3,xp:['2,500 Thieving'],unlocks:['West Ardougne access (Mourning quests)','Combat Training Camp (Attack dummies)'],t:'~30 min'},
+  "Observatory Quest":{qp:2,xp:['875 random combat stat or items (constellation-dependent)'],unlocks:['Observatory (telescope for some diary tasks)'],t:'~30 min'},
+  "Plague City":{qp:1,xp:['2,425 Mining'],unlocks:['West Ardougne access (Mourning quest chain start)'],t:'~20 min'},
+  "Sea Slug":{qp:1,xp:['7,175 Fishing'],unlocks:['Platform zone (Fishing Trawler shortcut)'],t:'~15 min'},
+  "Shilo Village":{qp:2,xp:['3,875 Crafting'],unlocks:['Shilo Village (gem rocks, best F2P Slayer location nearby)','Required for many quests'],t:'~1 hr'},
+  "Underground Pass":{qp:5,xp:['3,000 Agility'],unlocks:['Pass through to Tirannwn (Elf land)','Required for Regicide → Song of the Elves chain'],t:'~2 hrs (difficult)'},
+  "The Feud":{qp:1,xp:['15,000 Thieving'],unlocks:["Blackjacking unlock — fastest Thieving XP to 91",'Pollnivneach access'],t:'~45 min'},
+  "Dwarf Cannon":{qp:1,xp:[],unlocks:['Dwarf multicannon — fastest early Ranged XP','Required by some diaries'],t:'~20 min'},
+  "Animal Magnetism":{qp:1,xp:['1,000 Slayer, 1,000 Crafting, 2,500 Woodcutting, 1,000 Fletching'],unlocks:["Ava's accumulator/assembler (BIS ranged cape slot bonus)",'Required for DS2'],t:'~30 min'},
+  "Death Plateau":{qp:1,xp:[],unlocks:['Access to Trollheim/Troll Stronghold chain'],t:'~15 min'},
+  "Troll Stronghold":{qp:1,xp:['10,000 Agility'],unlocks:['Troll Stronghold (access to My Arm chain)','Required for Making Friends with My Arm'],t:'~45 min'},
+  "Eadgar's Ruse":{qp:1,xp:['11,000 Herblore'],unlocks:["Trollheim teleport",'Required for MM2'],t:'~30 min'},
+  "Ghosts Ahoy":{qp:2,xp:['2,400 Cooking, 2,400 Agility'],unlocks:['Ectofuntus (fast Prayer XP at 1/4 cost)','Morytania access for Barrows chain','Required for DS2'],t:'~1 hr'},
+  "Temple of Ikov":{qp:1,xp:['10,500 Fletching, 8,000 Ranged'],unlocks:['Pendant of Lucien (combat bonus)','Required for While Guthix Sleeps'],t:'~30 min'},
+  "Throne of Miscellania":{qp:1,xp:[],unlocks:["Miscellania kingdom management (passive resources)",'Required for Royal Trouble'],t:'~30 min'},
+  "Nature Spirit":{qp:2,xp:['3,000 Crafting, 3,000 Defence'],unlocks:["Nature Grotto (Fairy ring shortcut)",'Required for Ghosts Ahoy → DS2'],t:'~20 min'},
+  "Zogre Flesh Eaters":{qp:1,xp:['2,000 Ranged, 2,000 Smithing'],unlocks:['Jiggig (Zogre Slayer tasks)'],t:'~30 min'},
+  "The Giant Dwarf":{qp:2,xp:['2,500 Thieving, 2,500 Crafting, 5,000 Firemaking, 5,000 Magic'],unlocks:['Keldagrim access','Grand Exchange trapdoor shortcut to Rellekka'],t:'~45 min'},
+  "Recruitment Drive":{qp:1,xp:['1,000 Agility or any stat'],unlocks:["Temple Knights chain","Required for Wanted! → Devious Minds chain"],t:'~30 min'},
+  "Tears of Guthix":{qp:1,xp:[],unlocks:['Weekly Tears of Guthix minigame (XP in lowest skill)','More QP = more tears time'],t:'~20 min'},
+  "Tower of Life":{qp:2,xp:['1,000 Construction'],unlocks:['Tower of Life (creature combos, diary req)'],t:'~30 min'},
+  "Rum Deal":{qp:2,xp:['7,000 Prayer, 7,000 Farming, 7,000 Slayer, 7,000 Fishing'],unlocks:["Braindeath Island access",'Required for Cabin Fever'],t:'~45 min'},
+  "Shadow of the Storm":{qp:1,xp:['10,000 combat stat of choice'],unlocks:['Darklight upgrade path → Arclight (BIS vs demons/hellhounds)'],t:'~30 min'},
+  "Horror from the Deep":{qp:2,xp:['4,662 Ranged, 4,662 Magic, 4,662 Strength'],unlocks:['God Books (offensive/defensive prayer bonus)','Dagannoth tasks near lighthouse'],t:'~45 min'},
+  "Tourist Trap":{qp:2,xp:['4,650 Agility or Fletching (2 lamps)'],unlocks:["Access to the Kharidian Desert (Al Kharid south)",'Required for Desert Treasure I chain'],t:'~45 min'},
+  "Icthlarin's Little Helper":{qp:2,xp:['4,000 Agility'],unlocks:['Sophanem access (Pyramid Plunder — fastest Thieving 71+)','Required for Beneath Cursed Sands → DT2 chain'],t:'~45 min'},
+  "Making History":{qp:3,xp:['1,000 Prayer, 1,000 Crafting'],unlocks:["Outpost bank key access"],t:'~30 min'},
+  "Ratcatchers":{qp:2,xp:[],unlocks:["Ratcatcher's outfit (cat grows to adult)"],t:'~45 min'},
+  "Big Chompy Bird Hunting":{qp:2,xp:['1,470 Ranged, 1,470 Fletching, 5,320 Cooking'],unlocks:['Chompy hat cosmetics (from Randoms)'],t:'~30 min'},
+  "Tai Bwo Wannai Trio":{qp:2,xp:['5,000 Agility, 5,000 Fishing, 5,000 Cooking'],unlocks:['Karambwanji/Karambwan fishing (fastest early Cooking XP)','Karamja Diary reqs'],t:'~45 min'},
+  "A Soul's Bane":{qp:1,xp:['500 Attack, 500 Strength, 500 Defence, 500 Hitpoints'],unlocks:["Tolna's Rift (training location)"],t:'~20 min'},
+  "Gertrude's Cat":{qp:1,xp:['1,525 Cooking'],unlocks:["Pet cat ownership",'Required for Icthlarin\'s Little Helper'],t:'~15 min'},
+
+  // ── Members Intermediate ─────────────────────────────────────
+  "Priest in Peril":{qp:1,xp:['1,406 Prayer'],unlocks:['Morytania access (Barrows, Burg de Rott, Hallowed Sepulchre chain)','Required for MANY quests'],t:'~20 min'},
+  "Wanted!":{qp:1,xp:[],unlocks:['White Knights (Falador Diary)','Required for Devious Minds → SotN chain'],t:'~30 min'},
+  "One Small Favour":{qp:2,xp:['10,000 xp in 2 skills of choice (lamps)'],unlocks:['Required for Swan Song chain'],t:'~2 hrs (long runaround)'},
+  "The Fremennik Trials":{qp:3,xp:['2,812 Agility'],unlocks:['Fremennik Province access (Rellekka, Neitiznot, Jatizso)','Required for MM2, DS2, Cold War chains'],t:'~2 hrs'},
+  "The Fremennik Isles":{qp:1,xp:['10,000 Agility, 10,000 Smithing, 10,000 Construction, 10,000 Woodcutting'],unlocks:['Neitiznot helm (great early head slot)','Required for MM2'],t:'~1.5 hrs'},
+  "Grim Tales":{qp:1,xp:['14,000 Woodcutting, 14,000 Agility, 14,000 Herblore, 14,000 Farming, 14,000 Thieving'],unlocks:["Relicym's Balm recipe",'Experience boosts useful early'],t:'~45 min'},
+  "Hand in the Sand":{qp:1,xp:['9,000 Crafting'],unlocks:['Daily free 84 noted pure essence from Bert'],t:'~30 min'},
+  "Elemental Workshop I":{qp:1,xp:['5,000 Smithing, 5,000 Crafting'],unlocks:['Elemental shield (metal dragon safe)'],t:'~30 min'},
+  "Elemental Workshop II":{qp:1,xp:['7,500 Smithing'],unlocks:['Elemental mind helmet'],t:'~30 min'},
+  "Eyes of Glouphrie":{qp:2,xp:['12,000 Magic, 12,000 Runecrafting'],unlocks:["Maple shortbow (u) enchanting (not relevant)",'Required for The Path of Glouphrie'],t:'~45 min'},
+  "The Path of Glouphrie":{qp:2,xp:['20,000 Strength, 20,000 Slayer'],unlocks:['Terrorbird agility shortcut'],t:'~1 hr'},
+  "Cold War":{qp:1,xp:['5,000 Agility','2,000 Crafting','1,500 Construction'],unlocks:['Penguin Agility Course (50+ Agility)','Penguin Hide & Seek D&D (up to 15 pts/week)','NPC Contact with Larry'],t:'~45 min',note:'Reqs all met ✅'},
+  "Enlightened Journey":{qp:1,xp:['3,000 Farming, 3,000 Crafting'],unlocks:['Balloon transport network (fast travel between cities)'],t:'~30 min'},
+  "Lunar Diplomacy":{qp:2,xp:['5,000 Runecrafting, 5,000 Crafting, 5,000 Defence, 5,000 Mining'],unlocks:['Lunar Spellbook (NPC Contact, Vengeance, Fertile Soil, Humidify etc.)','Required for Dream Mentor → DS2'],t:'~1.5 hrs'},
+  "Swan Song":{qp:2,xp:['15,000 Magic','10,000 Prayer','10,000 Fishing','25,000 coins'],unlocks:['Piscatoris Fishing Colony (Monkfish — best mid-game Fishing XP)','Skeleton mage combat training','Required for Making Friends with My Arm'],t:'~1–1.5 hrs',note:'Sea Troll Queen (lvl 170) — bring Protect from Magic. You outgear this.'},
+  "My Arm's Big Adventure":{qp:1,xp:['10,000 Farming'],unlocks:["My Arm's herb patch on Trollheim (disease-free)",'Required for Making Friends with My Arm'],t:'~45 min'},
+  "In Search of the Myreque":{qp:2,xp:['600 Crafting'],unlocks:['Myreque Hideout (Barrows shortcut path)'],t:'~20 min'},
+  "In Aid of the Myreque":{qp:2,xp:['2,000 Magic, 2,000 Smithing'],unlocks:["Mort'ton teleport access (Shades of Mort'ton diary)",'Required for Darkness of Hallowvale'],t:'~45 min'},
+  "The Darkness of Hallowvale":{qp:2,xp:['7,000 Agility, 6,000 Thieving, 6,000 Construction, 6,000 Mining, 2,000 Strength'],unlocks:["Meiyerditch access (Barrows via boat shortcut)",'Required for Sins of the Father'],t:'~1.5 hrs'},
+  "Olaf's Quest":{qp:1,xp:['12,000 Firemaking, 12,000 Defence'],unlocks:['Viking boat shortcut to Miscellania'],t:'~30 min'},
+  "Garden of Tranquility":{qp:2,xp:['5,000 Farming'],unlocks:['Ring of Charos(a) — cheaper charter ships, cheaper Slayer masters, persuasion dialog options','Required for Swan Song'],t:'~45 min',note:'Prereq: Creature of Fenkenstrain for Ring of Charos'},
+  "Creature of Fenkenstrain":{qp:1,xp:['1,000 Thieving (pickpocket Dr Fenkenstrain)'],unlocks:['Ring of Charos (access to Werewolf Agility Course)','Experiment Cave (Slayer XP training early game)','Required for Garden of Tranquility → Swan Song chain'],t:'~30 min'},
+  "Roving Elves":{qp:1,xp:['10,000 Agility or Strength (lamp choice)'],unlocks:['Glarial amulet (required for Waterfall Quest variant)','Required for Mourning\'s End I → Song of the Elves'],t:'~30 min'},
+  "Mourning's End Part I":{qp:2,xp:['25,000 Agility, 25,000 Thieving'],unlocks:['Elven crystal key (Crystal bow/shield access)','Required for Mourning\'s End Part II → Song of the Elves'],t:'~1.5 hrs'},
+  "Mourning's End Part II":{qp:2,xp:['20,000 Agility, 20,000 Thieving'],unlocks:['Temple of Light (Death Altar = Wrath Runes prereq)','Required for Song of the Elves'],t:'~2 hrs (hard light puzzle)'},
+  "Royal Trouble":{qp:1,xp:['5,000 Agility, 5,000 Slayer'],unlocks:["Miscellania upgrade — 75 coin chest cap → 150k","More kingdom slots"],t:'~1 hr'},
+  "Legends' Quest":{qp:4,xp:['7,650 Agility, 7,650 Herblore, 7,650 Magic, 7,650 Prayer, 7,650 Strength, 7,650 Woodcutting, 7,650 Crafting, 7,650 Smithing'],unlocks:["Legends' Guild (Dragonstone use)","Cape of Legends (cosmetic)","Required for DS2 and many others"],t:'~3 hrs (many prereqs)'},
+  "Contact!":{qp:1,xp:['4,000 Thieving'],unlocks:['Bank in Sophanem basement (Pyramid Plunder QoL)','Required for Beneath Cursed Sands → DT2'],t:'~20 min'},
+  "The Lost Tribe":{qp:1,xp:['3,000 Mining, 3,000 Agility, 3,000 Thieving'],unlocks:['Dorgeshuun crossbow (4 tick, fast)','Goblin Village crossbow (early Ranged)'],t:'~30 min'},
+  "Death to the Dorgeshuun":{qp:2,xp:['2,000 Agility, 2,000 Thieving'],unlocks:['Light orb crafting (Agility short)','Required for Another Slice of H.A.M.'],t:'~30 min'},
+  "Another Slice of H.A.M.":{qp:1,xp:['3,000 Attack, 3,000 Prayer'],unlocks:['Dorgesh-Kaan mine (Agility course alternative at 90+)'],t:'~20 min'},
+  "A Tail of Two Cats":{qp:2,xp:['2,500 Herblore'],unlocks:["Bob the cat dialog","Required for SW quest chains"],t:'~30 min'},
+  "Cabin Fever":{qp:2,xp:['7,000 Agility'],unlocks:["Mos Le'Harmless access (Trouble Brewing, Cave Horrors)",'Required for Rum Deal completion'],t:'~45 min'},
+  "Rag and Bone Man I":{qp:1,xp:['500 Prayer, 500 Cooking'],unlocks:['Tooth creature Slayer unlock'],t:'~30 min'},
+  "Rag and Bone Man II":{qp:2,xp:['2,500 Prayer, 2,500 Cooking'],unlocks:['Pot of vinegar and wishlist reward'],t:'~1 hr (bone collecting)'},
+  "Shades of Mort'ton":{qp:3,xp:['2,000 Firemaking, 2,000 Crafting'],unlocks:["Shade catacombs (Mort'ton minigame, prayer XP)",'Required for some Morytania diary tasks'],t:'~30 min'},
+  "Watchtower":{qp:4,xp:['15,250 Magic'],unlocks:['Watchtower teleport (Yanille access)'],t:'~1 hr'},
+  "What Lies Below":{qp:1,xp:['8,000 Runecrafting'],unlocks:["Zamorak mage familiar (Mage of Zamorak for Abyss — required for Devious Minds)",'Required for WGS chain'],t:'~30 min'},
+  "Defender of Varrock":{qp:1,xp:['15,000 Attack, 15,000 Mining, 15,000 Smithing'],unlocks:["Varrock's special museum chat option"],t:'~1 hr'},
+  "Desert Treasure I":{qp:3,xp:['20,000 Magic'],unlocks:['Ancient Magicks spellbook (Ice Barrage, Barrage, Blood Blitz etc.)','Required for DT2'],t:'~2 hrs (tough bosses)'},
+  "Troll Romance":{qp:2,xp:['4,000 Agility'],unlocks:["Troll Romance diary req"],t:'~45 min'},
+  "Getting Ahead":{qp:2,xp:[],unlocks:['Mounted antler decoration in POH'],t:'~30 min'},
+  "Perilous Moons":{qp:2,xp:['5,000 Hunter, 5,000 Fishing, 5,000 Crafting'],unlocks:["Access to Cam Torum (Varlamore)","Required for Colosseum region quests"],t:'~1 hr'},
+  "Temple of the Eye":{qp:1,xp:['10,000 Runecrafting'],unlocks:["Guardians of the Rift minigame (best mid-game RC method)",'Abyssal lantern'],t:'~30 min'},
+  "A Taste of Hope":{qp:1,xp:['2,500 Attack, 2,500 Strength, 2,500 Defence, 2,500 Hitpoints, 2,500 Agility'],unlocks:["Blisterwood flail + polearm (excellent Vyrewatch Slayer weapons)",'Required for Sins of the Father'],t:'~45 min'},
+  "Devious Minds":{qp:1,xp:['6,500 Smithing','5,000 Fletching','5,000 Runecrafting'],unlocks:['Required for Secrets of the North (Assassin storyline)','RC 50 required (boostable from 46 with Mushroom Pie)'],t:'~20 min',note:'RC 50 req is boostable. Mushroom Pie +4. Train to 46 first.'},
+  "Azzanadra's Quest":{qp:2,xp:['5,000 Prayer, 5,000 Magic'],unlocks:["Azzanadra's cache (Ancient Communion)",'Required for Temple at Senntisten → DT2 chain'],t:'~30 min'},
+  "Between a Rock...":{qp:2,xp:['5,000 Mining, 5,000 Smithing, 5,000 Defence'],unlocks:["Keldagrim anvil shortcut",'Required for DS2'],t:'~1 hr'},
+  "Children of the Sun":{qp:1,xp:[],unlocks:['Colosseum access (Varlamore region)','Required for several Varlamore quests'],t:'~20 min'},
+  "A Ribbiting Tale of a Lily Pad":{qp:1,xp:['4,000 Farming'],unlocks:['Varlamore frog breeding content'],t:'~20 min'},
+  "The Slug Menace":{qp:1,xp:['3,500 Crafting, 3,500 Runecrafting, 3,500 Thieving, 3,500 Slayer'],unlocks:["Required for MM2 chain"],t:'~30 min'},
+
+  // ── Members Master/Grandmaster ───────────────────────────────
+  "Dragon Slayer II":{qp:5,xp:['18,000 Agility','15,000 Smithing','15,000 Mining','18,000 Thieving'],unlocks:["Vorkath access (best mid-game money: ~1.5M–2M/hr)",'Ava\'s Assembler (superior to accumulator)','Ferocious Gloves (BIS melee gloves with MM2)','Mythical Cape','Wyvern Cave access'],t:'~3–4 hrs',note:'One of the best quest unlocks in the game. Vorkath is endgame money.'},
+  "Monkey Madness I":{qp:3,xp:['35,000 attack or defence or strength, 20,000 hitpoints (choice)'],unlocks:["Ape Atoll Agility (best 48-74)",'Red chinchompas access for Ranged','Required for MM2'],t:'~1.5 hrs'},
+  "Monkey Madness II":{qp:4,xp:['25,000 Agility, 25,000 Slayer'],unlocks:['Zenyte shard (make BIS jewelry: Torture, Anguish, Bracelet of Torture)','Demonic Gorillas (best drops in game beside PvM)','MM2 tunnels (best AFK chinning for Prayer/Ranged XP)'],t:'~3 hrs (tough bosses)',note:'Zenyte → Amulet of Torture = BIS melee neck. Worth completing ASAP.'},
+  "Making Friends with My Arm":{qp:2,xp:['50,000 Agility','50,000 Mining','40,000 Firemaking','10,000 Construction'],unlocks:['Salt Mines (Basalt, Efh/Te/Urt Salt — useful for Wintertodt)','Weiss Herb Patch (disease-free, no payment needed)','Stony Basalt → Troll Stronghold teleport','Icy Basalt → Weiss teleport','Required for Secrets of the North'],t:'~2–3 hrs',note:'Mining 72 required — boostable from your 69. Buy Dwarven Stout (m) beforehand.'},
+  "Sins of the Father":{qp:2,xp:['15,000 Woodcutting, 15,000 Fletching, 15,000 Agility, 15,000 Slayer'],unlocks:["Vyre noble outfit (Vyrewatch Slayer speed boost)",'Hallowed Sepulchre access (best Agility XP from 52+)','Blood Altar access (AFK Runecrafting 77+)','Blisterwood tools for Vyrewatch'],t:'~2.5 hrs (tough vampire bosses)'},
+  "The Fremennik Exiles":{qp:1,xp:['10,000 Crafting, 10,000 Runecrafting, 10,000 Slayer'],unlocks:['Dagannoth Kings teleport via Waterbirth','Required for some diary completions'],t:'~1 hr'},
+  "Secrets of the North":{qp:2,xp:['60,000 Agility','50,000 Thieving','40,000 Hunter'],unlocks:['Phantom Muspah boss (Venator Bow shards — Venator Bow is BIS Ranged for training)','Ancient Essence crystals in Ghorrock Dungeon','Ghorrock Dungeon access','Required for Desert Treasure II'],t:'~2–3 hrs (master quest, Strange Creature boss fight)',note:'60k Agility XP — equivalent to ~2 Seers\' rooftop hours for free. Point that at getting to 69.'},
+  "The Curse of Arrav":{qp:1,xp:['12,000 Agility, 12,000 Strength'],unlocks:["Arrav's heart (Zemouregal fight in Defender of Varrock chain)"],t:'~45 min (miniquest-like)'},
+  "Garden of Death":{qp:2,xp:['15,000 Herblore, 10,000 Farming'],unlocks:["Iorwerth Dungeon access (DT2 chain)",'Required for DT2'],t:'~45 min'},
+  "At First Light":{qp:2,xp:['15,000 Hunter, 12,000 Agility'],unlocks:["Hunter Guild (Varlamore)",'Quetzal transport system'],t:'~1 hr'},
+  "Beneath Cursed Sands":{qp:2,xp:['15,000 Agility, 15,000 Firemaking'],unlocks:["Cam Torum (Varlamore)",'Required for DT2'],t:'~1.5 hrs'},
+  "Ethically Acquired Antiquities":{qp:2,xp:['10,000 Thieving, 10,000 Agility'],unlocks:["Varlamore museum thieving",'Antique dealer NPCs'],t:'~1 hr'},
+  "The Final Dawn":{qp:3,xp:['30,000 Agility, 20,000 Thieving, 15,000 Herblore'],unlocks:["Colosseum final story beat",'Varlamore quests completion'],t:'~2 hrs'},
+  "Scrambled!":{qp:2,xp:['12,000 Cooking, 10,000 Farming'],unlocks:["Varlamore cooking content"],t:'~1 hr'},
+  "While Guthix Sleeps":{qp:5,xp:['100,000 xp across combat skills (lamps)'],unlocks:["Ancient Curses (Soul Split, Turmoil equivalents)",'Corporeal Beast access','God Staves','Tormented demons (Dragon claws)'],t:'~4 hrs (very long, many bosses)',note:'Some of the most OP unlocks in the game. Soul Split alone is worth it for bossing.'},
+  "Song of the Elves":{qp:4,xp:['40,000 xp in each: Agility, Herblore, Construction, Farming, Hunter, Mining, Smithing, Woodcutting'],unlocks:['Prifddinas (Crystal armour, Gauntlet, Zalcano, Max Guild shop)','Crystal Armour (BIS vs Nex, some Slayer tasks)','Elven Rooftop (Agility) and Crystal Sink (Prayer)','Crystal tools (harpoon, axe, pickaxe)'],t:'~5–8 hrs (many prereqs, difficult light puzzles)'},
+  "Desert Treasure II - The Fallen Empire":{qp:5,xp:['3 × Ancient Lamp: 100,000 XP each in a combat skill (Atk/Str/Def/HP/Ranged/Magic/Prayer — req lvl 60+)'],unlocks:['4 endgame bosses: Vardorvis, Duke Sucellus, Leviathan, The Whisperer','Ring of Shadows (teleport hub + +1 Prayer bonus)','Ancient rings: Ultor (melee), Magus (mage), Bellator (spec), Venator (ranged) — all BIS','Virtus Robes (BIS mage armour)','Soulreaper Axe (BIS melee spec weapon)','Awakened boss variants'],t:'~6–10 hrs (longest quest in OSRS)',note:'300,000 total XP from lamps. Point at Prayer (77→81ish) or a combat skill you want boosted.'},
+
+  // ── Recent (2023–2026) already covered above ─────────────────
+  "The Red Reef":{qp:2,xp:['5,000 Fishing, 5,000 Crafting'],unlocks:["Coral reef Fishing spots (Varlamore coast)"],t:'~30 min'},
+
+  // ── Miniquests ───────────────────────────────────────────────
+  "Alfred Grimhand's Barcrawl":{qp:0,xp:[],unlocks:['Required for Barbarian Training completion (Dragon axe/harpoon/spear upgrades)'],t:'~20 min'},
+  "Barbarian Training":{qp:0,xp:[],unlocks:['Barbarian Fishing (best mid-game Fishing + passive Str/Agility XP)','Barbarian Smithing (smelt bars without a furnace at Barbarian Village)','Dragon axe/harpoon/spear spec (via Wyvern drops or GE)'],t:'~1 hr total (multiple steps)',note:'Barbarian Fishing: leaping starts at 58. At 52 you catch trout/salmon (30–35k XP/hr). By 58 leaping fish: ~45–55k XP/hr + Str/Agility XP.'},
+  "Bear Your Soul":{qp:0,xp:[],unlocks:["Arceuus library books (Arceuus favour)"],t:'~10 min'},
+  "Curse of the Empty Lord":{qp:0,xp:[],unlocks:['Ghostly Robes set (cosmetic)','Required for The General\'s Shadow → SotN chain'],t:'~30 min'},
+  "Enter the Abyss":{qp:0,xp:[],unlocks:['Abyss access (fastest RC route except GOTR)','Required for Devious Minds'],t:'~10 min'},
+  "The General's Shadow":{qp:0,xp:[],unlocks:['Required for Secrets of the North','Full Ghostly Robes (cosmetic)'],t:'~20 min',note:'Requires Curse of the Empty Lord miniquest first'},
+  "In Search of Knowledge":{qp:0,xp:[],unlocks:["Arceuus library knowledge"],t:'~10 min'},
+  "Lair of Tarn Razorlor":{qp:0,xp:[],unlocks:["Tarn's lens (salve amulet upgrade)","Salve amulet (e) — BIS vs undead Slayer tasks"],t:'~30 min'},
+  "Hopespear's Will":{qp:0,xp:[],unlocks:["Haunted Mine chain knowledge"],t:'~15 min'},
+  "The Mage Arena":{qp:0,xp:[],unlocks:['God capes (magic bonus)','God staves (pre-WGS)'],t:'~30 min'},
+  "The Mage Arena II":{qp:0,xp:[],unlocks:['Imbued God capes (BIS Magic/Ranged/Melee cape slot, +2 magic attack boost)','Requires Mage Arena I'],t:'~1 hr (three boss kills)'},
+  "Skippy and the Mogres":{qp:0,xp:[],unlocks:['Mogre Slayer task access (mudskipper point)'],t:'~5 min'},
+  "Stronghold of Security":{qp:0,xp:['10,000 coins (choice of fancy/fighting boots)'],unlocks:['Fancy boots or Fighting boots (cosmetic)'],t:'~30 min'},
+  "Volcanic Mine (miniquest)":{qp:0,xp:[],unlocks:['Volcanic Mine (best Mining XP 70+, ~90k/hr)'],t:'~10 min (unlock chat)'},
+  "Waterbirth Island (miniquest)":{qp:0,xp:[],unlocks:["Waterbirth Island access (Dagannoth Kings)",'DKS fairy ring access to iceberg (Cold War)'],t:'~10 min'},
+  "Daddy's Home":{qp:0,xp:['750 Construction'],unlocks:["Varrock Museum kudos (25 pts)","Antique lamp (1,000 XP any skill 30+)"],t:'~15 min',note:'Build furniture in the Varrock Museum basement. Low Construction reqs.'},
+  "Family Pest":{qp:0,xp:['2,500 Slayer'],unlocks:["Required to fully complete Morytania post-quest content","Unlocks Nieve/Steve as Slayer master after MM2"],t:'~20 min',note:'Requires completion of Monkey Madness II.'},
+  "The Frozen Door":{qp:0,xp:['5,000 Magic'],unlocks:["Ancient Vault access (God Wars lore)","Part of the God Wars story arc"],t:'~20 min'},
+  "His Faithful Servants":{qp:0,xp:[],unlocks:["Barrows lore completion","Chromatic dragonhide access hint"],t:'~15 min',note:'Requires partial Morytania access and Barrows experience.'},
+
+  // ── Grind steps (for companion goal bar) ─────────────────────
+  "Fishing 52→62":{
+    isGrind:true,
+    method:'Barbarian Fishing (Otto\'s Grotto) — best option even at 52',
+    xpRate:'52–58: ~30,000–35,000 XP/hr (catching trout & salmon only). 58+: ~45,000–55,000 XP/hr (leaping fish unlock). Also gives passive Str + Agility XP.',
+    estHours:'~10–14 hrs from 52 (slower start, speeds up at 58)',
+    note:'Fly fishing at Barbarian Village is similar XP but no Str/Agility bonus. Barbarian Fishing is better overall even if you start slow.'
+  },
+  "Agility 64→69":{
+    isGrind:true,
+    method:"Seers' Village Rooftop (best at this level)",
+    xpRate:"~42,000–47,000 XP/hr with Kandarin Hard Diary Camelot teleport. ~35,000/hr without the diary.",
+    estHours:'~5–7 hrs from 64 (to 69 = ~160,000 XP)',
+    note:"Wilderness Agility Course (~50k/hr) is faster but risky. If you don't have Kandarin Hard Diary yet, consider rushing that first for the teleport."
+  },
+  "Thieving 64→70":{
+    isGrind:true,
+    method:'Ardougne Knights (semi-AFK) or Blackjacking Menaphite Thugs',
+    xpRate:'Ardy Knights: ~100,000–150,000 XP/hr (Medium Ardougne Diary helps). Blackjacking: ~200,000–250,000 XP/hr (click-intensive)',
+    estHours:'Ardy Knights: ~2–4 hrs. Blackjacking: ~1–2 hrs.',
+    note:'DT2 requires Thieving 70 — not boostable. SotN quest itself gives 50,000 Thieving XP so you\'ll be well past 70 after completing it.'
+  },
+  "Firemaking 60→75 (Wintertodt)":{
+    isGrind:true,
+    method:'Wintertodt minigame (best from 50 onward)',
+    xpRate:'~80,000–100,000 XP/hr at your level. Passive Herblore, Farming, Woodcutting, Crafting XP from reward crates.',
+    estHours:'~8–12 hrs from 60 to 75 (≈ 840,000 XP)',
+    note:'Passive herb/seed drops from crates help the Herblore grind. Bring ~8 pieces of food per trip and warm clothes.'
+  },
+  "Herblore 52→62":{
+    isGrind:true,
+    method:'Make Energy Potions (Harralander + chocolate dust) or Antipoisons — or clean herbs if budget is tight',
+    xpRate:'Making pots: ~50,000–100,000 XP/hr. Cleaning herbs: ~50,000 XP/hr. Costs ~6–12M GP depending on method/herb prices.',
+    estHours:'~3–6 hrs',
+    note:'Wintertodt crate drops during Phase 11 will passively chip into this. Check how far they get you before buying herbs. DT2 requires 62 — not boostable.'
+  },
+  "RC 32→60":{
+    isGrind:true,
+    method:'Guardians of the Rift (GOTR) — strongly recommended over ZMI or lavas at your level',
+    xpRate:'GOTR: ~35,000–60,000 XP/hr (scales with level). ZMI altar: ~40,000–60,000 XP/hr (requires Lunar Diplomacy). Lava runes: ~65,000–75,000 XP/hr but costs GP.',
+    estHours:'~30–40 hrs from 32 to 60 via GOTR — your single longest grind on the DT2 path',
+    note:'GOTR also unlocks: Colossal Pouch (bigger essence carry), Raiments of the Eye outfit (+60% runes when full set), Abyssal Lantern. Do GOTR early to get the outfit — it helps all future RC grinding. DT2 requires RC 60 — NOT boostable. This is non-negotiable.'
+  }
+};
+
+/**
+ * Build tooltip HTML for a quest or grind entry.
+ * Returns empty string if no data found.
+ */
+function buildQuestTooltip(name) {
+  // Try exact match first, then try key variations
+  let d = QUEST_TOOLTIPS[name];
+  if (!d) {
+    // handle "Desert Treasure II - The Fallen Empire" vs "Desert Treasure II"
+    const k = Object.keys(QUEST_TOOLTIPS).find(k =>
+      name.startsWith(k) || k.startsWith(name) ||
+      name.toLowerCase() === k.toLowerCase()
+    );
+    if (k) d = QUEST_TOOLTIPS[k];
+  }
+  if (!d) return '';
+
+  const qpLine = d.isGrind ? '' :
+    `<div class="tt-row"><span class="tt-lbl">QP:</span><span class="tt-val">${d.qp > 0 ? '+'+d.qp : 'Miniquest'}</span></div>`;
+
+  let xpLines = '';
+  if (!d.isGrind && d.xp && d.xp.length) {
+    xpLines = '<hr class="tt-hr">' + d.xp.map(x =>
+      `<div class="tt-row"><span class="tt-lbl">XP:</span><span class="tt-val tt-xp">${x}</span></div>`
+    ).join('');
+  }
+  if (d.isGrind) {
+    xpLines = `<div class="tt-row"><span class="tt-lbl">Method:</span><span class="tt-val">${d.method}</span></div>
+<div class="tt-row"><span class="tt-lbl">XP/hr:</span><span class="tt-val tt-xp">${d.xpRate}</span></div>`;
+  }
+
+  let unlockLines = '';
+  if (!d.isGrind && d.unlocks && d.unlocks.length) {
+    unlockLines = '<hr class="tt-hr">' + d.unlocks.map(u =>
+      `<div class="tt-row"><span class="tt-lbl">🔓</span><span class="tt-val tt-lock">${u}</span></div>`
+    ).join('');
+  }
+
+  const timeLine = d.t ? `<hr class="tt-hr"><div class="tt-row"><span class="tt-lbl">⏱</span><span class="tt-val tt-time">${d.isGrind ? 'Est: ' + d.estHours : d.t}</span></div>` : '';
+  const noteLine = d.note ? `<div class="tt-row" style="margin-top:3px"><span class="tt-lbl" style="color:var(--text3)">ℹ</span><span class="tt-note">${d.note}</span></div>` : '';
+
+  return `<div class="tt-title">${name}</div>${qpLine}${xpLines}${unlockLines}${timeLine}${noteLine}`;
+}
+
+/**
+ * Wrap a quest/step name with the tooltip icon and box.
+ * Returns the modified HTML string if tooltip data exists, else plain name.
+ */
+function wrapWithTooltip(name, extraHtml = '') {
+  const tipHtml = buildQuestTooltip(name);
+  if (!tipHtml) return name + extraHtml;
+  const safe = name.replace(/"/g,'&quot;');
+  return `<span class="tt-wrap">${name}${extraHtml}<span class="tt-icon" tabindex="0" aria-label="Quest info: ${safe}" onmouseenter="ttShow(this)" onmouseleave="ttHide(this)" onfocus="ttShow(this)" onblur="ttHide(this)" onclick="event.stopPropagation()">i</span><div class="tt-box">${tipHtml}</div></span>`;
+}
+
+// ── Tooltip position engine ───────────────────────────────
+let _ttHideTimer = null;
+function ttShow(icon) {
+  clearTimeout(_ttHideTimer);
+  const box = icon.nextElementSibling;
+  if (!box || !box.classList.contains('tt-box')) return;
+  const wrap = icon.closest('.tt-wrap');
+  const r = (wrap || icon).getBoundingClientRect();
+  const vw = window.innerWidth;
+  let left = r.right + 12;
+  if (left + 292 > vw - 8) left = r.left - 292 - 12;
+  box.style.left = left + 'px';
+  box.style.top  = (r.top + r.height / 2) + 'px';
+  box.style.transform = 'translateY(-50%)';
+  box.classList.add('tt-visible');
+}
+function ttHide(icon) {
+  const box = icon.nextElementSibling;
+  if (!box) return;
+  _ttHideTimer = setTimeout(() => {
+    if (!box.matches(':hover')) box.classList.remove('tt-visible');
+  }, 80);
+}
+document.addEventListener('mouseover', e => {
+  const box = e.target.closest('.tt-box');
+  if (box) { clearTimeout(_ttHideTimer); box.classList.add('tt-visible'); }
+});
+document.addEventListener('mouseout', e => {
+  const box = e.target.closest('.tt-box');
+  if (box && !box.contains(e.relatedTarget)) box.classList.remove('tt-visible');
+});
+// tooltip click capture removed — handled by pointer-events:none on hidden boxes
+
+const QUEST_LIST = {
+  'Free-to-Play (24)':['Cook\'s Assistant','The Restless Ghost','Romeo & Juliet','Sheep Shearer','Shield of Arrav','Demon Slayer','The Corsair Curse','Goblin Diplomacy','Imp Catcher','Doric\'s Quest','Ernest the Chicken','Witch\'s Potion','Black Knights\' Fortress','The Knight\'s Sword','Prince Ali Rescue','Pirate\'s Treasure','Rune Mysteries','Vampyre Slayer','Dragon Slayer I','Misthalin Mystery','X Marks the Spot','Below Ice Mountain','Learning the Ropes','The Ides of Milk'],
+  'Members — Novice':['Druidic Ritual','Lost City','Witch\'s House','Merlin\'s Crystal','Heroes\' Quest','Scorpion Catcher','Family Crest','Fishing Contest','Tribal Totem','Monk\'s Friend','Clock Tower','Holy Grail','Tree Gnome Village','Fight Arena','Hazeel Cult','Waterfall Quest','Murder Mystery','Jungle Potion','Biohazard','Observatory Quest','Plague City','Sea Slug','Shilo Village','Underground Pass','The Feud','Dwarf Cannon','Animal Magnetism','Death Plateau','Troll Stronghold','Eadgar\'s Ruse','Ghosts Ahoy','Temple of Ikov','Throne of Miscellania','Nature Spirit','Zogre Flesh Eaters','The Giant Dwarf','Recruitment Drive','Tears of Guthix','Tower of Life','Rum Deal','Shadow of the Storm','Horror from the Deep','Tourist Trap','Icthlarin\'s Little Helper','Making History','Ratcatchers','Big Chompy Bird Hunting','Tai Bwo Wannai Trio','A Soul\'s Bane','Gertrude\'s Cat'],
+  'Members — Intermediate':['Priest in Peril','Wanted!','One Small Favour','The Fremennik Trials','The Fremennik Isles','Grim Tales','Hand in the Sand','Elemental Workshop I','Elemental Workshop II','Eyes of Glouphrie','The Path of Glouphrie','Cold War','Enlightened Journey','Lunar Diplomacy','Swan Song','My Arm\'s Big Adventure','In Search of the Myreque','In Aid of the Myreque','The Darkness of Hallowvale','Olaf\'s Quest','Garden of Tranquility','Creature of Fenkenstrain','Roving Elves','Mourning\'s End Part I','Mourning\'s End Part II','Royal Trouble','Legends\' Quest','Contact!','The Lost Tribe','Death to the Dorgeshuun','Another Slice of H.A.M.','A Tail of Two Cats','Cabin Fever','Rag and Bone Man I','Rag and Bone Man II','Shades of Mort\'ton','Watchtower','What Lies Below','Defender of Varrock','Desert Treasure I','Troll Romance','Getting Ahead','Perilous Moons','Temple of the Eye','A Taste of Hope','Devious Minds','Azzanadra\'s Quest','Between a Rock...','Children of the Sun','A Ribbiting Tale of a Lily Pad','The Slug Menace'],
+  'Members — Master/Grandmaster':['Dragon Slayer II','Monkey Madness I','Monkey Madness II','Making Friends with My Arm','Sins of the Father','The Fremennik Exiles','Secrets of the North','The Curse of Arrav','Garden of Death','At First Light','Beneath Cursed Sands','Ethically Acquired Antiquities','The Final Dawn','Scrambled!','While Guthix Sleeps','Song of the Elves','Desert Treasure II - The Fallen Empire'],
+  'Recent (2023–2026)':['At First Light','Beneath Cursed Sands','Children of the Sun','Desert Treasure II - The Fallen Empire','Ethically Acquired Antiquities','The Final Dawn','Garden of Death','Perilous Moons','A Ribbiting Tale of a Lily Pad','Scrambled!','The Ides of Milk','Learning the Ropes','The Red Reef'],
+};
+
+const MINIQUEST_LIST = ['Alfred Grimhand\'s Barcrawl','Barbarian Training','Bear Your Soul','Curse of the Empty Lord','Daddy\'s Home','Enter the Abyss','Family Pest','The Frozen Door','The General\'s Shadow','His Faithful Servants','Hopespear\'s Will','In Search of Knowledge','Lair of Tarn Razorlor','The Mage Arena','The Mage Arena II','Skippy and the Mogres','Stronghold of Security','Volcanic Mine (miniquest)','Waterbirth Island (miniquest)'];
+
+const DIARY_REGIONS = ['Ardougne','Desert','Falador','Fremennik','Kandarin','Karamja','Kourend & Kebos','Lumbridge & Draynor','Morytania','Varrock','Western Provinces','Wilderness'];
+const DIARY_TIERS   = ['Easy','Medium','Hard','Elite'];
+const DIARY_LIST    = {};
+DIARY_REGIONS.forEach(r=>{ DIARY_LIST[r] = DIARY_TIERS.map(t=>`${r} Diary — ${t}`); });
+
+const QUEST_CHECKS_KEY = 'osrs_quest_checks';
+const MINI_CHECKS_KEY  = 'osrs_mini_checks';
+const DIARY_CHECKS_KEY = 'osrs_diary_checks';
+const GOAL_CHECKS_KEY  = 'osrs_goal_quests';
+const DIARY_GOAL_KEY   = 'osrs_goal_diaries';
+const MINI_GOAL_KEY    = 'osrs_goal_minis';
+let questChecks = JSON.parse(localStorage.getItem(QUEST_CHECKS_KEY)||'{}');
+let miniChecks  = JSON.parse(localStorage.getItem(MINI_CHECKS_KEY) ||'{}');
+let diaryChecks = JSON.parse(localStorage.getItem(DIARY_CHECKS_KEY)||'{}');
+let goalQuests  = JSON.parse(localStorage.getItem(GOAL_CHECKS_KEY) ||'{}');
+let diaryGoals  = JSON.parse(localStorage.getItem(DIARY_GOAL_KEY)  ||'{}');
+let miniGoals   = JSON.parse(localStorage.getItem(MINI_GOAL_KEY)   ||'{}');
+
+const QUEST_TO_STEP = {
+  'Cold War':'cw1','Creature of Fenkenstrain':'fens1','Garden of Tranquility':'got1',
+  'Swan Song':'ss1','Devious Minds':'dm1','Making Friends with My Arm':'mfma1',
+  'Secrets of the North':'sotn1','Desert Treasure II - The Fallen Empire':'dt21'
+  // Sins of the Father removed — sotf1 step only exists in Song of the Elves goal
+};
+
+function syncQuestToSteps(qName) {
+  const stepId = QUEST_TO_STEP[qName]; if(!stepId) return;
+  cmpChecks[stepId] = !!questChecks['q_'+qName];
+  localStorage.setItem(CMP_STORAGE_KEY, JSON.stringify(cmpChecks));
+  if(document.getElementById('panel-companion')?.classList.contains('active')) renderCmpPhases();
+}
+
+function syncAllQuestsToSteps() { Object.keys(QUEST_TO_STEP).forEach(syncQuestToSteps); }
+
+function toggleQuestCheck(name) {
+  questChecks['q_'+name] = !questChecks['q_'+name];
+  localStorage.setItem(QUEST_CHECKS_KEY, JSON.stringify(questChecks));
+  syncQuestToSteps(name);
+  renderQuestList();
+  renderStarredGoals(); // update goal cards when quest completion changes
+}
+
+function toggleMiniCheck(name) {
+  miniChecks['m_'+name] = !miniChecks['m_'+name];
+  localStorage.setItem(MINI_CHECKS_KEY, JSON.stringify(miniChecks));
+  renderQuestList();
+}
+
+function toggleDiaryCheck(name) {
+  diaryChecks['d_'+name] = !diaryChecks['d_'+name];
+  localStorage.setItem(DIARY_CHECKS_KEY, JSON.stringify(diaryChecks));
+  renderQuestList();
+}
+
+function removeGoal(name, type) {
+  if (type==='diary') toggleDiaryGoal(name);
+  else if (type==='mini') toggleMiniGoal(name);
+  else toggleGoalQuest(name);
+}
+
+function toggleGoalQuest(name) {
+  goalQuests['g_'+name] = !goalQuests['g_'+name];
+  localStorage.setItem(GOAL_CHECKS_KEY, JSON.stringify(goalQuests));
+  renderQuestList(); renderStarredGoals(); renderCmpStats();
+}
+function toggleDiaryGoal(name) {
+  diaryGoals['dg_'+name] = !diaryGoals['dg_'+name];
+  localStorage.setItem(DIARY_GOAL_KEY, JSON.stringify(diaryGoals));
+  renderQuestList(); renderStarredGoals(); renderCmpStats();
+}
+function toggleMiniGoal(name) {
+  miniGoals['mg_'+name] = !miniGoals['mg_'+name];
+  localStorage.setItem(MINI_GOAL_KEY, JSON.stringify(miniGoals));
+  renderQuestList(); renderStarredGoals(); renderCmpStats();
+}
+
+let questSubTab = 'quests';
+
+function setQuestSubTab(tab) {
+  questSubTab = tab;
+  ['quests','miniquests','diaries'].forEach(t=>{
+    document.getElementById('qst-btn-'+t)?.classList.toggle('active', t===tab);
+  });
+  renderQuestList();
+}
+
+function questRow(name,done,type='quest',extra='',isQuest=false,displayName='') {
+  const label    = displayName || name;
+  const isDiary  = type==='diary';
+  const isMini   = type==='mini';
+  const isGoal      = isQuest && !!goalQuests['g_'+name];
+  const isDiaryGoal = isDiary  && !!diaryGoals['dg_'+name];
+  const isMiniGoal  = isMini   && !!miniGoals['mg_'+name];
+  const anyGoal = isGoal||isDiaryGoal||isMiniGoal;
+  const goalBtn = (!done && (isQuest||isDiary||isMini))
+    ? `<span class="cmp-quest-goal${anyGoal?' active':''}" title="${anyGoal?'Remove from goals':'Add as goal'}">★</span>`
+    : '';
+  const safeName = name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return `<div class="cmp-quest-item${done?' done':''}" data-qname="${safeName}" data-qtype="${type}">
+    <div class="cmp-quest-check${done?' on':''}" title="Mark completed"></div>
+    <div class="cmp-quest-name">${isDiary||isMini?label+extra:wrapWithTooltip(name,extra)}</div>
+    ${goalBtn}
+  </div>`;
+}
+
+const noMatch = '<div style="color:var(--text3);font-size:13px;padding:12px">No results.</div>';
+
+
+function wireQuestClicks() {
+  const groups = document.getElementById('cmpQuestGroups');
+  if (!groups || groups._delegated) return;
+  groups._delegated = true;
+  groups.addEventListener('click', e => {
+    e.stopPropagation();
+    const check = e.target.closest('.cmp-quest-check');
+    const star  = e.target.closest('.cmp-quest-goal');
+    const row   = e.target.closest('.cmp-quest-item');
+    if (!row) return;
+    const name = row.dataset.qname;
+    const type = row.dataset.qtype;
+    if (check && name) {
+      if (type === 'quest')     toggleQuestCheck(name);
+      else if (type === 'mini') toggleMiniCheck(name);
+      else if (type === 'diary') toggleDiaryCheck(name);
+      return;
+    }
+    if (star && name) {
+      if (type === 'diary')     toggleDiaryGoal(name);
+      else if (type === 'mini') toggleMiniGoal(name);
+      else                      toggleGoalQuest(name);
+      return;
+    }
+  });
+}
+function renderQuestList() {
+  const search = (document.getElementById('cmpQuestSearch')?.value||'').toLowerCase();
+  const groups = document.getElementById('cmpQuestGroups');
+  const prog   = document.getElementById('cmpQuestProgress');
+  if(!groups) return;
+
+  if(questSubTab==='quests') {
+    const all = [...new Set(Object.values(QUEST_LIST).flat())];
+    const done = all.filter(q=>questChecks['q_'+q]).length;
+    prog.innerHTML = `Quests: <span>${done}</span> / ${all.length} checked`;
+    const shown = new Set(); let html='';
+    for(const [grp,quests] of Object.entries(QUEST_LIST)) {
+      const f = quests.filter(q=>!shown.has(q)&&(!search||q.toLowerCase().includes(search)));
+      if(!f.length) continue;
+      f.forEach(q=>shown.add(q));
+      html += `<div class="cmp-quest-group-header">${grp}</div>`;
+      html += f.map(q=>questRow(q,!!questChecks['q_'+q],'quest','',true)).join('');
+    }
+    groups.innerHTML = html||noMatch;
+    wireQuestClicks();
+
+  } else if(questSubTab==='miniquests') {
+    const done = MINIQUEST_LIST.filter(m=>miniChecks['m_'+m]).length;
+    prog.innerHTML = `Miniquests: <span>${done}</span> / ${MINIQUEST_LIST.length} checked`;
+    const f = MINIQUEST_LIST.filter(m=>!search||m.toLowerCase().includes(search));
+    let html = '<div class="cmp-quest-group-header">All Miniquests (official)</div>';
+    html += f.map(m=>questRow(m,!!miniChecks['m_'+m],'mini')).join('');
+    groups.innerHTML = f.length?html:noMatch;
+    wireQuestClicks();
+
+  } else {
+    const all = DIARY_REGIONS.flatMap(r=>DIARY_TIERS.map(t=>`${r} Diary — ${t}`));
+    const done = all.filter(d=>diaryChecks['d_'+d]).length;
+    prog.innerHTML = `Diaries: <span>${done}</span> / ${all.length} tiers completed`;
+    let html='';
+    for(const [region,tiers] of Object.entries(DIARY_LIST)) {
+      const f = tiers.filter(t=>!search||t.toLowerCase().includes(search));
+      if(!f.length) continue;
+      const rDone = tiers.filter(t=>diaryChecks['d_'+t]).length;
+      html += `<div class="cmp-quest-group-header">${region} <span style="color:var(--gold);font-weight:400">${rDone}/${tiers.length}</span></div>`;
+      html += f.map(d=>{
+        const tier=d.split(' — ')[1];
+        const region=d.split(' — ')[0];
+        const col={Easy:'var(--green)',Medium:'var(--yellow)',Hard:'var(--orange)',Elite:'var(--red)'}[tier]||'var(--text)';
+        const badge=`<span style="color:${col};font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;border:0.5px solid ${col}55;margin-left:6px">${tier}</span>`;
+        return questRow(d,!!diaryChecks['d_'+d],'diary',badge,false,region);
+      }).join('');
+    }
+    groups.innerHTML = html||noMatch;
+    wireQuestClicks();
+  }
+}
+
+// ─── Hook switchTab ────────────────────────────────────
+const _origSwitch = switchTab;
+switchTab = function(t) {
+  _origSwitch(t);
+  if(t==='companion') { setCmpGoal(cmpGoal||'quests'); renderStarredGoals(); renderCompanion(); }
+};
+
+// ─── Init ──────────────────────────────────────────────
+// Clear personal session data so shared files open fresh
+// (only clears if no version key present — won't affect returning users)
+(function clearIfFresh(){
+  if (!localStorage.getItem('osrs_flipper_v9')) {
+    localStorage.removeItem(CMP_STATS_KEY);
+    localStorage.removeItem('osrs_cmp_rsn');
+    localStorage.setItem('osrs_flipper_v9','1');
+    // Re-init stats to defaults
+    cmpStats = {...DEFAULT_STATS};
+    document.getElementById('cmpUsername') && (document.getElementById('cmpUsername').value='');
+  }
+})();
+syncAllQuestsToSteps();
+renderStarredGoals();
+// Show Quest List by default when companion tab is first opened
+// setCmpGoal runs when the companion tab is activated via switchTab hook
+</script>
+</body>
+</html>
