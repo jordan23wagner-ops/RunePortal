@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RunePortal</title>
+  <style>
+    canvas { position: relative; z-index: 1; }
+    .backpack-panel { z-index: 9999 !important; }
+    .close-button { z-index: 99999 !important; pointer-events: all !important; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; }
+    canvas { z-index: 1; position: relative; display: block; }
+
+    .backpack-panel {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(10, 10, 10, 0.97);
+      color: #ccc;
+      font-family: 'Courier New', monospace;
+      z-index: 100;
+      flex-direction: column;
+      padding: 12px;
+    }
+
+    .backpack-panel.open { display: flex; }
+
+    .close-button { z-index: 999; pointer-events: all; cursor: pointer; z-index: 999; pointer-events: all; cursor: pointer;
+      position: absolute;
+      top: 10px; right: 16px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #888;
+      line-height: 1;
+    }
+    .close-button:hover { color: #fff; }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+    }
+
+    .tab {
+      padding: 6px 18px;
+      cursor: pointer;
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: #666;
+      border: 1px solid #333;
+      border-radius: 3px;
+      background: #111;
+    }
+
+    .tab.active {
+      color: #e8c97a;
+      border-color: #e8c97a;
+      background: #1a1a1a;
+    }
+
+    /* BACKPACK GRID */
+    .backpack-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      overflow-y: auto;
+      max-height: 70vh;
+    }
+
+    .backpack-grid .item {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 8px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s;
+    }
+
+    .backpack-grid .item:hover { border-color: #e8c97a; }
+    .backpack-grid .item.common  { border-color: #555; }
+    .backpack-grid .item.rare    { border-color: #4a90d9; color: #4a90d9; }
+    .backpack-grid .item.epic    { border-color: #9b59b6; color: #9b59b6; }
+
+    .item-type {
+      font-size: 9px;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 3px;
+    }
+
+    /* EQUIPMENT SLOTS */
+    .equipment-slots {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 8px 0;
+    }
+
+    .slot {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 12px 8px;
+      text-align: center;
+      min-height: 80px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .slot:hover { border-color: #555; }
+
+    .slot-label {
+      font-size: 9px;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .slot .item {
+      font-size: 11px;
+      color: #e8c97a;
+    }
+
+    .slot.empty .item { color: #333; }
+
+    /* GOLD DISPLAY */
+    .gold-display {
+      font-size: 13px;
+      color: #e8c97a;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+
+    /* TOOLTIP */
+    .item-tooltip {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111;
+      border: 1px solid #e8c97a;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #ccc;
+      z-index: 200;
+      min-width: 180px;
+      text-align: center;
+    }
+
+    .tooltip-name { color: #e8c97a; font-size: 14px; margin-bottom: 4px; }
+    .tooltip-stats { color: #aaa; font-size: 11px; margin: 4px 0; }
+    .equip-btn {
+      margin-top: 8px;
+      padding: 5px 16px;
+      background: #e8c97a;
+      color: #111;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: bold;
+      font-size: 11px;
+    }
+</style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div class="backpack-panel">
+    <button id="closeBtn" style="position:fixed;top:10px;right:16px;z-index:999999;background:#333;color:#e8c97a;border:1px solid #e8c97a;padding:6px 14px;font-size:18px;cursor:pointer;font-family:monospace;border-radius:4px;" onclick="document.querySelector('.backpack-panel').classList.remove('open');document.querySelector('canvas').style.pointerEvents='auto';">&times; CLOSE</button>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('backpack')">BACKPACK</div>
+      <div class="tab" onclick="switchTab('equipment')">EQUIPMENT</div>
+    </div>
+    <div class="gold-display">GOLD: <span id="goldCount">0</span></div><div class="backpack-grid"></div>
+    <div class="equipment-slots" style="display:none">
+      <div class="slot">
+        <div class="item">Weapon</div>
+      </div>
+      <div class="slot">
+        <div class="item">Helmet</div>
+      </div>
+      <div class="slot">
+        <div class="item">Chest</div>
+      </div>
+      <div class="slot">
+        <div class="item">Legs</div>
+      </div>
+      <div class="slot">
+        <div class="item">Boots</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const tileWidth = 64;
+    const tileHeight = tileWidth / 2;
+    const gridSize = 20;
+    const grid = [];
+    for (let x = 0; x < gridSize; x++) {
+      grid[x] = [];
+      for (let y = 0; y < gridSize; y++) {
+        grid[x][y] = (x + y) % 2 === 0 ? 'grass' : 'dirt';
+      }
+    }
+
+    const player = {
+      x: gridSize / 2,
+      y: gridSize / 2,
+      hp: 100,
+      maxHp: 100,
+      speed: 2,
+      skills: {
+        dexterity: 10,
+        strength: 10,
+        vigor: 10,
+        magic: 10,
+        ranged: 10,
+        xp: {
+          dexterity: 0,
+          strength: 0,
+          vigor: 0,
+          intelligence: 0
+        },
+        level: {
+          dexterity: 1,
+          strength: 1,
+          vigor: 1,
+          intelligence: 1
+        }
+      },
+      baseStats: {
+        dexterity: 10,
+        strength: 10,
+        vigor: 10,
+        intelligence: 10
+      },
+      equippedBonuses: {
+        dexterity: 0,
+        strength: 0,
+        vigor: 0,
+        intelligence: 0
+      }
+    };
+
+    const camera = {
+      x: 0,
+      y: 0
+    };
+
+    const joystick = {
+      x: 0,
+      y: 0,
+      radius: 50,
+      touching: false
+    };
+
+    let lastTime = 0;
+    let tick = 0;
+
+    const enemies = []; const enemyTypes = ['common', 'rare', 'epic']; function respawnEnemies() { const rarity = Math.random(); const enemyType = enemyTypes[Math.floor(rarity * enemyTypes.length)]; const enemy = { x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize), hp: 50, maxHp: 50, attackSpeed: 1 }; switch (enemyType) { case 'common': enemy.hp = 50; enemy.maxHp = 50; enemy.attackSpeed = 1; break; case 'rare': enemy.hp = 100; enemy.maxHp = 100; enemy.attackSpeed = 2; break; case 'epic': enemy.hp = 200; enemy.maxHp = 200; enemy.attackSpeed = 3; break; } setTimeout(function() { enemies.push(enemy); }, 5000); }
+    for (let i = 0; i < 10; i++) {
+      const x = Math.floor(Math.random() * gridSize);
+      const y = Math.floor(Math.random() * gridSize);
+      enemies.push({
+        x: x,
+        y: y,
+        hp: 50,
+        maxHp: 50,
+        attackSpeed: 1,
+        damage: 5,
+        xpReward: 10,
+        direction: Math.random() * 2 * Math.PI,
+        timer: 0
+      });
+    }
+
+    const loot = [];
+    const floatingText = [];
+    const gear = [
+      {
+        name: 'Rusty Sword',
+        type: 'Weapon',
+        statBonus: {
+          dexterity: 2
+        },
+        rarity: 'Common'
+      },
+      {
+        name: 'Iron Helm',
+        type: 'Helmet',
+        statBonus: {
+          vigor: 1
+        },
+        rarity: 'Common'
+      },
+      {
+        name: 'Leather Chest',
+        type: 'Chest',
+        statBonus: {
+          vigor: 2
+        },
+        rarity: 'Common'
+      },
+      {
+        name: 'Steel Sword',
+        type: 'Weapon',
+        statBonus: {
+          dexterity: 4
+        },
+        rarity: 'Rare'
+      },
+      {
+        name: 'Golden Helm',
+        type: 'Helmet',
+        statBonus: {
+          vigor: 3
+        },
+        rarity: 'Rare'
+      },
+      {
+        name: 'Plate Chest',
+        type: 'Chest',
+        statBonus: {
+          vigor: 4
+        },
+        rarity: 'Rare'
+      },
+      {
+        name: 'Dragon Sword',
+        type: 'Weapon',
+        statBonus: {
+          dexterity: 6
+        },
+        rarity: 'Epic'
+      },
+      {
+        name: 'Mythril Helm',
+        type: 'Helmet',
+        statBonus: {
+          vigor: 5
+        },
+        rarity: 'Epic'
+      },
+      {
+        name: 'Mythril Chest',
+        type: 'Chest',
+        statBonus: {
+          vigor: 6
+        },
+        rarity: 'Epic'
+      }
+    ];
+
+    const backpack = {
+      items: [],
+      gold: 0
+    };
+
+    function update(dt) {
+      applyKeyboardMovement(dt);
+      tick++;
+      if (joystick.touching) {
+        const angle = Math.atan2(joystick.y, joystick.x);
+        const speedX = Math.cos(angle) * player.speed * dt;
+        const speedY = Math.sin(angle) * player.speed * dt;
+        player.x += speedX;
+        player.y += speedY;
+
+        if (player.x < 0) {
+          player.x = 0;
+        } else if (player.x >= gridSize) {
+          player.x = gridSize - 1;
+        }
+
+        if (player.y < 0) {
+          player.y = 0;
+        } else if (player.y >= gridSize) {
+          player.y = gridSize - 1;
+        }
+
+        for (let i = 0; i < enemies.length; i++) {
+          const enemy = enemies[i];
+          const distance = Math.sqrt((player.x - enemy.x) ** 2 + (player.y - enemy.y) ** 2);
+          if (distance < 40 / tileWidth) {
+            const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x);
+            const speedX = Math.cos(angle) * 0.1;
+            const speedY = Math.sin(angle) * 0.1;
+            player.x -= speedX;
+            player.y -= speedY;
+            enemy.x += speedX;
+            enemy.y += speedY;
+          }
+        }
+      }
+
+      camera.x = player.x * tileWidth - vw / 2 + tileWidth / 2;
+      camera.y = player.y * tileHeight - vh / 2 + tileHeight / 2;
+
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        enemy.timer += dt;
+        if (enemy.timer > 2 + Math.random() * 1) {
+          enemy.direction = Math.random() * 2 * Math.PI;
+          enemy.timer = 0;
+        }
+        const speedX = Math.cos(enemy.direction) * enemy.attackSpeed * dt;
+        const speedY = Math.sin(enemy.direction) * enemy.attackSpeed * dt;
+        enemy.x += speedX;
+        enemy.y += speedY;
+
+        if (enemy.x < 0) {
+          enemy.x = 0;
+          enemy.direction = Math.PI - enemy.direction;
+        } else if (enemy.x >= gridSize) {
+          enemy.x = gridSize - 1;
+          enemy.direction = Math.PI - enemy.direction;
+        }
+
+        if (enemy.y < 0) {
+          enemy.y = 0;
+          enemy.direction = -enemy.direction;
+        } else if (enemy.y >= gridSize) {
+          enemy.y = gridSize - 1;
+          enemy.direction = -enemy.direction;
+        }
+
+        const distance = Math.sqrt((player.x - enemy.x) ** 2 + (player.y - enemy.y) ** 2);
+        if (distance < 80 / tileWidth) {
+          if (player.skills.dexterity > 0) {
+            const attackSpeed = 1 / (player.skills.dexterity / 10);
+            if (tick % Math.floor(attackSpeed * 60) === 0) {
+              const damage = 1 + Math.floor(player.skills.strength / 10);
+              enemy.hp -= damage;
+              if (enemy.hp <= 0) {
+                enemy.hp = 0;
+                if (Math.random() < 0.3) {
+                  const gearItem = gear[Math.floor(Math.random() * gear.length)];
+                  loot.push({ x: enemy.x, y: enemy.y, gear: gearItem });
+                }
+                loot.push({ x: enemy.x, y: enemy.y, gold: Math.floor(Math.random() * 10) + 1 });
+                player.skills.xp.dexterity += enemy.xpReward;
+                player.skills.xp.strength += enemy.xpReward;
+                player.skills.xp.vigor += enemy.xpReward;
+                enemies.splice(i, 1);
+                i--;
+              }
+            }
+          }
+
+          if (enemy.attackSpeed > 0) {
+            const attackSpeed = 1 / (enemy.attackSpeed);
+            if (tick % Math.floor(attackSpeed * 60) === 0) {
+              const damage = enemy.damage;
+              player.hp -= damage;
+              if (player.hp <= 0) {
+                player.hp = 0;
+              }
+            }
+          }
+        }
+      }
+
+      for (let i = 0; i < loot.length; i++) {
+        const item = loot[i];
+        if (item.gear) {
+          const distance = Math.sqrt((player.x - item.x) ** 2 + (player.y - item.y) ** 2);
+          if (distance < 40 / tileWidth) {
+            backpack.items.push(item.gear);
+            loot.splice(i, 1);
+            i--;
+          }
+        } else if (item.gold) {
+          const distance = Math.sqrt((player.x - item.x) ** 2 + (player.y - item.y) ** 2);
+          if (distance < 40 / tileWidth) {
+            const goldAmt = item.gold;
+            backpack.gold += goldAmt;
+            floatingText.push({ x: player.x, y: player.y, text: `+${goldAmt}g`, timer: 0 });
+            loot.splice(i, 1);
+            i--;
+          }
+        }
+      }
+
+      for (let i = 0; i < floatingText.length; i++) {
+        const text = floatingText[i];
+        text.timer += dt;
+        if (text.timer > 1) {
+          floatingText.splice(i, 1);
+          i--;
+        }
+      }
+
+      for (const skill in player.skills.xp) {
+        if (player.skills.xp[skill] >= 100 * player.skills.level[skill]) {
+          player.skills.level[skill]++;
+          player.skills.xp[skill] = 0;
+        }
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, vw, vh);
+
+      for (let x = 0; x < gridSize; x++) {
+        for (let y = 0; y < gridSize; y++) {
+          const tileX = x * tileWidth - camera.x;
+          const tileY = y * tileHeight - camera.y;
+          if (tileX + tileWidth > 0 && tileX < vw && tileY + tileHeight > 0 && tileY < vh) {
+            ctx.fillStyle = grid[x][y] === 'grass' ? 'green' : 'brown';
+            ctx.fillRect(tileX, tileY, tileWidth, tileHeight);
+          }
+        }
+      }
+
+      const playerX = player.x * tileWidth - camera.x;
+      const playerY = player.y * tileHeight - camera.y;
+      ctx.fillStyle = 'blue';
+      ctx.beginPath();
+      ctx.moveTo(playerX + tileWidth / 2, playerY);
+      ctx.lineTo(playerX + tileWidth, playerY + tileHeight / 2);
+      ctx.lineTo(playerX + tileWidth / 2, playerY + tileHeight);
+      ctx.lineTo(playerX, playerY + tileHeight / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = 'red';
+      ctx.fillRect(playerX, playerY - 10, (player.hp / player.maxHp) * tileWidth, 5);
+
+      ctx.font = '16px Arial';
+      ctx.fillStyle = 'black';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.shadowColor='black'; ctx.shadowBlur=6; ctx.fillStyle='#e8c97a'; ctx.font='bold 14px Courier New'; ctx.fillText(`DEX: ${player.baseStats.dexterity + player.equippedBonuses.dexterity}`, 10, 10);
+      ctx.fillText(`STR: ${player.baseStats.strength + player.equippedBonuses.strength}`, 10, 30);
+      ctx.fillText(`VIG: ${player.baseStats.vigor + player.equippedBonuses.vigor}`, 10, 50);
+      ctx.fillText(`INT: ${player.baseStats.intelligence + player.equippedBonuses.intelligence}`, 10, 70);
+
+      ctx.beginPath();
+      ctx.arc(50, vh - 50, joystick.radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'black';
+      ctx.stroke();
+
+      if (joystick.touching) {
+        ctx.beginPath();
+        ctx.arc(50 + joystick.x, vh - 50 + joystick.y, 10, 0, 2 * Math.PI);
+        ctx.fillStyle = 'black';
+        ctx.fill();
+      }
+
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        const enemyX = enemy.x * tileWidth - camera.x;
+        const enemyY = enemy.y * tileHeight - camera.y;
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.moveTo(enemyX + tileWidth / 4, enemyY);
+        ctx.lineTo(enemyX + tileWidth / 2, enemyY + tileHeight / 4);
+        ctx.lineTo(enemyX + tileWidth / 4, enemyY + tileHeight / 2);
+        ctx.lineTo(enemyX, enemyY + tileHeight / 4);
+        ctx.closePath();
+        ctx.fill();
+
+        if (enemy.hp < enemy.maxHp) {
+          ctx.fillStyle = 'green';
+          ctx.fillRect(enemyX, enemyY - 10, (enemy.hp / enemy.maxHp) * tileWidth / 2, 5);
+          ctx.fillStyle = 'red';
+          ctx.fillRect(enemyX + (enemy.hp / enemy.maxHp) * tileWidth / 2, enemyY - 10, tileWidth / 2 - (enemy.hp / enemy.maxHp) * tileWidth / 2, 5);
+        }
+      }
+
+      for (let i = 0; i < loot.length; i++) {
+        const item = loot[i];
+        const itemX = item.x * tileWidth - camera.x;
+        const itemY = item.y * tileHeight - camera.y;
+        if (item.gear) {
+          ctx.fillStyle = item.gear.rarity === 'Common' ? 'white' : item.gear.rarity === 'Rare' ? 'blue' : 'purple';
+          ctx.beginPath();
+          ctx.moveTo(itemX + tileWidth / 2, itemY);
+          ctx.lineTo(itemX + tileWidth, itemY + tileHeight / 2);
+          ctx.lineTo(itemX + tileWidth / 2, itemY + tileHeight);
+          ctx.lineTo(itemX, itemY + tileHeight / 2);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillStyle = 'yellow';
+          ctx.beginPath();
+          ctx.arc(itemX + tileWidth / 2, itemY + tileHeight / 2, 10, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      }
+
+      for (let i = 0; i < floatingText.length; i++) {
+        const text = floatingText[i];
+        const textX = text.x * tileWidth - camera.x;
+        const textY = text.y * tileHeight - camera.y;
+        ctx.font = '16px Arial';
+        ctx.fillStyle = 'black';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text.text, textX, textY - 20 - text.timer * 100);
+      }
+
+      ctx.font = '16px Arial';
+      ctx.fillStyle = 'black';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      for (const skill in player.skills.xp) {
+        ctx.fillStyle='#e8c97a'; ctx.fillText(`${({dexterity:"Dexterity",strength:"Strength",vigor:"Vigor",intelligence:"Intelligence"})[skill]||skill} XP: ${player.skills.xp[skill]}/${100 * player.skills.level[skill]}`, 10, 90 + 20 * Object.keys(player.skills.xp).indexOf(skill));
+      }
+
+      ctx.font = '24px Arial';
+      ctx.fillStyle = 'black';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle='#e8c97a'; ctx.font='bold 16px Courier New'; ctx.fillText('BAG', window.innerWidth - 40, 24);
+    }
+
+    function handleTouchStart(event) {
+      const touch = event.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      if (x > 0 && x < 100 && y > vh - 100 && y < vh) {
+        joystick.touching = true;
+        joystick.x = x - 50;
+        joystick.y = y - (vh - 50);
+      } else if (x > vw - 80 && y < 40) {
+        const backpackPanel = document.querySelector('.backpack-panel');
+        backpackPanel.classList.add('open'); canvas.style.pointerEvents='none'; renderBackpack(); document.dispatchEvent(new Event('backpackOpened'));
+      }
+    }
+
+    function handleTouchMove(event) {
+      if (joystick.touching) {
+        const touch = event.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        joystick.x = x - 50;
+        joystick.y = y - (vh - 50);
+        const angle = Math.atan2(joystick.y, joystick.x);
+        const length = Math.sqrt(joystick.x ** 2 + joystick.y ** 2);
+        if (length > joystick.radius) {
+          joystick.x = Math.cos(angle) * joystick.radius;
+          joystick.y = Math.sin(angle) * joystick.radius;
+        }
+      }
+    }
+
+    function handleTouchEnd(event) {
+      joystick.touching = false;
+    }
+
+    document.addEventListener('touchstart', handleTouchStart);
+    document.addEventListener('touchmove', handleTouchMove);
+    document.addEventListener('touchend', handleTouchEnd);
+
+    const backpackPanel = document.querySelector('.backpack-panel');
+    // close button handled inline
+
+    function loop(timestamp) {
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  
+    // --- KEYBOARD + MOUSE CONTROLS (desktop fallback) ---
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.key] = true);
+    document.addEventListener('keyup', e => keys[e.key] = false);
+
+    function applyKeyboardMovement(dt) {
+      const spd = 0.1;
+      if (keys['ArrowUp'] || keys['w'] || keys['W'])    { player.y -= spd; }
+      if (keys['ArrowDown'] || keys['s'] || keys['S'])  { player.y += spd; }
+      if (keys['ArrowLeft'] || keys['a'] || keys['A'])  { player.x -= spd; }
+      if (keys['ArrowRight'] || keys['d'] || keys['D']) { player.x += spd; }
+      player.x = Math.max(0, Math.min(player.x, 20 * 64));
+      player.y = Math.max(0, Math.min(player.y, 20 * 64));
+    }
+
+    // Click to open BAG on desktop
+    canvas.addEventListener('click', function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x > vw - 80 && y < 40) {
+        document.querySelector('.backpack-panel').classList.add('open'); renderBackpack(); document.getElementById('closeBtn').style.display = 'block'; document.dispatchEvent(new Event('backpackOpened'));
+      }
+    });
+
+  
+    function renderBackpack() {
+      document.getElementById('goldCount').textContent = backpack.gold;
+      const grid = document.querySelector('.backpack-grid');
+      grid.innerHTML = '';
+      if (backpack.items.length === 0) {
+        grid.innerHTML = '<div style="color:#555;font-size:12px;grid-column:1/-1;text-align:center;padding:20px;">Empty</div>';
+        return;
+      }
+      backpack.items.forEach(function(item) {
+        const div = document.createElement('div');
+        div.className = 'item ' + item.rarity.toLowerCase();
+        div.innerHTML = '<div>' + item.name + '</div><div class="item-type">' + item.type + '</div>';
+        grid.appendChild(div);
+      });
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      if (tab === 'backpack') {
+        document.querySelectorAll('.tab')[0].classList.add('active');
+        document.querySelector('.backpack-grid').style.display = 'grid';
+        document.querySelector('.equipment-slots').style.display = 'none';
+      } else {
+        document.querySelectorAll('.tab')[1].classList.add('active');
+        document.querySelector('.backpack-grid').style.display = 'none';
+        document.querySelector('.equipment-slots').style.display = 'grid';
+      }
+    }
+
+
+    // ?? SAVE / LOAD ?????????????????????????????????????
+    function saveGame() {
+      try {
+        const saveData = {
+          skills:          JSON.parse(JSON.stringify(player.skills)),
+          hp:              player.hp,
+          baseStats:       JSON.parse(JSON.stringify(player.baseStats)),
+          equippedBonuses: JSON.parse(JSON.stringify(player.equippedBonuses)),
+          gold:            backpack.gold,
+          items:           JSON.parse(JSON.stringify(backpack.items))
+        };
+        localStorage.setItem("runeportal_save", JSON.stringify(saveData));
+      } catch(e) { console.warn("Save failed:", e); }
+    }
+
+    function loadGame() {
+      try {
+        const raw = localStorage.getItem("runeportal_save");
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (d.skills)             Object.assign(player.skills, d.skills);
+        if (d.hp !== undefined)   player.hp = d.hp;
+        if (d.baseStats)          Object.assign(player.baseStats, d.baseStats);
+        if (d.equippedBonuses)    Object.assign(player.equippedBonuses, d.equippedBonuses);
+        if (d.gold !== undefined) backpack.gold = d.gold;
+        if (d.items)              backpack.items = d.items;
+      } catch(e) { console.warn("Load failed:", e); }
+    }
+
+    loadGame();
+    setInterval(saveGame, 30000); // auto-save every 30s
+
+  </script>
+<script>
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") {
+    document.querySelector(".backpack-panel").classList.remove("open");
+    document.querySelector("canvas").style.pointerEvents = "auto";
+    document.getElementById("closeBtn").style.display = "none";
+    saveGame();
+  }
+});
+</script></body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
