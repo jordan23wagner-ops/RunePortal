@@ -166,18 +166,28 @@
   .ft-btn:hover { background:#1a1a3a; }
 
   /* Backpack + Dev full-screen overlays */
-  #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel {
+  #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel, #merchant-panel {
     display:none; position:fixed; inset:0; z-index:100;
     background:rgba(26,26,46,0.97); color:#ccc; font-family:'Courier New',monospace;
     flex-direction:column; padding:14px; overflow-y:auto;
   }
   #backpack-overlay.open, #dev-overlay.open,
-  #storage-panel.open, #forge-panel.open { display:flex; }
+  #storage-panel.open, #forge-panel.open,
+  #merchant-panel.open { display:flex; }
   .stc-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
     background:#1a2a1a; color:#44cc44; border:1px solid #44cc44; border-radius:3px; cursor:pointer; }
   .use-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
     background:#1a1a3a; color:#44aaff; border:1px solid #44aaff; border-radius:3px; cursor:pointer; }
   .forge-recipe { background:#15152a; border:1px solid #555; border-radius:6px; padding:12px; margin-bottom:12px; }
+  .mch-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #1e1e30;font:11px monospace;}
+  .mch-name{flex:1;} .mch-type{width:58px;color:#666;font-size:9px;text-transform:uppercase;}
+  .mch-val{width:52px;text-align:right;color:#e8c97a;}
+  .mch-btn{min-width:64px;min-height:28px;font:9px monospace;cursor:pointer;border-radius:3px;border:1px solid;padding:0 6px;}
+  .mch-sell-btn{color:#e8c97a;background:#1a1800;border-color:#e8c97a;}
+  .mch-buy-btn{color:#44aaff;background:#0a0a1a;border-color:#44aaff;}
+  .forge-entry{padding:7px 4px;border-bottom:1px solid #1e1e30;cursor:pointer;font:11px monospace;color:#888;border-radius:3px;}
+  .forge-entry:hover{color:#ccc;background:rgba(255,255,255,0.03);}
+  .forge-entry.active{color:#e8c97a;background:rgba(232,201,122,0.07);}
   .bp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .bp-gold { color:#e8c97a; font-size:15px; letter-spacing:1px; }
   .bp-close { background:#333; color:#e8c97a; border:1px solid #e8c97a; border-radius:4px;
@@ -260,12 +270,34 @@
     <div style="color:#888;font:11px monospace;letter-spacing:1px;margin-bottom:10px">20 SLOTS &mdash; Use [STORE] in bag to deposit</div>
     <div id="storage-grid" class="bp-grid"></div>
   </div>
+  <div id="merchant-panel">
+    <div class="bp-header">
+      <div>
+        <span style="color:#e8c97a;font:13px monospace;letter-spacing:2px">MERCHANT</span>
+        <span style="color:#888;font:11px monospace;margin-left:10px">Homestead Trader</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="mch-gold" style="color:#e8c97a;font:12px monospace">&#9679; 0g</span>
+        <button class="bp-close" onclick="closeMerchantUI()">&#10005;</button>
+      </div>
+    </div>
+    <div class="bp-tabs" style="border-color:#cc6600">
+      <div class="bp-tab active" id="mchtab-sell" onclick="switchMerchantTab('sell')" style="--acc:#cc6600">SELL</div>
+      <div class="bp-tab"        id="mchtab-buy"  onclick="switchMerchantTab('buy')">BUY</div>
+    </div>
+    <div id="mch-sell-view"></div>
+    <div id="mch-buy-view"  style="display:none"></div>
+  </div>
   <div id="forge-panel">
     <div class="bp-header">
       <span style="color:#ff7722;font:13px monospace;letter-spacing:2px">FORGE</span>
+      <span style="color:#888;font:11px monospace">Craft &amp; Upgrade</span>
       <button class="bp-close" onclick="closeForgeUI()">&#10005;</button>
     </div>
-    <div id="forge-recipe-list"></div>
+    <div style="display:flex;gap:12px;flex:1;min-height:0;margin-top:8px;overflow:hidden">
+      <div id="forge-list" style="width:34%;overflow-y:auto;padding-right:8px;border-right:1px solid #333"></div>
+      <div id="forge-detail" style="flex:1;overflow-y:auto;padding-left:2px"></div>
+    </div>
   </div>
   <div id="backpack-overlay">
     <div class="bp-header">
@@ -593,10 +625,50 @@
     { id:'iron_ore', name:'Iron Ore', rarity:'common', dropFrom:['ashfields'] },
     { id:'bog_root', name:'Bog Root', rarity:'rare', dropFrom:['bleakwood'] },
     { id:'void_shard',  name:'Void Shard',  rarity:'epic',     dropFrom:['ironbone'] },
-    { id:'runic_dust',  name:'Runic Dust',  rarity:'uncommon', dropFrom:[] },
+    { id:'runic_dust',    name:'Runic Dust',    rarity:'uncommon', dropFrom:[] },
+    { id:'iron_ingot',    name:'Iron Ingot',    rarity:'common',   dropFrom:[] },
+    { id:'leather_scraps',name:'Leather Scraps',rarity:'common',   dropFrom:[] },
     { id:'iron_bar', name:'Iron Bar', rarity:'common', dropFrom:[] },
     { id:'bog_ingot', name:'Bog Ingot', rarity:'rare', dropFrom:[] },
     { id:'void_crystal', name:'Void Crystal', rarity:'epic', dropFrom:[] },
+  ];
+
+  const MERCHANT_STOCK = [
+    { name:'Health Potion',    type:'consumable', rarity:'common',   cost:25,  effect:'Restore 40 HP' },
+    { name:'Antidote',         type:'consumable', rarity:'common',   cost:40,  effect:'Cure poison' },
+    { name:'Runic Dust',       type:'material',   rarity:'uncommon', cost:120, materialKey:'runic_dust',     effect:'Crafting material' },
+    { name:'Iron Ingot',       type:'material',   rarity:'common',   cost:60,  materialKey:'iron_ingot',     effect:'Crafting material' },
+    { name:'Leather Scraps',   type:'material',   rarity:'common',   cost:45,  materialKey:'leather_scraps', effect:'Crafting material' },
+    { name:'Traveler Boots',   type:'boots',   slot:'boots',   rarity:'common', cost:80,  stats:{vig:2} },
+    { name:'Worn Shortbow',    type:'weapon',  slot:'weapon',  rarity:'common', cost:90,  weaponStyle:'ranged', stats:{dex:3} },
+    { name:'Apprentice Staff', type:'weapon',  slot:'weapon',  rarity:'common', cost:90,  weaponStyle:'magic',  stats:{int:3} },
+  ];
+
+  const MAT_KEY = {
+    'Runic Dust':'runic_dust', 'Void Shard':'void_shard',
+    'Iron Ingot':'iron_ingot', 'Leather Scraps':'leather_scraps',
+    'Iron Ore':'iron_ore', 'Bog Root':'bog_root'
+  };
+
+  const FORGE_RECIPES = [
+    { name:'Teleport Scroll',
+      output:{ item:'Teleport Scroll', type:'consumable', rarity:'uncommon', qty:1 },
+      ingredients:[{name:'Runic Dust',qty:5},{name:'Void Shard',qty:2},{name:'Gold',qty:500}] },
+    { name:'Health Potion (x3)',
+      output:{ item:'Health Potion', type:'consumable', rarity:'common', qty:3 },
+      ingredients:[{name:'Leather Scraps',qty:2},{name:'Gold',qty:40}] },
+    { name:'Iron Sword',
+      output:{ item:'Iron Sword', type:'weapon', slot:'weapon', weaponStyle:'melee', rarity:'uncommon', stats:{str:5,dex:3}, qty:1 },
+      ingredients:[{name:'Iron Ingot',qty:4},{name:'Leather Scraps',qty:2},{name:'Gold',qty:150}] },
+    { name:'Leather Armor',
+      output:{ item:'Leather Armor', type:'chest', slot:'chest', rarity:'uncommon', stats:{vig:4}, qty:1 },
+      ingredients:[{name:'Leather Scraps',qty:6},{name:'Iron Ingot',qty:1},{name:'Gold',qty:120}] },
+    { name:'Hunter Bow',
+      output:{ item:'Hunter Bow', type:'weapon', slot:'weapon', weaponStyle:'ranged', rarity:'rare', stats:{dex:8}, qty:1 },
+      ingredients:[{name:'Leather Scraps',qty:8},{name:'Iron Ingot',qty:3},{name:'Gold',qty:300}] },
+    { name:'Runic Staff',
+      output:{ item:'Runic Staff', type:'weapon', slot:'weapon', weaponStyle:'magic', rarity:'rare', stats:{int:8}, qty:1 },
+      ingredients:[{name:'Runic Dust',qty:8},{name:'Void Shard',qty:1},{name:'Gold',qty:350}] },
   ];
 
   // ═══════════════════════════════════════════════════════════
@@ -625,7 +697,7 @@
   };
   const backpack = {
     items: [], food: [],
-    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0, runic_dust:0 },
+    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0, runic_dust:0, iron_ingot:0, leather_scraps:0 },
     gold: 0
   };
   // Minimal homestead/guild state (levels stay 0 this session — no panels to raise them)
@@ -1696,13 +1768,14 @@
   window.addEventListener('keydown', e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = true; e.preventDefault(); } });
   window.addEventListener('keyup',   e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = false; e.preventDefault(); } });
   window.addEventListener('keydown', e => {
-    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); if (nearBuilding && nearBuilding.key === 'forge') openForgeUI(); if (nearBuilding && nearBuilding.key === 'storage_chest') openStoragePanel(); } }
+    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); if (nearBuilding && nearBuilding.key === 'forge') openForgeUI(); if (nearBuilding && nearBuilding.key === 'storage_chest') openStoragePanel(); if (nearBuilding && nearBuilding.key === 'merchant') openMerchantUI(); } }
     else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
     else if (e.code === 'Escape') {
       document.getElementById('backpack-overlay').classList.remove('open');
       document.getElementById('dev-overlay').classList.remove('open');
       document.getElementById('storage-panel').classList.remove('open');
       document.getElementById('forge-panel').classList.remove('open');
+      document.getElementById('merchant-panel').classList.remove('open');
       storageOpen = false;
       syncPanelState();
     }
@@ -1985,8 +2058,11 @@
   const STAT_KEYS = [['dexterity','DEX'],['strength','STR'],['vigor','VIG'],['intelligence','INT']];
   const RARITY_DOT = { common:'#888888', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
   const RARITY_TEXT = { common:'#cccccc', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
-  const SELL_VALUE = { common:10, rare:50, epic:150, legendary:500 };
-  function getSellValue(item) { return SELL_VALUE[item.rarity] || 10; }
+  const SELL_VALUE = { common:10, uncommon:35, rare:120, epic:300, legendary:500 };
+  const SELL_TYPE = { weapon:1.5, chest:1.2, helmet:1.2, legs:1.2, boots:1.2, armor:1.2 };
+  function getSellValue(item) {
+    return Math.floor((SELL_VALUE[item.rarity] || 10) * (SELL_TYPE[item.type] || 1.0));
+  }
 
   // ── STATS PANEL (top-left) ──
   let statsBuilt = false;
@@ -2099,7 +2175,8 @@
     const open = document.getElementById('backpack-overlay').classList.contains('open')
               || document.getElementById('dev-overlay').classList.contains('open')
               || document.getElementById('storage-panel').classList.contains('open')
-              || document.getElementById('forge-panel').classList.contains('open');
+              || document.getElementById('forge-panel').classList.contains('open')
+              || document.getElementById('merchant-panel').classList.contains('open');
     anyPanelOpen = open;
     player.uiLocked = open;
   }
@@ -2142,7 +2219,7 @@
       d.innerHTML = `<div class="bp-item-name">${item.name}</div><div class="bp-item-type">${item.type || item.slot}</div>`
         + (isConsumable ? '' : `<div style="font:9px monospace;color:#777;margin-top:2px">${_stats || '<i style="color:#444">No affixes</i>'}</div>`)
         + (playerNearMerchant && !isConsumable ? `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>` : '')
-        + (isConsumable ? `<button class="use-btn" onclick="event.stopPropagation();useTeleportScroll(${idx})">USE</button>` : '')
+        + (isConsumable ? `<button class="use-btn" onclick="event.stopPropagation();useConsumableItem(${idx})">USE</button>` : '')
         + (storageOpen && !isConsumable ? `<button class="stc-btn" onclick="event.stopPropagation();storeItem(${idx})">STORE</button>` : '');
       d.onclick = () => { if (!isConsumable) equipFromBag(idx); };
       grid.appendChild(d);
@@ -2210,6 +2287,96 @@
     saveGame(); renderBackpack();
   }
 
+  // ── MERCHANT ───────────────────────────────────────────────────
+  function openMerchantUI() {
+    document.getElementById('merchant-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    switchMerchantTab('sell');
+  }
+  function closeMerchantUI() {
+    document.getElementById('merchant-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function switchMerchantTab(tab) {
+    document.getElementById('mchtab-sell').classList.toggle('active', tab === 'sell');
+    document.getElementById('mchtab-buy').classList.toggle('active',  tab === 'buy');
+    document.getElementById('mch-sell-view').style.display = tab === 'sell' ? 'block' : 'none';
+    document.getElementById('mch-buy-view').style.display  = tab === 'buy'  ? 'block' : 'none';
+    document.getElementById('mch-gold').textContent = '\u25cf ' + backpack.gold + 'g';
+    if (tab === 'sell') renderMerchantSell(); else renderMerchantBuy();
+  }
+  function renderMerchantSell() {
+    const el = document.getElementById('mch-sell-view'); el.innerHTML = '';
+    const idxMap = [];
+    backpack.items.forEach((item, i) => { if (!item.untradeable && item.type !== 'consumable') idxMap.push(i); });
+    if (!idxMap.length) { el.innerHTML = '<div class="bp-empty">No items to sell</div>'; return; }
+    let totalVal = 0;
+    idxMap.forEach(i => {
+      const item = backpack.items[i], val = getSellValue(item);
+      totalVal += val;
+      const row = document.createElement('div'); row.className = 'mch-row';
+      row.innerHTML = `<span class="mch-name" style="color:${rarText(item.rarity)}">${item.name}</span>`
+        + `<span class="mch-type">${item.type||item.slot}</span>`
+        + `<span class="mch-val">${val}g</span>`
+        + `<button class="mch-btn mch-sell-btn" onclick="merchantSell(${i})">SELL</button>`;
+      el.appendChild(row);
+    });
+    const all = document.createElement('button');
+    all.className = 'bp-sell'; all.style.marginTop = '14px';
+    all.textContent = 'SELL ALL — ' + totalVal + 'g';
+    all.onclick = () => sellAllMerchant(totalVal);
+    el.appendChild(all);
+  }
+  function merchantSell(idx) {
+    const item = backpack.items[idx]; if (!item) return;
+    if (item.untradeable || item.type === 'consumable') return;
+    const val = getSellValue(item);
+    backpack.gold += val; backpack.items.splice(idx, 1);
+    saveGame(); switchMerchantTab('sell'); renderBackpack();
+    showToast('+' + val + 'g');
+  }
+  function sellAllMerchant(totalVal) {
+    if (!confirm('Sell all items for ' + totalVal + 'g?')) return;
+    backpack.items = backpack.items.filter(i => i.untradeable || i.type === 'consumable');
+    backpack.gold += totalVal;
+    saveGame(); switchMerchantTab('sell'); renderBackpack();
+    showToast('+' + totalVal + 'g sold');
+  }
+  function renderMerchantBuy() {
+    const el = document.getElementById('mch-buy-view'); el.innerHTML = '';
+    MERCHANT_STOCK.forEach((stock, idx) => {
+      const canAfford = backpack.gold >= stock.cost;
+      const row = document.createElement('div'); row.className = 'mch-row';
+      const detail = stock.effect
+        || (stock.stats ? Object.entries(stock.stats).map(([k,v])=>k.toUpperCase()+' +'+v).join(' ') : '');
+      row.innerHTML = `<span class="mch-name" style="color:${rarText(stock.rarity)}">${stock.name}`
+        + `<span style="color:#555;font-size:9px;margin-left:8px">${detail}</span></span>`
+        + `<span class="mch-val">${stock.cost}g</span>`
+        + `<button class="mch-btn mch-buy-btn" onclick="buyMerchantItem(${idx})" style="${canAfford ? '' : 'opacity:0.38'}">${canAfford ? 'BUY' : 'NEED '+stock.cost+'g'}</button>`;
+      el.appendChild(row);
+    });
+  }
+  function buyMerchantItem(idx) {
+    const stock = MERCHANT_STOCK[idx];
+    if (backpack.gold < stock.cost) { showToast('Not enough gold'); return; }
+    if (stock.type === 'material') {
+      backpack.materials[stock.materialKey] = (backpack.materials[stock.materialKey] || 0) + 1;
+    } else {
+      if (backpack.items.length >= 20) { showToast('Bag is full'); return; }
+      const newItem = { name:stock.name, type:stock.type, rarity:stock.rarity, statBonus:{} };
+      if (stock.slot) newItem.slot = stock.slot;
+      if (stock.weaponStyle) newItem.weaponStyle = stock.weaponStyle;
+      if (stock.stats) {
+        const FM = {dex:'dexterity',str:'strength',vig:'vigor',int:'intelligence'};
+        for (const [k,v] of Object.entries(stock.stats)) newItem.statBonus[FM[k]||k] = v;
+      }
+      backpack.items.push(newItem);
+    }
+    backpack.gold -= stock.cost;
+    document.getElementById('mch-gold').textContent = '\u25cf ' + backpack.gold + 'g';
+    saveGame(); renderMerchantBuy(); showToast('Bought ' + stock.name);
+  }
+
   // ── STORAGE CHEST ──────────────────────────────────────────────
   function openStoragePanel() {
     if (currentZoneId !== 'homestead') return;
@@ -2253,40 +2420,93 @@
   }
 
   // ── FORGE ──────────────────────────────────────────────────────
+  let selectedRecipeIdx = 0;
+
   function openForgeUI() {
     document.getElementById('forge-panel').classList.add('open');
     anyPanelOpen = true; player.uiLocked = true;
-    renderForge();
+    renderForgeList(); renderForgeDetail();
   }
   function closeForgeUI() {
     document.getElementById('forge-panel').classList.remove('open');
     syncPanelState();
   }
-  function renderForge() {
-    const el = document.getElementById('forge-recipe-list');
-    const dustHave  = backpack.materials.runic_dust  || 0;
-    const shardHave = backpack.materials.void_shard  || 0;
-    const goldHave  = backpack.gold;
-    const canCraft  = dustHave >= 5 && shardHave >= 2 && goldHave >= 500;
-    el.innerHTML = `
-      <div class="forge-recipe">
-        <div class="bp-section-title" style="color:#44cc44;margin-top:0">Teleport Scroll</div>
-        <div style="font:11px monospace;color:#aaa;margin-bottom:10px">Escape to Homestead from any zone,<br>keeping only your most valuable item.</div>
-        <div class="bp-mat" style="color:${dustHave  >= 5 ? '#7d5' : '#c55'}">Runic Dust &nbsp; ${dustHave} / 5</div>
-        <div class="bp-mat" style="color:${shardHave >= 2 ? '#7d5' : '#c55'}">Void Shard &nbsp; ${shardHave} / 2</div>
-        <div class="bp-mat" style="color:${goldHave  >= 500 ? '#7d5' : '#c55'}">Gold &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${goldHave} / 500g</div>
-        <button class="bp-sell" onclick="craftTeleportScroll()" style="margin-top:12px;${canCraft ? '' : 'opacity:0.38;pointer-events:none'}">CRAFT SCROLL</button>
-      </div>`;
+  function renderForgeList() {
+    const el = document.getElementById('forge-list'); el.innerHTML = '';
+    FORGE_RECIPES.forEach((r, i) => {
+      const d = document.createElement('div');
+      d.className = 'forge-entry' + (i === selectedRecipeIdx ? ' active' : '');
+      d.innerHTML = `<span style="color:${rarText(r.output.rarity||'common')}">${r.name}</span>`;
+      d.onclick = () => { selectedRecipeIdx = i; renderForgeList(); renderForgeDetail(); };
+      el.appendChild(d);
+    });
   }
-  function craftTeleportScroll() {
-    if ((backpack.materials.runic_dust || 0) < 5) { showToast('Need 5 Runic Dust'); return; }
-    if ((backpack.materials.void_shard || 0) < 2) { showToast('Need 2 Void Shards'); return; }
-    if (backpack.gold < 500) { showToast('Need 500 gold'); return; }
-    backpack.materials.runic_dust -= 5;
-    backpack.materials.void_shard -= 2;
-    backpack.gold -= 500;
-    backpack.items.push({ name:'Teleport Scroll', type:'consumable', rarity:'uncommon', droppable:false, statBonus:{} });
-    saveGame(); renderForge(); showToast('Teleport Scroll crafted!');
+  function renderForgeDetail() {
+    const r = FORGE_RECIPES[selectedRecipeIdx];
+    const el = document.getElementById('forge-detail');
+    if (!r) { el.innerHTML = ''; return; }
+    let canCraft = true, ingHtml = '';
+    for (const ing of r.ingredients) {
+      const have = ing.name === 'Gold' ? backpack.gold : (backpack.materials[MAT_KEY[ing.name]] || 0);
+      const met = have >= ing.qty;
+      if (!met) canCraft = false;
+      ingHtml += `<div class="bp-mat" style="color:${met ? '#7d5' : '#c55'}">${ing.name}: ${have} / ${ing.qty}</div>`;
+    }
+    const outCol = rarText(r.output.rarity || 'common');
+    const outStats = r.output.stats
+      ? Object.entries(r.output.stats).map(([k,v]) => k.toUpperCase()+' +'+v).join('  ')
+      : (r.output.effect || (r.output.rarity ? r.output.rarity.toUpperCase() : ''));
+    const qtyLabel = r.output.qty > 1 ? ' \u00d7' + r.output.qty : '';
+    el.innerHTML = `<div style="color:${outCol};font:13px monospace;letter-spacing:1px;margin-bottom:3px">${r.output.item}${qtyLabel}</div>`
+      + `<div style="color:#666;font:10px monospace;margin-bottom:12px">${outStats}</div>`
+      + `<div class="bp-section-title" style="margin-top:0;margin-bottom:6px">Ingredients</div>`
+      + ingHtml
+      + `<button class="bp-sell" onclick="craftRecipe(${selectedRecipeIdx})" style="margin-top:14px;${canCraft ? '' : 'opacity:0.36;pointer-events:none'}">CRAFT</button>`;
+  }
+  function craftRecipe(idx) {
+    const r = FORGE_RECIPES[idx]; if (!r) return;
+    for (const ing of r.ingredients) {
+      const have = ing.name === 'Gold' ? backpack.gold : (backpack.materials[MAT_KEY[ing.name]] || 0);
+      if (have < ing.qty) { showToast('Need ' + ing.qty + ' ' + ing.name); return; }
+    }
+    if (r.output.type !== 'consumable' && backpack.items.length >= 20) {
+      showToast('Bag is full \u2014 make room first'); return;
+    }
+    for (const ing of r.ingredients) {
+      if (ing.name === 'Gold') backpack.gold -= ing.qty;
+      else backpack.materials[MAT_KEY[ing.name]] -= ing.qty;
+    }
+    const FM = {dex:'dexterity',str:'strength',vig:'vigor',int:'intelligence'};
+    for (let q = 0; q < (r.output.qty || 1); q++) {
+      if (r.output.type === 'consumable') {
+        backpack.items.push({ name:r.output.item, type:'consumable', rarity:r.output.rarity||'common', statBonus:{}, droppable:false });
+      } else {
+        const ni = { name:r.output.item, type:r.output.type, rarity:r.output.rarity||'common', statBonus:{} };
+        if (r.output.slot)        ni.slot = r.output.slot;
+        if (r.output.weaponStyle) ni.weaponStyle = r.output.weaponStyle;
+        if (r.output.stats) { for (const [k,v] of Object.entries(r.output.stats)) ni.statBonus[FM[k]||k] = v; }
+        backpack.items.push(ni);
+      }
+    }
+    saveGame(); renderForgeList(); renderForgeDetail();
+    showToast(r.output.item + ' crafted!');
+  }
+
+  // ── CONSUMABLE USE DISPATCHER ──────────────────────────────────
+  function useConsumableItem(idx) {
+    const item = backpack.items[idx];
+    if (!item || item.type !== 'consumable') return;
+    if (item.name === 'Teleport Scroll') { useTeleportScroll(idx); return; }
+    if (item.name === 'Health Potion') {
+      if (player.hp >= player.maxHp) { showToast('Already at full HP'); return; }
+      player.hp = Math.min(player.maxHp, player.hp + 40);
+      backpack.items.splice(idx, 1);
+      showHitSplat(toWorldX(player.x), toWorldZ(player.y), '+40 HP', '#55ee55');
+      saveGame(); renderBackpack(); return;
+    }
+    showToast('Used ' + item.name);
+    backpack.items.splice(idx, 1);
+    saveGame(); renderBackpack();
   }
 
   // ── TELEPORT SCROLL USE ────────────────────────────────────────
