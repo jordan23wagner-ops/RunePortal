@@ -6,6 +6,36 @@
 
 ---
 
+## SESSION_STATE (for multi-tool sync)
+
+> **For Groq/Qwen/Claude Web fallback:** Load this section first.  
+> **Updated after every session.**
+
+| Item | Value |
+|------|-------|
+| **Current Phase** | Phase 5 — Three.js migration + Open World |
+| **Active File** | `runeportal_phase5.html` (1,598 lines) |
+| **Renderer** | Three.js r128 (from PixiJS, 2026-06-13) |
+| **Last Work** | Danger bar + character/enemy facing (2026-06-13) |
+| **Next Task** | Waypoint/campfire discovery system |
+
+### Last 3 Patches
+1. [2026-06-13] Danger bar UI + player/enemy facing direction
+2. [2026-06-13] Homestead 3D environment (9 buildings)
+3. [2026-06-13] Three.js r128 full migration (replaced PixiJS)
+
+### Known Bugs
+- None currently
+
+### Dev Notes
+- Save key: `runeportal_save` (localStorage)
+- Three.js version: r128 — NO CapsuleGeometry
+- Death sickness: Active (halves max HP)
+- Minimap: 2D canvas (top-right)
+- Joystick: Mobile (bottom-left)
+
+---
+
 ## Project Identity
 
 | Field | Value |
