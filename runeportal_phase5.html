@@ -65,7 +65,13 @@
   #hud-hp-text { margin-bottom: 3px; }
   #hud-hp-track { width: 140px; height: 10px; background: #333333; border: 1px solid #000; }
   #hud-hp-fill { height: 100%; width: 100%; background: #e44444; }
+  #hud-level { margin-top: 5px; }
+  #hud-lvl-text { font: 10px monospace; color: #44dddd; letter-spacing: 1px; display: block; margin-bottom: 2px; }
+  #hud-xp-track { width: 140px; height: 5px; background: #0a2a2a; border: 1px solid #000; }
+  #hud-xp-fill { height: 100%; width: 0%; background: #44dddd; transition: width 0.3s ease; }
   #enemy-hpbars { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+  #hit-splats { position: fixed; inset: 0; pointer-events: none; z-index: 16; }
+  .hit-splat { position: absolute; font: bold 14px monospace; text-shadow: 1px 1px 3px #000; transform: translateX(-50%); pointer-events: none; white-space: nowrap; }
   .ehp { position: absolute; width: 34px; height: 5px; background: #222; border: 1px solid #000;
          transform: translate(-50%, -50%); }
   .ehp > i { display: block; height: 100%; background: #44aa44; }
@@ -227,8 +233,9 @@
     <div style="color:#888;font:12px monospace;margin-bottom:8px;letter-spacing:1px">DISCOVERED WAYPOINTS</div>
     <div id="ft-list"></div>
   </div>
-  <div id="hud-hpbar"><div id="hud-hp-text">HP: 100 / 100</div><div id="hud-hp-track"><div id="hud-hp-fill"></div></div></div>
+  <div id="hud-hpbar"><div id="hud-hp-text">HP: 100 / 100</div><div id="hud-hp-track"><div id="hud-hp-fill"></div></div><div id="hud-level"><span id="hud-lvl-text">LVL 1</span><div id="hud-xp-track"><div id="hud-xp-fill"></div></div></div></div>
   <div id="enemy-hpbars"></div>
+  <div id="hit-splats"></div>
   <div id="zone-banner"></div>
   <div id="sickness-bar">Death Sickness <span id="sickness-timer">0:00</span></div>
   <div id="zone-fade"></div>
@@ -430,11 +437,11 @@
       tierName: 'Ashfields', recommendedLevel: '1-5', portalColor: '#e8a05a',
       enemyColor: '#c0392b', bossColor: '#8B0000', auraColor: null, lootMult: 1,
       enemyTypes: [
-        { name:'Ashwalker Scavenger', hp:50,  damage:5,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
-        { name:'Raider Brute',        hp:90,  damage:9,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
-        { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
+        { name:'Ashwalker Scavenger', hp:25,  damage:3,  speed:1.0, attackSpeed:1.0, xp:10, weight:0.5, color:'#c0392b', sizeScale:0.85 },
+        { name:'Raider Brute',        hp:45,  damage:5,  speed:0.7, attackSpeed:0.8, xp:16, weight:0.3, color:'#a0522d', sizeScale:1.3 },
+        { name:'Bone Collector',      hp:32,  damage:3,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
       ],
-      boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
+      boss: { name:'The Warden', hp:560, damage:21, speed:1.0, attackSpeed:1.0, xp:200 },
       dropTable: { rarities:['rare'], legendaryChance:0 }, isHome: true, campfirePos: { x:70, y:60 },
       exits: { south: 'homestead', east: 'bleakwood', north: 'rot_flats' }
     },
@@ -591,7 +598,8 @@
     baseStats: { dexterity:10, strength:10, vigor:10, intelligence:10 },
     equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
     equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null },
-    untradableArmor: { equipped: false, broken: false }
+    untradableArmor: { equipped: false, broken: false },
+    totalXP: 0
   };
   const backpack = {
     items: [], food: [],
@@ -613,7 +621,22 @@
 
   let enemies = [];
   let lootPiles = [];
-  let floatingTexts = [];   // logic kept; not rendered this session
+  let floatingTexts = [];
+
+  function showHitSplat(wx, wz, text, color) {
+    const splatRoot = document.getElementById('hit-splats');
+    if (!splatRoot) return;
+    const v = new THREE.Vector3(wx, 1.5, wz).project(camera);
+    if (v.z > 1) return;
+    const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    const el = document.createElement('div');
+    el.className = 'hit-splat'; el.style.color = color;
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    el.textContent = text;
+    splatRoot.appendChild(el);
+    floatingTexts.push({ el, timer: 0, y0: y });
+  }
   let particles = [];
   let projectiles = [];
   let tick = 0;
@@ -752,6 +775,7 @@
     const pile = { x: enemy.x, y: enemy.y, items: [], gold: 0, isDeathPile: false };
     const baseGold = Math.floor(Math.random() * 10) + 1;
     pile.gold = Math.floor(baseGold * zone.lootMult * getGoldBonus() * (enemy.goldMult || 1));
+    if (pile.gold > 0) showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + pile.gold + 'g', '#e8c97a');
     const gearChance = enemy.rarity === 'epic' ? 0.7 : enemy.rarity === 'rare' ? 0.5 : 0.3;
     if (Math.random() < gearChance) { const item = rollZoneGear(zone, enemy.isBoss); if (item) pile.items.push(item); }
     const matChance = enemy.rarity === 'epic' ? 0.6 : enemy.rarity === 'rare' ? 0.35 : 0.15;
@@ -975,9 +999,9 @@
     currentZoneId = zoneId; player.currentZone = zoneId;
     const zone = ZONES[zoneId];
     if (!zone.isSafe) spawnEnemies(); else enemies = [];
-    lootPiles = [];
+    lootPiles = []; playerNearMerchant = false;
     if (arrivalPos) { player.x = arrivalPos.x; player.y = arrivalPos.y; }
-    else if (zoneId === 'homestead') { player.x = 45; player.y = 80; }
+    else if (zoneId === 'homestead') { player.x = 50; player.y = 53; }
     else { player.x = GRID/2; player.y = GRID/2; }
     setZoneVisuals(zoneId);
     spawnEnvObjects(zoneId);
@@ -1023,6 +1047,7 @@
         guilds: guilds, craftQueue: craftQueue, gardenPlot: gardenPlot,
         shrineBuff: shrineBuff, currentZone: currentZoneId,
         discoveredWaypoints: discoveredWaypoints,
+        totalXP: player.totalXP,
       }));
     } catch(e) { storageAvailable = false; }
   }
@@ -1058,6 +1083,7 @@
       if (d.shrineBuff) Object.assign(shrineBuff, d.shrineBuff);
       if (d.currentZone && ZONES[d.currentZone]) { currentZoneId = d.currentZone; player.currentZone = d.currentZone; }
       if (Array.isArray(d.discoveredWaypoints)) discoveredWaypoints = d.discoveredWaypoints;
+      if (Number.isFinite(d.totalXP)) player.totalXP = d.totalXP;
     } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
   }
 
@@ -1181,16 +1207,16 @@
   let hsFireLight = null;
 
   const HS_BUILDINGS = [
-    { key:'campfire',   tx:40, ty:17, label:'Campfire',        color:'#ff8800', prompt:'Press E — Rest & Recover' },
-    { key:'forge',      tx:60, ty:17, label:'Forge',           color:'#ff6600', prompt:'Press E — Smith & Craft' },
-    { key:'shrine',     tx:21, ty:30, label:'Shrine',          color:'#cc88ff', prompt:'Press E — Receive Blessing' },
-    { key:'garden',     tx:45, ty:39, label:'Garden',          color:'#44cc44', prompt:'Press E — Tend Plants' },
-    { key:'watchtower', tx: 9, ty:51, label:'Watchtower',      color:'#aaaaaa', prompt:'Press E — Survey the Land' },
-    { key:'merchant',   tx:57, ty:45, label:'Merchant',        color:'#e8c97a', prompt:'Press E — Browse Wares' },
-    { key:'str_guild',  tx:21, ty:60, label:"Warriors' Guild", color:'#cc4444', prompt:"Press E — Train & Upgrade" },
-    { key:'rng_guild',  tx:45, ty:66, label:"Rangers' Guild",  color:'#44aacc', prompt:"Press E — Train & Upgrade" },
-    { key:'mge_guild',  tx:69, ty:60, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
-    { key:'fast_travel', tx:30, ty:39, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
+    { key:'campfire',   tx:49, ty:41, label:'Campfire',        color:'#ff8800', prompt:'Press E — Rest & Recover' },
+    { key:'forge',      tx:55, ty:41, label:'Forge',           color:'#ff6600', prompt:'Press E — Smith & Craft' },
+    { key:'shrine',     tx:42, ty:45, label:'Shrine',          color:'#cc88ff', prompt:'Press E — Receive Blessing' },
+    { key:'garden',     tx:50, ty:48, label:'Garden',          color:'#44cc44', prompt:'Press E — Tend Plants' },
+    { key:'watchtower', tx:38, ty:52, label:'Watchtower',      color:'#aaaaaa', prompt:'Press E — Survey the Land' },
+    { key:'merchant',   tx:54, ty:50, label:'Merchant',        color:'#e8c97a', prompt:'Press E — Browse Wares' },
+    { key:'str_guild',  tx:42, ty:55, label:"Warriors' Guild", color:'#cc4444', prompt:"Press E — Train & Upgrade" },
+    { key:'rng_guild',  tx:50, ty:57, label:"Rangers' Guild",  color:'#44aacc', prompt:"Press E — Train & Upgrade" },
+    { key:'mge_guild',  tx:58, ty:55, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
+    { key:'fast_travel', tx:50, ty:50, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
   ];
 
   const hsBuildingEl = (function() {
@@ -1242,6 +1268,7 @@
   }
 
   let nearBuilding = null;
+  let playerNearMerchant = false;
   function updateBuildingLabel() {
     if (currentZoneId !== 'homestead' || player.isDead || anyPanelOpen) {
       hsBuildingEl.style.display = 'none'; nearBuilding = null; return;
@@ -1252,6 +1279,7 @@
       if (d < bd) { bd = d; best = b; }
     }
     nearBuilding = best;
+    playerNearMerchant = !!(best && best.key === 'merchant');
     if (best) {
       hsBuildingEl.innerHTML = '<span style="color:' + best.color + '">' + best.label + '</span>'
         + '<br><span style="font-size:11px;color:#bbb">' + best.prompt + '</span>';
@@ -1688,6 +1716,7 @@
         if (tick % atkInterval === 0) {
           const dmg = Math.max(1, Math.floor(combatStat / 5));
           e.hp -= dmg; e.flashTimer = 0.12;
+          showHitSplat(toWorldX(e.x), toWorldZ(e.y), String(dmg), '#ff5533');
           spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
           if (e.hp <= 0) {
             const zone = ZONES[currentZoneId];
@@ -1698,6 +1727,10 @@
             if (weaponStyle === 'ranged') player.skills.xp.dexterity    += xpGain;
             if (weaponStyle === 'magic')  player.skills.xp.intelligence += xpGain;
             player.skills.xp.vigor += xpGain * 0.5;
+            const _prevLvl = levelFromXP(player.totalXP);
+            player.totalXP += xpGain;
+            if (levelFromXP(player.totalXP) > _prevLvl) showToast('Level Up! Now level ' + levelFromXP(player.totalXP) + '!');
+            showHitSplat(toWorldX(e.x), toWorldZ(e.y) - 0.5, '+' + xpGain + ' XP', '#44dddd');
             dropLootFromEnemy(e);
             enemies.splice(i, 1);
             if (!e.isBoss) {
@@ -1733,8 +1766,11 @@
       }
     }
 
-    // Floating-text decay kept (not rendered)
-    for (let i = floatingTexts.length - 1; i >= 0; i--) { floatingTexts[i].timer += dt; if (floatingTexts[i].timer > 1.2) floatingTexts.splice(i, 1); }
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+      const ft = floatingTexts[i]; ft.timer += dt;
+      if (ft.el) { const t = Math.min(1, ft.timer / 0.9); ft.el.style.top = (ft.y0 - ft.timer * 55) + 'px'; ft.el.style.opacity = String(1 - t * 0.9); }
+      if (ft.timer > 1.0) { if (ft.el) ft.el.remove(); floatingTexts.splice(i, 1); }
+    }
 
     // XP level-up
     for (const skill of ['dexterity','strength','vigor','intelligence']) {
@@ -1778,12 +1814,27 @@
     fill.style.width = level + '%';
     fill.style.background = level < 34 ? '#aa4400' : level < 67 ? '#cc5500' : '#dd2200';
   }
+  function xpForLevel(n) {
+    var t = 0;
+    for (var i = 1; i < n; i++) t += Math.floor(i + 300 * Math.pow(2, i / 7));
+    return Math.floor(t / 4);
+  }
+  function levelFromXP(xp) {
+    var lv = 1;
+    while (lv < 99 && xpForLevel(lv + 1) <= xp) lv++;
+    return lv;
+  }
   function updateHUD() {
     const zone = ZONES[currentZoneId];
     document.getElementById('hud-zone').innerHTML = zone.name + (zone.recommendedLevel ? `<small>Recommended Level ${zone.recommendedLevel}</small>` : '<small>Sanctuary</small>');
     const hpFrac = player.maxHp > 0 ? Math.max(0, Math.min(1, player.hp / player.maxHp)) : 0;
     document.getElementById('hud-hp-text').textContent = `HP: ${Math.ceil(player.hp)} / ${player.maxHp}`;
     document.getElementById('hud-hp-fill').style.width = (hpFrac * 100) + '%';
+    const _plvl = levelFromXP(player.totalXP);
+    const _xpThis = player.totalXP - xpForLevel(_plvl);
+    const _xpNext = Math.max(1, xpForLevel(_plvl + 1) - xpForLevel(_plvl));
+    document.getElementById('hud-lvl-text').textContent = 'LVL ' + _plvl;
+    document.getElementById('hud-xp-fill').style.width = Math.min(100, (_xpThis / _xpNext) * 100) + '%';
     updateStatsPanel();
     drawMinimap();
     updateDangerBar(calcDangerLevel());
@@ -1886,7 +1937,7 @@
       const d = document.createElement('div');
       d.className = 'bp-item ' + (item.rarity || 'common');
       d.innerHTML = `<div class="bp-item-name">${item.name}</div><div class="bp-item-type">${item.type || item.slot}</div>`
-        + `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>`;
+        + (playerNearMerchant ? `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>` : '');
       d.onclick = () => equipFromBag(idx);
       grid.appendChild(d);
     });
