@@ -166,12 +166,18 @@
   .ft-btn:hover { background:#1a1a3a; }
 
   /* Backpack + Dev full-screen overlays */
-  #backpack-overlay, #dev-overlay {
+  #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel {
     display:none; position:fixed; inset:0; z-index:100;
     background:rgba(26,26,46,0.97); color:#ccc; font-family:'Courier New',monospace;
     flex-direction:column; padding:14px; overflow-y:auto;
   }
-  #backpack-overlay.open, #dev-overlay.open { display:flex; }
+  #backpack-overlay.open, #dev-overlay.open,
+  #storage-panel.open, #forge-panel.open { display:flex; }
+  .stc-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
+    background:#1a2a1a; color:#44cc44; border:1px solid #44cc44; border-radius:3px; cursor:pointer; }
+  .use-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
+    background:#1a1a3a; color:#44aaff; border:1px solid #44aaff; border-radius:3px; cursor:pointer; }
+  .forge-recipe { background:#15152a; border:1px solid #555; border-radius:6px; padding:12px; margin-bottom:12px; }
   .bp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .bp-gold { color:#e8c97a; font-size:15px; letter-spacing:1px; }
   .bp-close { background:#333; color:#e8c97a; border:1px solid #e8c97a; border-radius:4px;
@@ -246,6 +252,21 @@
   </div>
 
   <!-- Three.js r128 (approved CDN import — only new external this session) -->
+  <div id="storage-panel">
+    <div class="bp-header">
+      <span style="color:#e8c97a;font:13px monospace;letter-spacing:2px">STORAGE CHEST</span>
+      <button class="bp-close" onclick="closeStoragePanel()">&#10005;</button>
+    </div>
+    <div style="color:#888;font:11px monospace;letter-spacing:1px;margin-bottom:10px">20 SLOTS &mdash; Use [STORE] in bag to deposit</div>
+    <div id="storage-grid" class="bp-grid"></div>
+  </div>
+  <div id="forge-panel">
+    <div class="bp-header">
+      <span style="color:#ff7722;font:13px monospace;letter-spacing:2px">FORGE</span>
+      <button class="bp-close" onclick="closeForgeUI()">&#10005;</button>
+    </div>
+    <div id="forge-recipe-list"></div>
+  </div>
   <div id="backpack-overlay">
     <div class="bp-header">
       <div class="bp-gold" id="bp-gold">&#9679; Gold: 0</div>
@@ -571,7 +592,8 @@
   const MATERIAL_DB = [
     { id:'iron_ore', name:'Iron Ore', rarity:'common', dropFrom:['ashfields'] },
     { id:'bog_root', name:'Bog Root', rarity:'rare', dropFrom:['bleakwood'] },
-    { id:'void_shard', name:'Void Shard', rarity:'epic', dropFrom:['ironbone'] },
+    { id:'void_shard',  name:'Void Shard',  rarity:'epic',     dropFrom:['ironbone'] },
+    { id:'runic_dust',  name:'Runic Dust',  rarity:'uncommon', dropFrom:[] },
     { id:'iron_bar', name:'Iron Bar', rarity:'common', dropFrom:[] },
     { id:'bog_ingot', name:'Bog Ingot', rarity:'rare', dropFrom:[] },
     { id:'void_crystal', name:'Void Crystal', rarity:'epic', dropFrom:[] },
@@ -603,7 +625,7 @@
   };
   const backpack = {
     items: [], food: [],
-    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0 },
+    materials: { iron_ore:0, bog_root:0, void_shard:0, iron_bar:0, bog_ingot:0, void_crystal:0, runic_dust:0 },
     gold: 0
   };
   // Minimal homestead/guild state (levels stay 0 this session — no panels to raise them)
@@ -643,6 +665,8 @@
   let lastSave = 0;
   let forgeTimer = 0, gardenTimer = 0;
   let anyPanelOpen = false;
+  let storageOpen = false;
+  let homedStorage = [];  // Homestead storage chest items (max 20)
   let devInvincible = false;
 
   // Visual no-ops this session (combat logic still calls them) ──────────────
@@ -845,6 +869,17 @@
       if (zoneMats.length) pile.materialDrop = zoneMats[Math.floor(Math.random() * zoneMats.length)].id;
     }
     if (Math.random() < 0.08) pile.foodDrop = {...FOOD_DB[Math.min(Math.floor(zone.lootMult - 1), FOOD_DB.length - 1)]};
+    // Scroll ingredient drops (direct award, not walk-over)
+    const _zo = ['homestead','ashfields','bleakwood','ironbone','rot_flats','veilstone','cindermaw','ashen_crown'];
+    const _zi = _zo.indexOf(currentZoneId);
+    if (_zi >= 2 && !enemy.isBoss && (enemy.rarity === 'rare' || enemy.rarity === 'epic') && Math.random() < 0.08) {
+      backpack.materials.runic_dust = (backpack.materials.runic_dust || 0) + 1;
+      showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+Runic Dust', '#cc88ff');
+    }
+    if (enemy.isBoss && _zi >= 3 && Math.random() < 0.05) {
+      backpack.materials.void_shard = (backpack.materials.void_shard || 0) + 1;
+      showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+Void Shard', '#9944ff');
+    }
     lootPiles.push(pile);
   }
 
@@ -1111,6 +1146,7 @@
         shrineBuff: shrineBuff, currentZone: currentZoneId,
         discoveredWaypoints: discoveredWaypoints,
         totalXP: player.totalXP,
+        homedStorage: homedStorage,
       }));
     } catch(e) { storageAvailable = false; }
   }
@@ -1147,6 +1183,8 @@
       if (d.currentZone && ZONES[d.currentZone]) { currentZoneId = d.currentZone; player.currentZone = d.currentZone; }
       if (Array.isArray(d.discoveredWaypoints)) discoveredWaypoints = d.discoveredWaypoints;
       if (Number.isFinite(d.totalXP)) player.totalXP = d.totalXP;
+      if (Array.isArray(d.homedStorage)) homedStorage = d.homedStorage;
+      if (d.materials && d.materials.runic_dust !== undefined) backpack.materials.runic_dust = d.materials.runic_dust;
     } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
   }
 
@@ -1279,7 +1317,8 @@
     { key:'str_guild',  tx:42, ty:55, label:"Warriors' Guild", color:'#cc4444', prompt:"Press E — Train & Upgrade" },
     { key:'rng_guild',  tx:50, ty:57, label:"Rangers' Guild",  color:'#44aacc', prompt:"Press E — Train & Upgrade" },
     { key:'mge_guild',  tx:58, ty:55, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
-    { key:'fast_travel', tx:50, ty:50, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
+    { key:'fast_travel',   tx:50, ty:50, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
+    { key:'storage_chest', tx:60, ty:46, label:'Storage Chest',      color:'#cc9900', prompt:'Press E — Open Storage' },
   ];
 
   const hsBuildingEl = (function() {
@@ -1484,6 +1523,14 @@
     }
     addMesh(new THREE.SphereGeometry(0.25, 8, 8), lm(0xcc66ff, 0xaa44cc, 2.0), 8.0, 6.3, 5.0);
     addPL(0xaa44cc, 1.8, 7, 8.0, 5.5, 5.0);
+
+    // ── 10. STORAGE CHEST (10, 0, -4) — tx:60, ty:46 ──
+    addMesh(new THREE.BoxGeometry(1.4, 0.75, 0.9), lm(0x5a3a10), 10.0, 0.375, -4.0);
+    addMesh(new THREE.BoxGeometry(1.4, 0.28, 0.9), lm(0x7a5520), 10.0, 0.89,  -4.0);
+    addMesh(new THREE.BoxGeometry(0.22, 0.22, 0.13), lm(0xcc9900, 0xaa7700, 0.6), 10.0, 0.7, -3.56);
+    addMesh(new THREE.BoxGeometry(0.1, 0.36, 0.08), lm(0x8b6014), 9.2, 0.18, -3.6);
+    addMesh(new THREE.BoxGeometry(0.1, 0.36, 0.08), lm(0x8b6014), 10.8, 0.18, -3.6);
+    addPL(0xcc8800, 0.7, 4, 10.0, 1.2, -4.0);
   }
 
   // Portal meshes removed — border-walk system replaces them
@@ -1649,11 +1696,14 @@
   window.addEventListener('keydown', e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = true; e.preventDefault(); } });
   window.addEventListener('keyup',   e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = false; e.preventDefault(); } });
   window.addEventListener('keydown', e => {
-    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); } }
+    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); if (nearBuilding && nearBuilding.key === 'forge') openForgeUI(); if (nearBuilding && nearBuilding.key === 'storage_chest') openStoragePanel(); } }
     else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
     else if (e.code === 'Escape') {
       document.getElementById('backpack-overlay').classList.remove('open');
       document.getElementById('dev-overlay').classList.remove('open');
+      document.getElementById('storage-panel').classList.remove('open');
+      document.getElementById('forge-panel').classList.remove('open');
+      storageOpen = false;
       syncPanelState();
     }
   });
@@ -2047,7 +2097,9 @@
   // ── PANEL OPEN/CLOSE STATE ──
   function syncPanelState() {
     const open = document.getElementById('backpack-overlay').classList.contains('open')
-              || document.getElementById('dev-overlay').classList.contains('open');
+              || document.getElementById('dev-overlay').classList.contains('open')
+              || document.getElementById('storage-panel').classList.contains('open')
+              || document.getElementById('forge-panel').classList.contains('open');
     anyPanelOpen = open;
     player.uiLocked = open;
   }
@@ -2085,11 +2137,14 @@
     else backpack.items.forEach((item, idx) => {
       const d = document.createElement('div');
       d.className = 'bp-item ' + (item.rarity || 'common');
-      const _stats = Object.entries(item.statBonus || {}).filter(([,v]) => v > 0).map(([k,v]) => k.slice(0,3).toUpperCase()+' +'+v).join(' · ');
+      const isConsumable = item.type === 'consumable';
+      const _stats = isConsumable ? '' : Object.entries(item.statBonus || {}).filter(([,v]) => v > 0).map(([k,v]) => k.slice(0,3).toUpperCase()+' +'+v).join(' · ');
       d.innerHTML = `<div class="bp-item-name">${item.name}</div><div class="bp-item-type">${item.type || item.slot}</div>`
-        + `<div style="font:9px monospace;color:#777;margin-top:2px">${_stats || '<i style="color:#444">No affixes</i>'}</div>`
-        + (playerNearMerchant ? `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>` : '');
-      d.onclick = () => equipFromBag(idx);
+        + (isConsumable ? '' : `<div style="font:9px monospace;color:#777;margin-top:2px">${_stats || '<i style="color:#444">No affixes</i>'}</div>`)
+        + (playerNearMerchant && !isConsumable ? `<button class="bp-sell" onclick="event.stopPropagation();sellFromBag(${idx})">SELL ${getSellValue(item)}g</button>` : '')
+        + (isConsumable ? `<button class="use-btn" onclick="event.stopPropagation();useTeleportScroll(${idx})">USE</button>` : '')
+        + (storageOpen && !isConsumable ? `<button class="stc-btn" onclick="event.stopPropagation();storeItem(${idx})">STORE</button>` : '');
+      d.onclick = () => { if (!isConsumable) equipFromBag(idx); };
       grid.appendChild(d);
     });
 
@@ -2153,6 +2208,107 @@
     player.hp = Math.min(player.maxHp, player.hp + f.healAmt);
     backpack.food.splice(idx, 1);
     saveGame(); renderBackpack();
+  }
+
+  // ── STORAGE CHEST ──────────────────────────────────────────────
+  function openStoragePanel() {
+    if (currentZoneId !== 'homestead') return;
+    storageOpen = true;
+    document.getElementById('storage-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderStorage();
+  }
+  function closeStoragePanel() {
+    storageOpen = false;
+    document.getElementById('storage-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function renderStorage() {
+    const g = document.getElementById('storage-grid'); g.innerHTML = '';
+    if (!homedStorage.length) { g.innerHTML = '<div class="bp-empty">Storage is empty</div>'; return; }
+    homedStorage.forEach((item, idx) => {
+      const d = document.createElement('div');
+      d.className = 'bp-item ' + (item.rarity || 'common');
+      const _st = Object.entries(item.statBonus || {}).filter(([,v]) => v > 0).map(([k,v]) => k.slice(0,3).toUpperCase()+' +'+v).join(' · ');
+      d.innerHTML = `<div class="bp-item-name">${item.name}</div><div class="bp-item-type">${item.type || item.slot}</div>`
+        + `<div style="font:9px monospace;color:#777;margin-top:2px">${_st || '<i style="color:#444">No affixes</i>'}</div>`
+        + `<button class="stc-btn" onclick="event.stopPropagation();withdrawItem(${idx})">WITHDRAW</button>`;
+      g.appendChild(d);
+    });
+  }
+  function storeItem(bagIdx) {
+    if (homedStorage.length >= 20) { showToast('Chest is full (20 slots)'); return; }
+    if (currentZoneId !== 'homestead') { showToast('Storage only accessible in Homestead'); return; }
+    const item = backpack.items[bagIdx]; if (!item) return;
+    backpack.items.splice(bagIdx, 1);
+    homedStorage.push(item);
+    saveGame(); renderBackpack(); renderStorage();
+  }
+  function withdrawItem(stIdx) {
+    if (backpack.items.length >= 20) { showToast('Bag is full'); return; }
+    const item = homedStorage[stIdx]; if (!item) return;
+    homedStorage.splice(stIdx, 1);
+    backpack.items.push(item);
+    saveGame(); renderStorage(); renderBackpack();
+  }
+
+  // ── FORGE ──────────────────────────────────────────────────────
+  function openForgeUI() {
+    document.getElementById('forge-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderForge();
+  }
+  function closeForgeUI() {
+    document.getElementById('forge-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function renderForge() {
+    const el = document.getElementById('forge-recipe-list');
+    const dustHave  = backpack.materials.runic_dust  || 0;
+    const shardHave = backpack.materials.void_shard  || 0;
+    const goldHave  = backpack.gold;
+    const canCraft  = dustHave >= 5 && shardHave >= 2 && goldHave >= 500;
+    el.innerHTML = `
+      <div class="forge-recipe">
+        <div class="bp-section-title" style="color:#44cc44;margin-top:0">Teleport Scroll</div>
+        <div style="font:11px monospace;color:#aaa;margin-bottom:10px">Escape to Homestead from any zone,<br>keeping only your most valuable item.</div>
+        <div class="bp-mat" style="color:${dustHave  >= 5 ? '#7d5' : '#c55'}">Runic Dust &nbsp; ${dustHave} / 5</div>
+        <div class="bp-mat" style="color:${shardHave >= 2 ? '#7d5' : '#c55'}">Void Shard &nbsp; ${shardHave} / 2</div>
+        <div class="bp-mat" style="color:${goldHave  >= 500 ? '#7d5' : '#c55'}">Gold &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${goldHave} / 500g</div>
+        <button class="bp-sell" onclick="craftTeleportScroll()" style="margin-top:12px;${canCraft ? '' : 'opacity:0.38;pointer-events:none'}">CRAFT SCROLL</button>
+      </div>`;
+  }
+  function craftTeleportScroll() {
+    if ((backpack.materials.runic_dust || 0) < 5) { showToast('Need 5 Runic Dust'); return; }
+    if ((backpack.materials.void_shard || 0) < 2) { showToast('Need 2 Void Shards'); return; }
+    if (backpack.gold < 500) { showToast('Need 500 gold'); return; }
+    backpack.materials.runic_dust -= 5;
+    backpack.materials.void_shard -= 2;
+    backpack.gold -= 500;
+    backpack.items.push({ name:'Teleport Scroll', type:'consumable', rarity:'uncommon', droppable:false, statBonus:{} });
+    saveGame(); renderForge(); showToast('Teleport Scroll crafted!');
+  }
+
+  // ── TELEPORT SCROLL USE ────────────────────────────────────────
+  function getKeepItem(inv) {
+    const RARITY_RANK = { legendary:4, epic:3, rare:2, uncommon:1, common:0 };
+    return inv.filter(i => i.type !== 'consumable')
+      .sort((a, b) => {
+        const rd = (RARITY_RANK[b.rarity] || 0) - (RARITY_RANK[a.rarity] || 0);
+        if (rd !== 0) return rd;
+        const tr = { weapon:3, armor:2 };
+        return (tr[b.type] || 0) - (tr[a.type] || 0);
+      })[0] || null;
+  }
+  function useTeleportScroll(idx) {
+    const scroll = backpack.items[idx]; if (!scroll || scroll.type !== 'consumable') return;
+    if (!confirm('Teleport home?\nYou will lose all bag items except your most valuable gear.')) return;
+    const keepItem = getKeepItem(backpack.items);
+    backpack.items = keepItem ? [keepItem] : [];
+    closeBag();
+    saveGame();
+    transitionToZone('homestead');
+    setTimeout(() => showToast('You escaped with your life.'), 600);
   }
 
   // ── HOME button — teleport to Homestead if not in combat ──
