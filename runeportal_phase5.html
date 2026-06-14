@@ -577,7 +577,9 @@
       hp: type.hp * m.hp, maxHp: type.hp * m.hp, damage: type.damage * m.dmg,
       speed: type.speed, attackSpeed: type.attackSpeed, xpReward: type.xp * m.xp,
       goldMult: m.gold, rarity, direction: Math.random() * Math.PI * 2,
-      dirTimer: 0, healTimer: 0, isBoss: false, phase: 1, flashTimer: 0
+      dirTimer: 0, healTimer: 0, isBoss: false, phase: 1, flashTimer: 0,
+      facing: Math.random() * Math.PI * 2,
+      idleTimer: Math.random() * 3, idleState: 'still', aggroed: false
     };
     if (!isRespawn) enemies.push(e);
     return e;
@@ -590,7 +592,8 @@
       name: b.name, behavior: null, color: null,
       hp: b.hp, maxHp: b.hp, damage: b.damage, speed: b.speed, attackSpeed: b.attackSpeed,
       xpReward: b.xp, goldMult: RARITY_MULT.epic.gold, rarity: 'epic',
-      direction: 0, dirTimer: 0, healTimer: 0, isBoss: true, phase: 1, flashTimer: 0
+      direction: 0, dirTimer: 0, healTimer: 0, isBoss: true, phase: 1, flashTimer: 0,
+      facing: 0, idleTimer: 0, idleState: 'walk', aggroed: true
     });
   }
 
@@ -1257,7 +1260,7 @@
         e.hpEl = document.createElement('div'); e.hpEl.className = 'ehp';
         e.hpEl.innerHTML = '<i></i>'; hpbarLayer.appendChild(e.hpEl); }
       e.mesh.position.set(toWorldX(e.x), 0, toWorldZ(e.y));
-      e.mesh.rotation.y = -e.direction;
+      e.mesh.rotation.y = -e.facing;
       const flash = e.flashTimer > 0;
       for (const m of e.mats) m.emissive.setHex(flash ? 0xffffff : m.userData.baseEmissive);
       liveEnemies.add(e);
@@ -1296,6 +1299,7 @@
     }
     // Player + equipped gear overlays
     playerMesh.position.set(toWorldX(player.x), 0, toWorldZ(player.y));
+    playerMesh.rotation.y = -playerFacing;
     playerMesh.visible = !player.isDead;
     for (const slot of ['helmet','chest','legs','boots','weapon']) {
       const item = player.equipped[slot];
@@ -1346,6 +1350,13 @@
     base.addEventListener('pointerup', end); base.addEventListener('pointercancel', end);
   })();
 
+  let playerFacing = 0;
+
+  function lerpAngle(cur, tgt, t) {
+    var diff = ((tgt - cur) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    return cur + diff * t;
+  }
+
   // ═══════════════════════════════════════════════════════════
   //  MAIN UPDATE  (verbatim phase4 logic — tile space)
   // ═══════════════════════════════════════════════════════════
@@ -1377,6 +1388,11 @@
     }
     player.x = Math.max(0, Math.min(player.x, GRID - 1));
     player.y = Math.max(0, Math.min(player.y, GRID - 1));
+    // Player facing direction
+    var _pdx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    var _pdy = (keys.down  ? 1 : 0) - (keys.up   ? 1 : 0);
+    if (_pdx !== 0 || _pdy !== 0) playerFacing = lerpAngle(playerFacing, Math.atan2(_pdy, _pdx), Math.min(1, 10 * 0.016));
+    else if (joy.active) playerFacing = lerpAngle(playerFacing, Math.atan2(joy.z, joy.x), Math.min(1, 10 * 0.016));
 
     // Portal check
     for (const portal of getPortals()) {
@@ -1404,15 +1420,46 @@
       if (e.isBoss && e.phase === 1 && e.hp < e.maxHp * 0.5) {
         e.phase = 2; e.damage *= 1.5; e.speed *= 1.4; addScreenShake(12);
       }
-      e.dirTimer += dt;
-      const dirChange = e.isBoss ? (e.phase === 2 ? 0.8 : 1.5) : (2 + Math.random());
-      if (e.dirTimer > dirChange) {
-        if (e.isBoss && e.phase === 2) e.direction = Math.atan2(player.y - e.y, player.x - e.x);
-        else e.direction = Math.random() * Math.PI * 2;
-        e.dirTimer = 0;
+      // Aggro + movement state machine
+      const aggroDist = Math.hypot(player.x - e.x, player.y - e.y);
+      if (e.isBoss) {
+        // Boss: phase 2 tracks player constantly; phase 1 re-aims on timer
+        e.dirTimer += dt;
+        if (e.phase === 2 || e.dirTimer > 1.5) {
+          e.direction = Math.atan2(player.y - e.y, player.x - e.x);
+          e.dirTimer = 0;
+        }
+        e.x += Math.cos(e.direction) * e.speed * dt;
+        e.y += Math.sin(e.direction) * e.speed * dt;
+      } else {
+        if (aggroDist < 5) e.aggroed = true;
+        if (aggroDist > 7) e.aggroed = false;
+        if (e.aggroed) {
+          // Aggro: face and charge player
+          e.direction = Math.atan2(player.y - e.y, player.x - e.x);
+          e.x += Math.cos(e.direction) * e.speed * dt;
+          e.y += Math.sin(e.direction) * e.speed * dt;
+        } else {
+          // Idle state machine
+          e.idleTimer -= dt;
+          if (e.idleTimer <= 0) {
+            if (e.idleState === 'still') {
+              e.idleState = 'walk';
+              e.direction = Math.random() * Math.PI * 2;
+              e.idleTimer = 1 + Math.random() * 2;
+            } else {
+              e.idleState = 'still';
+              e.idleTimer = 1 + Math.random() * 9;
+            }
+          }
+          if (e.idleState === 'walk') {
+            e.x += Math.cos(e.direction) * e.speed * 0.3 * dt;
+            e.y += Math.sin(e.direction) * e.speed * 0.3 * dt;
+          }
+        }
       }
-      e.x += Math.cos(e.direction) * e.speed * dt;
-      e.y += Math.sin(e.direction) * e.speed * dt;
+      // Smooth facing lerp (8 rad/s turn rate)
+      e.facing = lerpAngle(e.facing, e.direction, Math.min(1, dt * 8));
       e.x = Math.max(0, Math.min(e.x, GRID - 1));
       e.y = Math.max(0, Math.min(e.y, GRID - 1));
 
