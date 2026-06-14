@@ -166,14 +166,15 @@
   .ft-btn:hover { background:#1a1a3a; }
 
   /* Backpack + Dev full-screen overlays */
-  #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel, #merchant-panel {
+  #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel, #merchant-panel,
+  #shrine-panel, #guild-panel {
     display:none; position:fixed; inset:0; z-index:100;
     background:rgba(26,26,46,0.97); color:#ccc; font-family:'Courier New',monospace;
     flex-direction:column; padding:14px; overflow-y:auto;
   }
   #backpack-overlay.open, #dev-overlay.open,
   #storage-panel.open, #forge-panel.open,
-  #merchant-panel.open { display:flex; }
+  #merchant-panel.open, #shrine-panel.open, #guild-panel.open { display:flex; }
   .stc-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
     background:#1a2a1a; color:#44cc44; border:1px solid #44cc44; border-radius:3px; cursor:pointer; }
   .use-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
@@ -188,6 +189,18 @@
   .forge-entry{padding:7px 4px;border-bottom:1px solid #1e1e30;cursor:pointer;font:11px monospace;color:#888;border-radius:3px;}
   .forge-entry:hover{color:#ccc;background:rgba(255,255,255,0.03);}
   .forge-entry.active{color:#e8c97a;background:rgba(232,201,122,0.07);}
+  .shrine-card{background:#15152a;border:1px solid #3a2050;border-radius:6px;padding:10px;text-align:center;}
+  .shrine-card-name{color:#cc88ff;font:12px monospace;font-weight:bold;margin-bottom:4px;}
+  .shrine-card-effect{color:#999;font:10px monospace;margin-bottom:5px;line-height:1.4;min-height:26px;}
+  .shrine-card-dur{color:#555;font:9px monospace;margin-bottom:4px;}
+  .shrine-card-cost{font:11px monospace;margin-bottom:7px;}
+  .shrine-invoke{min-height:32px;width:100%;font:9px monospace;border-radius:3px;border:1px solid #cc88ff;background:#1a0a2a;color:#cc88ff;cursor:pointer;}
+  .guild-train-card{background:#15152a;border:1px solid #333;border-radius:6px;padding:14px;text-align:center;}
+  .guild-stat-name{font:14px monospace;font-weight:bold;margin-bottom:4px;}
+  .guild-stat-desc{color:#666;font:9px monospace;margin-bottom:8px;min-height:20px;}
+  .guild-stat-val{color:#ccc;font:22px monospace;margin-bottom:4px;}
+  .guild-cost{color:#aa88ff;font:10px monospace;margin-bottom:10px;}
+  .guild-train-btn{min-height:36px;width:100%;font:10px monospace;border-radius:3px;border:1px solid #aa88ff;background:#0a0a1a;color:#aa88ff;cursor:pointer;}
   .bp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .bp-gold { color:#e8c97a; font-size:15px; letter-spacing:1px; }
   .bp-close { background:#333; color:#e8c97a; border:1px solid #e8c97a; border-radius:4px;
@@ -249,7 +262,7 @@
     <div style="color:#888;font:12px monospace;margin-bottom:8px;letter-spacing:1px">DISCOVERED WAYPOINTS</div>
     <div id="ft-list"></div>
   </div>
-  <div id="hud-hpbar"><div id="hud-hp-text">HP: 100 / 100</div><div id="hud-hp-track"><div id="hud-hp-fill"></div></div><div id="hud-level"><span id="hud-lvl-text">LVL 1</span><div id="hud-xp-track"><div id="hud-xp-fill"></div></div></div></div>
+  <div id="hud-hpbar"><div id="hud-hp-text">HP: 100 / 100</div><div id="hud-hp-track"><div id="hud-hp-fill"></div></div><div id="hud-level"><span id="hud-lvl-text">LVL 1</span><div id="hud-xp-track"><div id="hud-xp-fill"></div></div></div><div id="hud-buffs" style="margin-top:4px;min-height:14px"></div><div id="hud-train-text" style="display:none;font:9px monospace;color:#aa88ff;margin-top:2px;letter-spacing:1px"></div></div>
   <div id="enemy-hpbars"></div>
   <div id="hit-splats"></div>
   <div id="zone-banner"></div>
@@ -298,6 +311,31 @@
       <div id="forge-list" style="width:34%;overflow-y:auto;padding-right:8px;border-right:1px solid #333"></div>
       <div id="forge-detail" style="flex:1;overflow-y:auto;padding-left:2px"></div>
     </div>
+  </div>
+  <div id="shrine-panel">
+    <div class="bp-header">
+      <div>
+        <span style="color:#cc88ff;font:13px monospace;letter-spacing:2px">SHRINE</span>
+        <span style="color:#888;font:11px monospace;margin-left:10px">Seek the Old Powers</span>
+      </div>
+      <button class="bp-close" onclick="closeShrineUI()">&#10005;</button>
+    </div>
+    <div id="shrine-buff-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px"></div>
+    <div class="bp-section-title">Active Blessings</div>
+    <div id="shrine-active-list"></div>
+  </div>
+  <div id="guild-panel">
+    <div class="bp-header">
+      <div>
+        <span id="guild-title" style="font:13px monospace;letter-spacing:2px">GUILD</span>
+        <span id="guild-subtitle" style="color:#888;font:11px monospace;margin-left:10px"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="guild-xp-display" style="color:#aa88ff;font:12px monospace"></span>
+        <button class="bp-close" onclick="closeGuildUI()">&#10005;</button>
+      </div>
+    </div>
+    <div id="guild-train-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px"></div>
   </div>
   <div id="backpack-overlay">
     <div class="bp-header">
@@ -671,6 +709,23 @@
       ingredients:[{name:'Runic Dust',qty:8},{name:'Void Shard',qty:1},{name:'Gold',qty:350}] },
   ];
 
+  const SHRINE_BUFFS = [
+    { id:'blood_pact',    name:'Blood Pact',    effect:'+25% damage (all types)',        duration:5*60*1000,  cost:{gold:300}, statMod:{damageMult:1.25} },
+    { id:'stone_skin',    name:'Stone Skin',    effect:'-30% damage taken',             duration:5*60*1000,  cost:{gold:250}, statMod:{damageReduction:0.30} },
+    { id:'swift_step',    name:'Swift Step',    effect:'+40% movement speed',           duration:3*60*1000,  cost:{gold:200}, statMod:{speedMult:1.40} },
+    { id:'hunters_eye',   name:"Hunter's Eye", effect:'+20% crit chance',             duration:4*60*1000,  cost:{gold:280}, statMod:{critBonus:0.20} },
+    { id:'runic_surge',   name:'Runic Surge',   effect:'+35% magic damage, +2 INT',    duration:4*60*1000,  cost:{item:'Runic Dust',qty:3}, statMod:{magicMult:1.35,int:2} },
+    { id:'vitality_rite', name:'Vitality Rite', effect:'+50 max HP for duration',      duration:8*60*1000,  cost:{gold:180}, statMod:{bonusMaxHp:50} },
+  ];
+
+  const GUILD_DEFS = {
+    str_guild:{ title:"Fighters' Guild", subtitle:'Train your body', color:'#cc4444', stats:['strength','vigor'] },
+    rng_guild:{ title:"Rangers' Guild",  subtitle:'Train your aim',  color:'#44aacc', stats:['dexterity','vigor'] },
+    mge_guild:{ title:"Mages' Guild",    subtitle:'Train your mind', color:'#aa44cc', stats:['intelligence','vigor'] },
+  };
+  const STAT_LABEL = { strength:'STR', dexterity:'DEX', vigor:'VIG', intelligence:'INT' };
+  const STAT_DESC  = { strength:'Melee damage', dexterity:'Attack speed & ranged', vigor:'+10 max HP per rank', intelligence:'Magic damage' };
+
   // ═══════════════════════════════════════════════════════════
   //  GAME STATE  (player schema verbatim — ⚠️ no changes; loads phase4 saves)
   // ═══════════════════════════════════════════════════════════
@@ -693,7 +748,9 @@
     equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
     equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null },
     untradableArmor: { equipped: false, broken: false },
-    totalXP: 0
+    totalXP: 0,
+    trainingXP: 0,
+    activeBuffs: []
   };
   const backpack = {
     items: [], food: [],
@@ -812,7 +869,7 @@
   //  STAT HELPERS  (verbatim)
   // ═══════════════════════════════════════════════════════════
   function getStat(stat) {
-    return player.baseStats[stat] + player.equippedBonuses[stat] + getHomesteadBonus(stat);
+    return player.baseStats[stat] + player.equippedBonuses[stat] + getHomesteadBonus(stat) + getBuffBonus(stat);
   }
   function getHomesteadBonus(stat) {
     let bonus = 0;
@@ -821,6 +878,39 @@
     return bonus;
   }
   function getGoldBonus() { return 1 + homestead.merchant.level * 0.15; }
+
+  // ── BUFF HELPERS ─────────────────────────────────────────────
+  function getBuffBonus(stat) {
+    const abbr = {dexterity:'dex',strength:'str',vigor:'vig',intelligence:'int'};
+    let total = 0;
+    for (const b of player.activeBuffs) {
+      if (!b.statMod) continue;
+      if (b.statMod[stat]        !== undefined) total += b.statMod[stat];
+      if (b.statMod[abbr[stat]]  !== undefined) total += b.statMod[abbr[stat]];
+    }
+    return total;
+  }
+  function getBuffMult(key) {
+    let extra = 0;
+    for (const b of player.activeBuffs) if (b.statMod && b.statMod[key] !== undefined) extra += b.statMod[key] - 1.0;
+    return 1.0 + extra;
+  }
+  function getBuffAdd(key) {
+    let total = 0;
+    for (const b of player.activeBuffs) if (b.statMod && b.statMod[key] !== undefined) total += b.statMod[key];
+    return total;
+  }
+  function recalcPlayerStats() { recalcEquippedBonuses(); recalcMaxHp(); }
+  function applyBuff(buffDef) {
+    player.activeBuffs = player.activeBuffs.filter(b => b.id !== buffDef.id);
+    player.activeBuffs.push({ id:buffDef.id, name:buffDef.name, statMod:buffDef.statMod, expiresAt:Date.now() + buffDef.duration });
+    recalcPlayerStats();
+  }
+  function tickBuffs() {
+    const before = player.activeBuffs.length;
+    player.activeBuffs = player.activeBuffs.filter(b => b.expiresAt > Date.now());
+    if (player.activeBuffs.length < before) recalcPlayerStats();
+  }
 
   function getWeaponStyle() {
     const w = player.equipped.weapon;
@@ -845,7 +935,7 @@
     let vig = getStat('vigor');
     if (!Number.isFinite(vig)) vig = 10;
     const base = 50 + vig * 10;
-    player.maxHp = player.deathSickness > 0 ? Math.floor(base * 0.5) : base;
+    player.maxHp = (player.deathSickness > 0 ? Math.floor(base * 0.5) : base) + getBuffAdd('bonusMaxHp');
     if (!Number.isFinite(player.hp)) player.hp = player.maxHp;
     if (player.hp > player.maxHp) player.hp = player.maxHp;
   }
@@ -1218,6 +1308,7 @@
         shrineBuff: shrineBuff, currentZone: currentZoneId,
         discoveredWaypoints: discoveredWaypoints,
         totalXP: player.totalXP,
+        trainingXP: player.trainingXP,
         homedStorage: homedStorage,
       }));
     } catch(e) { storageAvailable = false; }
@@ -1254,7 +1345,8 @@
       if (d.shrineBuff) Object.assign(shrineBuff, d.shrineBuff);
       if (d.currentZone && ZONES[d.currentZone]) { currentZoneId = d.currentZone; player.currentZone = d.currentZone; }
       if (Array.isArray(d.discoveredWaypoints)) discoveredWaypoints = d.discoveredWaypoints;
-      if (Number.isFinite(d.totalXP)) player.totalXP = d.totalXP;
+      if (Number.isFinite(d.totalXP))    player.totalXP    = d.totalXP;
+      if (Number.isFinite(d.trainingXP)) player.trainingXP = d.trainingXP;
       if (Array.isArray(d.homedStorage)) homedStorage = d.homedStorage;
       if (d.materials && d.materials.runic_dust !== undefined) backpack.materials.runic_dust = d.materials.runic_dust;
     } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
@@ -1768,7 +1860,11 @@
   window.addEventListener('keydown', e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = true; e.preventDefault(); } });
   window.addEventListener('keyup',   e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = false; e.preventDefault(); } });
   window.addEventListener('keydown', e => {
-    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); if (nearBuilding && nearBuilding.key === 'forge') openForgeUI(); if (nearBuilding && nearBuilding.key === 'storage_chest') openStoragePanel(); if (nearBuilding && nearBuilding.key === 'merchant') openMerchantUI(); } }
+    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); if (nearBuilding && nearBuilding.key === 'forge') openForgeUI(); if (nearBuilding && nearBuilding.key === 'storage_chest') openStoragePanel(); if (nearBuilding && nearBuilding.key === 'merchant') openMerchantUI();
+      if (nearBuilding && nearBuilding.key === 'shrine')    openShrineUI();
+      if (nearBuilding && nearBuilding.key === 'str_guild') openGuildUI('str_guild');
+      if (nearBuilding && nearBuilding.key === 'rng_guild') openGuildUI('rng_guild');
+      if (nearBuilding && nearBuilding.key === 'mge_guild') openGuildUI('mge_guild'); } }
     else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
     else if (e.code === 'Escape') {
       document.getElementById('backpack-overlay').classList.remove('open');
@@ -1776,6 +1872,8 @@
       document.getElementById('storage-panel').classList.remove('open');
       document.getElementById('forge-panel').classList.remove('open');
       document.getElementById('merchant-panel').classList.remove('open');
+      document.getElementById('shrine-panel').classList.remove('open');
+      document.getElementById('guild-panel').classList.remove('open');
       storageOpen = false;
       syncPanelState();
     }
@@ -1826,15 +1924,16 @@
 
     // Movement — keyboard 0.08/frame, joystick speed*dt (phase4 verbatim feel)
     if (!player.uiLocked) {
-      const spd = 0.25;
+      const _smult = getBuffMult('speedMult');
+      const spd = 0.25 * _smult;
       if (keys.up)    player.y -= spd;
       if (keys.down)  player.y += spd;
       if (keys.left)  player.x -= spd;
       if (keys.right) player.x += spd;
       if (joy.active) {
         const angle = Math.atan2(joy.z, joy.x);
-        player.x += Math.cos(angle) * player.speed * dt;
-        player.y += Math.sin(angle) * player.speed * dt;
+        player.x += Math.cos(angle) * player.speed * _smult * dt;
+        player.y += Math.sin(angle) * player.speed * _smult * dt;
       }
     }
     player.x = Math.max(0, Math.min(player.x, GRID - 1));
@@ -1919,9 +2018,12 @@
       if (dist < combatRange) {
         if (tick % atkInterval === 0) {
           const _sd = getStat('dexterity'), _ss = getStat('strength'), _si = getStat('intelligence');
-          const dmg = weaponStyle === 'magic'  ? Math.max(1, 1 + Math.floor(_si * 1.0))
-                    : weaponStyle === 'ranged' ? Math.max(1, 1 + Math.floor(_sd * 0.8))
-                    :                            Math.max(1, 1 + Math.floor(_sd * 0.8) + Math.floor(_ss * 0.4));
+          let dmg = weaponStyle === 'magic'
+            ? Math.max(1, Math.round((1 + Math.floor(_si * 1.0)) * getBuffMult('magicMult') * getBuffMult('damageMult')))
+            : weaponStyle === 'ranged'
+            ? Math.max(1, Math.round((1 + Math.floor(_sd * 0.8)) * getBuffMult('damageMult')))
+            : Math.max(1, Math.round((1 + Math.floor(_sd * 0.8) + Math.floor(_ss * 0.4)) * getBuffMult('damageMult')));
+          if (getBuffAdd('critBonus') > 0 && Math.random() < getBuffAdd('critBonus')) { dmg = dmg * 2; showHitSplat(toWorldX(e.x), toWorldZ(e.y) - 0.3, 'CRIT!', '#ffdd00'); }
           e.hp -= dmg; e.flashTimer = 0.12;
           showHitSplat(toWorldX(e.x), toWorldZ(e.y), String(dmg), '#ff5533');
           spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
@@ -1936,6 +2038,7 @@
             player.skills.xp.vigor += xpGain * 0.5;
             const _prevLvl = levelFromXP(player.totalXP);
             player.totalXP += xpGain;
+            player.trainingXP += Math.floor(xpGain * 0.6);
             if (levelFromXP(player.totalXP) > _prevLvl) showToast('Level Up! Now level ' + levelFromXP(player.totalXP) + '!');
             showHitSplat(toWorldX(e.x), toWorldZ(e.y) - 0.5, '+' + xpGain + ' XP', '#44dddd');
             dropLootFromEnemy(e);
@@ -1956,7 +2059,8 @@
         const eAtkInterval = Math.max(20, Math.floor((1 / e.attackSpeed) * 60));
         if (tick % eAtkInterval === 0) {
           if (devInvincible) continue;
-          player.hp -= e.damage;
+          const _dr = getBuffAdd('damageReduction');
+          player.hp -= _dr > 0 ? Math.max(1, Math.round(e.damage * (1 - _dr))) : e.damage;
           addScreenShake(e.isBoss ? 10 : 4);
           if (player.hp <= 0) { player.hp = 0; triggerDeath(); return; }
         }
@@ -2045,6 +2149,22 @@
     const _xpNext = Math.max(1, xpForLevel(_plvl + 1) - xpForLevel(_plvl));
     document.getElementById('hud-lvl-text').textContent = 'LVL ' + _plvl;
     document.getElementById('hud-xp-fill').style.width = Math.min(100, (_xpThis / _xpNext) * 100) + '%';
+    const _tbuf = document.getElementById('hud-buffs');
+    if (_tbuf) {
+      if (player.activeBuffs.length) {
+        const _now = Date.now();
+        _tbuf.innerHTML = player.activeBuffs.map(b => {
+          const rem = Math.max(0, Math.ceil((b.expiresAt - _now) / 1000));
+          const m = Math.floor(rem / 60), s = rem % 60;
+          return '<span style="background:' + buffColor(b.id) + ';color:#000;padding:0 4px;border-radius:2px;margin-right:3px;font:8px monospace;display:inline-block">' + b.name.split(' ')[0] + ' ' + m + ':' + s.toString().padStart(2,'0') + '</span>';
+        }).join('');
+      } else { _tbuf.innerHTML = ''; }
+    }
+    const _ttrain = document.getElementById('hud-train-text');
+    if (_ttrain) {
+      if (player.trainingXP > 0) { _ttrain.textContent = 'Train: ' + player.trainingXP + ' xp'; _ttrain.style.display = 'block'; }
+      else _ttrain.style.display = 'none';
+    }
     updateStatsPanel();
     updateExploredTiles();
     drawMinimap();
@@ -2176,7 +2296,9 @@
               || document.getElementById('dev-overlay').classList.contains('open')
               || document.getElementById('storage-panel').classList.contains('open')
               || document.getElementById('forge-panel').classList.contains('open')
-              || document.getElementById('merchant-panel').classList.contains('open');
+              || document.getElementById('merchant-panel').classList.contains('open')
+              || document.getElementById('shrine-panel').classList.contains('open')
+              || document.getElementById('guild-panel').classList.contains('open');
     anyPanelOpen = open;
     player.uiLocked = open;
   }
@@ -2285,6 +2407,125 @@
     player.hp = Math.min(player.maxHp, player.hp + f.healAmt);
     backpack.food.splice(idx, 1);
     saveGame(); renderBackpack();
+  }
+
+  // ── SHRINE ─────────────────────────────────────────────────────
+  function buffColor(id) {
+    const C = { blood_pact:'#cc4444',stone_skin:'#4488cc',swift_step:'#44cc88',
+                hunters_eye:'#cccc44',runic_surge:'#aa44cc',vitality_rite:'#44ccaa' };
+    return C[id] || '#888888';
+  }
+  function openShrineUI() {
+    document.getElementById('shrine-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderShrine();
+  }
+  function closeShrineUI() {
+    document.getElementById('shrine-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function renderShrine() {
+    const grid = document.getElementById('shrine-buff-grid'); grid.innerHTML = '';
+    const now = Date.now();
+    SHRINE_BUFFS.forEach((buff, idx) => {
+      const active = player.activeBuffs.find(b => b.id === buff.id);
+      const card = document.createElement('div'); card.className = 'shrine-card';
+      let canAfford = true, costHtml = '';
+      if (buff.cost.gold !== undefined) {
+        canAfford = backpack.gold >= buff.cost.gold;
+        costHtml = '<span style="color:' + (canAfford ? '#e8c97a' : '#c55') + '">' + buff.cost.gold + 'g</span>';
+      } else if (buff.cost.item) {
+        const mk = MAT_KEY[buff.cost.item];
+        const have = mk ? (backpack.materials[mk] || 0) : 0;
+        canAfford = have >= buff.cost.qty;
+        costHtml = '<span style="color:' + (canAfford ? '#7ddd55' : '#c55') + '">' + buff.cost.item + ' \u00d7' + buff.cost.qty + ' (have ' + have + ')</span>';
+      }
+      const durMin = Math.round(buff.duration / 60000);
+      const activeRem = active ? Math.max(0, Math.ceil((active.expiresAt - now) / 1000)) : 0;
+      const am = Math.floor(activeRem / 60), as2 = activeRem % 60;
+      card.innerHTML = '<div class="shrine-card-name">' + buff.name + '</div>'
+        + '<div class="shrine-card-effect">' + buff.effect + '</div>'
+        + '<div class="shrine-card-dur">Duration: ' + durMin + ' min</div>'
+        + '<div class="shrine-card-cost">Cost: ' + costHtml + '</div>'
+        + (active
+          ? '<div style="color:' + buffColor(buff.id) + ';font:10px monospace">ACTIVE \u2014 ' + am + 'm ' + as2.toString().padStart(2,'0') + 's</div>'
+          : '<button class="shrine-invoke" onclick="invokeShrineBuff(' + idx + ')" ' + (canAfford ? '' : 'style="opacity:0.38;pointer-events:none"') + '>INVOKE</button>');
+      grid.appendChild(card);
+    });
+    const activeEl = document.getElementById('shrine-active-list'); activeEl.innerHTML = '';
+    if (!player.activeBuffs.length) {
+      activeEl.innerHTML = '<div class="bp-empty">No blessings active</div>';
+    } else {
+      player.activeBuffs.forEach(b => {
+        const rem = Math.max(0, Math.ceil((b.expiresAt - Date.now()) / 1000));
+        const m = Math.floor(rem / 60), s = rem % 60;
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:5px 0;border-bottom:1px solid #1e1e30;font:11px monospace';
+        row.innerHTML = '<span style="color:' + buffColor(b.id) + '">' + b.name + '</span>'
+          + '<span style="color:#555"> \u2014 ' + m + 'm ' + s.toString().padStart(2,'0') + 's remaining</span>';
+        activeEl.appendChild(row);
+      });
+    }
+  }
+  function invokeShrineBuff(idx) {
+    const buff = SHRINE_BUFFS[idx]; if (!buff) return;
+    if (buff.cost.gold !== undefined) {
+      if (backpack.gold < buff.cost.gold) { showToast('Need ' + buff.cost.gold + 'g'); return; }
+      backpack.gold -= buff.cost.gold;
+    } else if (buff.cost.item) {
+      const mk = MAT_KEY[buff.cost.item];
+      if (!mk || (backpack.materials[mk] || 0) < buff.cost.qty) { showToast('Need ' + buff.cost.qty + ' ' + buff.cost.item); return; }
+      backpack.materials[mk] -= buff.cost.qty;
+    }
+    applyBuff(buff);
+    renderShrine();
+    showToast(buff.name + ' invoked!');
+  }
+
+  // ── GUILDS ─────────────────────────────────────────────────────
+  let currentGuildKey = '';
+  function xpCostToTrain(currentStatLevel) {
+    return Math.floor(500 * Math.pow(1.08, currentStatLevel));
+  }
+  function openGuildUI(key) {
+    currentGuildKey = key;
+    document.getElementById('guild-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderGuildPanel();
+  }
+  function closeGuildUI() {
+    document.getElementById('guild-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function renderGuildPanel() {
+    const def = GUILD_DEFS[currentGuildKey]; if (!def) return;
+    const titleEl = document.getElementById('guild-title');
+    titleEl.textContent = def.title; titleEl.style.color = def.color;
+    document.getElementById('guild-subtitle').textContent = def.subtitle;
+    document.getElementById('guild-xp-display').textContent = 'Train XP: ' + player.trainingXP.toLocaleString();
+    const grid = document.getElementById('guild-train-grid'); grid.innerHTML = '';
+    for (const stat of def.stats) {
+      const cur = player.baseStats[stat];
+      const cost = xpCostToTrain(cur);
+      const canTrain = player.trainingXP >= cost;
+      const card = document.createElement('div'); card.className = 'guild-train-card';
+      card.style.borderColor = def.color + '44';
+      card.innerHTML = '<div class="guild-stat-name" style="color:' + def.color + '">' + STAT_LABEL[stat] + '</div>'
+        + '<div class="guild-stat-desc">' + STAT_DESC[stat] + '</div>'
+        + '<div class="guild-stat-val">' + cur + '</div>'
+        + '<div class="guild-cost">' + cost.toLocaleString() + ' XP needed</div>'
+        + '<button class="guild-train-btn" style="border-color:' + def.color + ';color:' + def.color + ';' + (canTrain ? '' : 'opacity:0.38;pointer-events:none') + '" onclick="trainStat(\'' + stat + '\')">' + (canTrain ? 'TRAIN +1' : 'NEED ' + cost.toLocaleString() + ' XP') + '</button>';
+      grid.appendChild(card);
+    }
+  }
+  function trainStat(stat) {
+    const cost = xpCostToTrain(player.baseStats[stat]);
+    if (player.trainingXP < cost) { showToast('Not enough training XP'); return; }
+    player.trainingXP -= cost;
+    player.baseStats[stat]++;
+    recalcPlayerStats();
+    saveGame(); renderGuildPanel();
+    showToast(STAT_LABEL[stat] + ' increased to ' + player.baseStats[stat] + '!');
   }
 
   // ── MERCHANT ───────────────────────────────────────────────────
@@ -2589,6 +2830,7 @@
     const dt = Math.min((now - lastT) / 1000, 0.1);
     lastT = now;
     update(dt);
+    tickBuffs();
     updateCamera();
     syncRender();
     updateProjectiles(dt);
