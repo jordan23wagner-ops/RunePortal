@@ -675,6 +675,27 @@
     epic:   { hp:4, dmg:2,   xp:2,   gold:4 },
   };
 
+  const WEAPON_TYPES = {
+    sword:    { stat:'dex', speed:1.0,  dmgMult:1.0,  twoHand:false, anim:'melee' },
+    bow:      { stat:'dex', speed:0.8,  dmgMult:1.1,  twoHand:true,  anim:'ranged' },
+    staff:    { stat:'int', speed:0.7,  dmgMult:1.3,  twoHand:true,  anim:'magic' },
+    mace:     { stat:'str', speed:0.85, dmgMult:1.15, twoHand:false, anim:'melee' },
+    sword_2h: { stat:'str', speed:0.65, dmgMult:1.6,  twoHand:true,  anim:'melee' },
+    wand:     { stat:'int', speed:1.3,  dmgMult:0.75, twoHand:false, anim:'magic' },
+    crossbow: { stat:'dex', speed:0.6,  dmgMult:1.4,  twoHand:true,  anim:'ranged' },
+    dagger:   { stat:'dex', speed:1.5,  dmgMult:0.7,  twoHand:false, anim:'melee', bonus:'critChance+0.10' },
+  };
+  const OFFHAND_TYPES = {
+    shield:    { type:'offhand', stat:'vig', dmgReduction:0.12 },
+    quiver:    { type:'offhand', stat:'dex', rangedDmgBonus:0.10 },
+    mage_book: { type:'offhand', stat:'int', magicDmgBonus:0.12 },
+  };
+  const MAGE_BOOKS = [
+    { name:"Book of the Damned", type:'offhand', slot:'offhand', offhandType:'mage_book', rarity:'rare',      statBonus:{intelligence:6} },
+    { name:"Mage's Tome",        type:'offhand', slot:'offhand', offhandType:'mage_book', rarity:'uncommon',  statBonus:{intelligence:4} },
+    { name:'Void Codex',         type:'offhand', slot:'offhand', offhandType:'mage_book', rarity:'legendary', statBonus:{intelligence:10} },
+  ];
+
   const GEAR_DB = [
     { name:'Rusty Sword',    type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'melee',  statBonus:{dexterity:0,strength:2,vigor:0,intelligence:0} },
     { name:'Short Bow',      type:'weapon', slot:'weapon', rarity:'common', weaponStyle:'ranged', statBonus:{dexterity:2,strength:0,vigor:0,intelligence:0} },
@@ -697,6 +718,44 @@
     { name:'Mythril Chest',  type:'chest',  slot:'chest',  rarity:'epic',   statBonus:{dexterity:0,strength:4,vigor:12,intelligence:0} },
     { name:'Shadow Legs',    type:'legs',   slot:'legs',   rarity:'epic',   statBonus:{dexterity:4,strength:2,vigor:6,intelligence:0} },
     { name:'Void Boots',     type:'boots',  slot:'boots',  rarity:'epic',   statBonus:{dexterity:4,strength:0,vigor:4,intelligence:2} },
+    // Offhand — Shields
+    { name:'Wooden Shield',  type:'offhand', slot:'offhand', offhandType:'shield',    rarity:'common',   statBonus:{vigor:2} },
+    { name:'Iron Shield',    type:'offhand', slot:'offhand', offhandType:'shield',    rarity:'uncommon', statBonus:{vigor:4,strength:1} },
+    { name:'Void Shield',    type:'offhand', slot:'offhand', offhandType:'shield',    rarity:'rare',     statBonus:{vigor:7,strength:2} },
+    // Offhand — Quivers
+    { name:'Light Quiver',   type:'offhand', slot:'offhand', offhandType:'quiver',    rarity:'common',   statBonus:{dexterity:2} },
+    { name:'Hunter Quiver',  type:'offhand', slot:'offhand', offhandType:'quiver',    rarity:'uncommon', statBonus:{dexterity:4} },
+    // Offhand — Mage Books (named)
+    { name:"Mage's Tome",    type:'offhand', slot:'offhand', offhandType:'mage_book', rarity:'uncommon', statBonus:{intelligence:4} },
+    { name:'Book of the Damned', type:'offhand', slot:'offhand', offhandType:'mage_book', rarity:'rare', statBonus:{intelligence:6} },
+    // Hands
+    { name:'Cloth Wraps',    type:'hands',  slot:'hands',  rarity:'common',   statBonus:{dexterity:1,strength:0,vigor:1,intelligence:0} },
+    { name:'Iron Gauntlets', type:'hands',  slot:'hands',  rarity:'uncommon', statBonus:{dexterity:0,strength:2,vigor:2,intelligence:0} },
+    { name:'Plate Gauntlets',type:'hands',  slot:'hands',  rarity:'rare',     statBonus:{dexterity:0,strength:4,vigor:3,intelligence:0} },
+    { name:'Void Gauntlets', type:'hands',  slot:'hands',  rarity:'epic',     statBonus:{dexterity:2,strength:5,vigor:4,intelligence:0} },
+    // Capes / Back
+    { name:'Tattered Cape',  type:'back',   slot:'back',   rarity:'common',   statBonus:{vigor:1,dexterity:0,strength:0,intelligence:0} },
+    { name:"Ranger's Cloak", type:'back',   slot:'back',   rarity:'uncommon', statBonus:{dexterity:3,vigor:1,strength:0,intelligence:0} },
+    { name:'Arcane Mantle',  type:'back',   slot:'back',   rarity:'rare',     statBonus:{intelligence:4,vigor:2,dexterity:0,strength:0} },
+    { name:'Shadow Cape',    type:'back',   slot:'back',   rarity:'rare',     statBonus:{dexterity:4,vigor:1,strength:0,intelligence:0}, critChance:0.05 },
+    { name:'Void Shroud',    type:'back',   slot:'back',   rarity:'epic',     statBonus:{intelligence:6,dexterity:3,vigor:4,strength:0} },
+    // Amulets / Neck
+    { name:'Bone Amulet',    type:'neck',   slot:'neck',   rarity:'common',   statBonus:{vigor:2,dexterity:0,strength:0,intelligence:0} },
+    { name:'Iron Pendant',   type:'neck',   slot:'neck',   rarity:'uncommon', statBonus:{strength:3,vigor:1,dexterity:0,intelligence:0} },
+    { name:'Runic Amulet',   type:'neck',   slot:'neck',   rarity:'rare',     statBonus:{intelligence:5,vigor:2,dexterity:0,strength:0} },
+    { name:'Soul Locket',    type:'neck',   slot:'neck',   rarity:'epic',     statBonus:{strength:4,intelligence:4,vigor:6,dexterity:0} },
+    // Rings
+    { name:'Copper Ring',    type:'ring',   slot:'ring',   rarity:'common',   statBonus:{dexterity:1,strength:0,vigor:0,intelligence:0} },
+    { name:'Iron Band',      type:'ring',   slot:'ring',   rarity:'uncommon', statBonus:{strength:2,vigor:1,dexterity:0,intelligence:0} },
+    { name:'Sigil Ring',     type:'ring',   slot:'ring',   rarity:'rare',     statBonus:{intelligence:3,dexterity:0,strength:0,vigor:0}, critChance:0.04 },
+    { name:'Void Band',      type:'ring',   slot:'ring',   rarity:'epic',     statBonus:{strength:3,dexterity:3,intelligence:3,vigor:0} },
+    // New weapons with weaponType field
+    { name:'Iron Mace',      type:'weapon', slot:'weapon', weaponType:'mace',     weaponStyle:'melee',  rarity:'uncommon', twoHand:false, statBonus:{strength:5,dexterity:0,vigor:0,intelligence:0} },
+    { name:'Greatsword',     type:'weapon', slot:'weapon', weaponType:'sword_2h', weaponStyle:'melee',  rarity:'rare',     twoHand:true,  statBonus:{strength:10,dexterity:2,vigor:0,intelligence:0} },
+    { name:'Runed Wand',     type:'weapon', slot:'weapon', weaponType:'wand',     weaponStyle:'magic',  rarity:'uncommon', twoHand:false, statBonus:{intelligence:4,dexterity:0,strength:0,vigor:0} },
+    { name:'Void Wand',      type:'weapon', slot:'weapon', weaponType:'wand',     weaponStyle:'magic',  rarity:'rare',     twoHand:false, statBonus:{intelligence:7,dexterity:0,strength:0,vigor:0} },
+    { name:'Heavy Crossbow', type:'weapon', slot:'weapon', weaponType:'crossbow', weaponStyle:'ranged', rarity:'rare',     twoHand:true,  statBonus:{dexterity:8,strength:2,vigor:0,intelligence:0} },
+    { name:'Shadow Dagger',  type:'weapon', slot:'weapon', weaponType:'dagger',   weaponStyle:'melee',  rarity:'rare',     twoHand:false, statBonus:{dexterity:6,strength:2,vigor:0,intelligence:0} },
   ];
   const FOOD_DB = [
     { name:'Bread', healAmt:15, rarity:'common' },
@@ -1005,14 +1064,50 @@
   }
   function recalcEquippedBonuses() {
     player.equippedBonuses = { dexterity:0, strength:0, vigor:0, intelligence:0 };
+    // Reset combat meta derived fields
+    player.combatMeta.weaponSpeedMult = 1.0;
+    player.combatMeta.critChance      = 0.0;
+    player.combatMeta.dmgReduction    = 0.0;
+    player.combatMeta.rangedBonus     = 0.0;
+    player.combatMeta.magicBonus      = 0.0;
+    player.combatMeta.twoHandLock     = false;
+    const wpn = player.equipped.weapon;
+    if (wpn) {
+      const wt = WEAPON_TYPES[wpn.weaponType] || null;
+      if (wt) {
+        player.combatMeta.weaponSpeedMult = wt.speed;
+        if (wt.twoHand) player.combatMeta.twoHandLock = true;
+        if (wt.bonus === 'critChance+0.10') player.combatMeta.critChance += 0.10;
+      } else if (wpn.twoHand) {
+        player.combatMeta.twoHandLock = true;
+      }
+    }
+    const isLocked = player.combatMeta.twoHandLock;
     for (const slot in player.equipped) {
+      if (slot === 'offhand' && isLocked) continue; // skip offhand when 2H
       const item = player.equipped[slot];
-      if (item && item.statBonus) {
+      if (!item) continue;
+      // Sum statBonus into equippedBonuses
+      if (item.statBonus) {
         for (const stat in item.statBonus) {
           player.equippedBonuses[stat] = (player.equippedBonuses[stat] || 0) + item.statBonus[stat];
         }
       }
+      // Item-level critChance (capes, rings with bonus)
+      if (item.critChance) player.combatMeta.critChance += item.critChance;
+      // Offhand type bonuses
+      if (slot === 'offhand' && item.offhandType) {
+        const ot = OFFHAND_TYPES[item.offhandType];
+        if (ot) {
+          if (ot.dmgReduction)   player.combatMeta.dmgReduction += ot.dmgReduction;
+          if (ot.rangedDmgBonus) player.combatMeta.rangedBonus  += ot.rangedDmgBonus;
+          if (ot.magicDmgBonus)  player.combatMeta.magicBonus   += ot.magicDmgBonus;
+        }
+      }
     }
+    // Set bonuses
+    player.combatMeta.activeSets = typeof getActiveSetBonuses === 'function'
+      ? getActiveSetBonuses(Object.values(player.equipped).filter(Boolean)) : [];
   }
 
   // ═══════════════════════════════════════════════════════════
