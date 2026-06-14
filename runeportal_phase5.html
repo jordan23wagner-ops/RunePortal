@@ -237,6 +237,7 @@
   .bp-slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
   .bp-slot{background:#111;border:1px solid #2a2a2a;border-radius:6px;padding:12px 8px;text-align:center;min-height:96px;}
   .bp-slot.filled{border-color:#e8c97a55;}
+  .bp-slot.locked{border-color:#33333388;opacity:0.45;}
   .bp-slot-label{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
   .bp-slot-item{font-size:12px;color:#e8c97a;margin-bottom:8px;} .bp-slot-item.empty{color:#444;}
   .bp-uneq{min-height:32px;padding:5px 12px;font:10px monospace;color:#fff;background:#555;border:none;border-radius:3px;cursor:pointer;}
@@ -391,6 +392,7 @@
     <div id="bp-equip-view" style="display:none">
       <div id="bp-slots" class="bp-slots"></div>
       <div class="bp-bonus" id="bp-bonus"></div>
+      <div id="bp-setbonus" style="margin-top:4px"></div>
     </div>
   </div>
   <div id="dev-overlay">
@@ -660,6 +662,13 @@
     }
   };
 
+  const SLOT_LABEL = {
+    weapon:'Main Hand', offhand:'Off Hand', helmet:'Head',  chest:'Chest',
+    legs:'Legs',        boots:'Feet',       hands:'Hands',  back:'Back',
+    neck:'Neck',        ring1:'Ring 1',     ring2:'Ring 2',
+  };
+  const SLOT_ORDER = ['weapon','offhand','helmet','neck','chest','back','hands','legs','boots','ring1','ring2'];
+
   const RARITY_MULT = {
     common: { hp:1, dmg:1,   xp:1,   gold:1 },
     rare:   { hp:2, dmg:1.5, xp:1.5, gold:2 },
@@ -798,8 +807,9 @@
     },
     baseStats: { dexterity:10, strength:10, vigor:10, intelligence:10 },
     equippedBonuses: { dexterity:0, strength:0, vigor:0, intelligence:0 },
-    equipped: { weapon:null, helmet:null, chest:null, legs:null, boots:null },
+    equipped: { weapon:null, offhand:null, helmet:null, chest:null, legs:null, boots:null, hands:null, back:null, neck:null, ring1:null, ring2:null },
     untradableArmor: { equipped: false, broken: false },
+    combatMeta: { weaponSpeedMult:1.0, critChance:0.0, dmgReduction:0.0, rangedBonus:0.0, magicBonus:0.0, twoHandLock:false, activeSets:[] },
     totalXP: 0,
     trainingXP: 0,
     activeBuffs: []
@@ -2014,7 +2024,7 @@
     const weaponStyle = getWeaponStyle();
     const combatStat  = getCombatStat();
     const combatRange = getCombatRange();
-    const atkInterval = Math.max(20, Math.floor((1 / (combatStat / 10)) * 60));
+    const atkInterval = Math.max(14, Math.floor((1 / (combatStat / 10)) * 60 / (player.combatMeta.weaponSpeedMult || 1.0)));
 
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
@@ -2084,7 +2094,8 @@
             : weaponStyle === 'ranged'
             ? Math.max(1, Math.round((1 + Math.floor(_sd * 0.8)) * getBuffMult('damageMult')))
             : Math.max(1, Math.round((1 + Math.floor(_sd * 0.8) + Math.floor(_ss * 0.4)) * getBuffMult('damageMult')));
-          if (getBuffAdd('critBonus') > 0 && Math.random() < getBuffAdd('critBonus')) { dmg = dmg * 2; showHitSplat(toWorldX(e.x), toWorldZ(e.y) - 0.3, 'CRIT!', '#ffdd00'); }
+          const _crit = getBuffAdd('critBonus') + (player.combatMeta.critChance || 0);
+          if (_crit > 0 && Math.random() < _crit) { dmg = dmg * 2; showHitSplat(toWorldX(e.x), toWorldZ(e.y) - 0.3, 'CRIT!', '#ffdd00'); }
           e.hp -= dmg; e.flashTimer = 0.12;
           showHitSplat(toWorldX(e.x), toWorldZ(e.y), String(dmg), '#ff5533');
           spawnAttackVisual(weaponStyle, player.x, player.y, e.x, e.y);
@@ -2241,7 +2252,8 @@
   const RARITY_DOT = { common:'#888888', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
   const RARITY_TEXT = { common:'#cccccc', uncommon:'#44cc44', rare:'#4a90d9', epic:'#9b59b6', legendary:'#ff8f00' };
   const SELL_VALUE = { common:10, uncommon:35, rare:120, epic:300, legendary:500 };
-  const SELL_TYPE = { weapon:1.5, chest:1.2, helmet:1.2, legs:1.2, boots:1.2, armor:1.2 };
+  const SELL_TYPE = { weapon:1.5, chest:1.2, helmet:1.2, legs:1.2, boots:1.2, armor:1.2,
+    hands:1.1, back:1.1, neck:1.4, ring:1.4, offhand:1.2 };
   function getSellValue(item) {
     return Math.floor((SELL_VALUE[item.rarity] || 10) * (SELL_TYPE[item.type] || 1.0));
   }
@@ -2428,12 +2440,14 @@
 
     // Equipment slots
     const slotsEl = document.getElementById('bp-slots'); slotsEl.innerHTML = '';
-    for (const slot of ['weapon','helmet','chest','legs','boots']) {
+    for (const slot of SLOT_ORDER) {
       const it = player.equipped[slot];
-      const div = document.createElement('div'); div.className = 'bp-slot' + (it ? ' filled' : '');
+      const _twLk = slot === 'offhand' && player.combatMeta.twoHandLock;
+      const div = document.createElement('div'); div.className = 'bp-slot' + (it ? ' filled' : '') + (_twLk ? ' locked' : '');
       const _stats = it ? Object.entries(it.statBonus || {}).filter(([,v]) => v > 0).map(([k,v]) => k.slice(0,3).toUpperCase()+' +'+v).join(' · ') : '';
-      div.innerHTML = `<div class="bp-slot-label">${slot}</div>`
-        + (it ? `<div class="bp-slot-item" style="color:${rarText(it.rarity)}">${it.name}</div>`
+      div.innerHTML = `<div class="bp-slot-label">${SLOT_LABEL[slot] || slot}</div>`
+        + (_twLk && !it ? '<div class="bp-slot-item" style="color:#555">2H — locked</div>'
+        : it ? `<div class="bp-slot-item ${it.rarity || 'common'}">${it.name}</div>`
               + `<div style="font:9px monospace;margin:3px 0 5px;color:#777">${_stats || '<i style=\'color:#444\'>No affixes</i>'}</div>`
               + `<button class="bp-uneq" onclick="unequipSlot('${slot}')">UNEQUIP</button>`
               : `<div class="bp-slot-item empty">Empty</div>`);
@@ -2442,15 +2456,29 @@
     // Stat bonus summary
     const b = player.equippedBonuses;
     document.getElementById('bp-bonus').textContent = `DEX +${b.dexterity}   STR +${b.strength}   VIG +${b.vigor}   INT +${b.intelligence}`;
+    const setEl = document.getElementById('bp-setbonus');
+    const _activeSets = player.combatMeta.activeSets || [];
+    if (setEl) setEl.innerHTML = _activeSets.length
+      ? _activeSets.map(s => `<div style="color:#00ffcc;font:10px monospace;margin-top:3px">[SET] ${s.setName}: ${s.bonus}</div>`).join('')
+      : '';
   }
 
   // ── EQUIP / UNEQUIP / SELL / EAT (logic ported from phase4) ──
   function equipFromBag(idx) {
     const item = backpack.items[idx]; if (!item) return;
-    const slot = item.slot; if (!slot || !(slot in player.equipped)) return;
+    let slot = item.slot; if (!slot) return;
+    // Ring routing: fill ring1 first, then ring2
+    if (slot === 'ring') slot = !player.equipped.ring1 ? 'ring1' : 'ring2';
+    if (!(slot in player.equipped)) return;
+    // Block offhand if 2H weapon equipped
+    if (slot === 'offhand' && player.combatMeta.twoHandLock) { showToast('2H weapon — offhand locked'); return; }
+    // 2H weapon: kick out offhand to bag
+    if (slot === 'weapon' && item.twoHand) {
+      if (player.equipped.offhand) { backpack.items.push(player.equipped.offhand); player.equipped.offhand = null; }
+    }
     const cur = player.equipped[slot];
-    backpack.items.splice(idx, 1);          // task spec: remove from backpack
-    if (cur) backpack.items.push(cur);       // swap the previously-equipped back in
+    backpack.items.splice(idx, 1);
+    if (cur) backpack.items.push(cur);
     player.equipped[slot] = item;
     recalcEquippedBonuses(); recalcMaxHp(); saveGame(); renderBackpack();
   }
