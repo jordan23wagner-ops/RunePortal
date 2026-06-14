@@ -140,7 +140,7 @@
   #ui-minimap-label { color:#e8c97a; font:10px monospace; margin-bottom:3px; text-shadow:0 1px 2px #000; letter-spacing:1px; }
   #ui-minimap { background:#111; border:1px solid #e8c97a; display:block; }
 
-  #ui-buttons { position: fixed; right: 10px; top: 145px; z-index: 11; display:flex; flex-direction:column; gap:6px; }
+  #ui-buttons { position: fixed; right: 10px; top: 188px; z-index: 11; display:flex; flex-direction:column; gap:6px; }
   .ui-btn { width:60px; min-height:44px; font:11px monospace; letter-spacing:1px; color:#e8c97a;
     background:#1a1a1a; border:1px solid #e8c97a; border-radius:3px; cursor:pointer; }
   .ui-btn:active { background:#2a2a2a; }
@@ -216,7 +216,7 @@
     </div>
   </div>
   <div id="ui-stats"></div>
-  <div id="ui-minimap-wrap"><div id="ui-minimap-label"></div><canvas id="ui-minimap" width="120" height="120"></canvas></div>
+  <div id="ui-minimap-wrap"><div id="ui-minimap-label"></div><canvas id="ui-minimap" width="160" height="160"></canvas></div>
   <div id="ui-buttons">
     <button class="ui-btn" id="btn-bag" onclick="toggleBag()">BAG</button>
     <button class="ui-btn" id="btn-home" onclick="goHome()">HOME</button>
@@ -1064,6 +1064,8 @@
     if (arrivalPos) { player.x = arrivalPos.x; player.y = arrivalPos.y; }
     else if (zoneId === 'homestead') { player.x = 50; player.y = 53; }
     else { player.x = GRID/2; player.y = GRID/2; }
+    const _fogCells = Math.ceil(GRID / FOG_CELL);
+    exploredTiles = Array.from({length: _fogCells}, () => new Array(_fogCells).fill(false));
     setZoneVisuals(zoneId);
     spawnEnvObjects(zoneId);
     spawnZoneCampfire(zoneId);
@@ -1487,6 +1489,8 @@
   // Portal meshes removed — border-walk system replaces them
   let envGroup = null;
   let chests = [];         // { x, y, mesh, looted }
+  const FOG_CELL = 2;      // world tile units per fog cell (50x50 fog grid)
+  let exploredTiles = [];  // [cx][cz] boolean, reset on zone transition
   let nearChest = null;
   function clearEnvObjects() {
     if (envGroup) { scene.remove(envGroup); envGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); }); envGroup = null; }
@@ -1518,11 +1522,22 @@
         envGroup.add(mesh);
       }
     }
-    // Spawn 3 treasure chests per combat zone
+    // Spawn up to 2 treasure chests per combat zone (spread distribution)
     if (!ZONES[zoneId].isSafe) {
-      for (let i = 0; i < 3; i++) {
-        const tx = 5 + Math.random() * (GRID - 10);
-        const ty = 5 + Math.random() * (GRID - 10);
+      const _cfp = (ZONES[zoneId] && ZONES[zoneId].campfirePos) || { x: 50, y: 50 };
+      const _sp = { x: GRID / 2, y: GRID / 2 };
+      const _placed = [];
+      let _att = 0;
+      while (_placed.length < 2 && _att < 200) {
+        _att++;
+        const tx = 10 + Math.random() * (GRID - 20);
+        const ty = 10 + Math.random() * (GRID - 20);
+        const tooClose = _placed.some(p => Math.hypot(p.tx - tx, p.ty - ty) < 25)
+          || Math.hypot(_sp.x - tx, _sp.y - ty) < 20
+          || Math.hypot(_cfp.x - tx, _cfp.y - ty) < 15;
+        if (!tooClose) _placed.push({ tx, ty });
+      }
+      for (const { tx, ty } of _placed) {
         const cMat = new THREE.MeshLambertMaterial({ color: 0xaa8800, emissive: new THREE.Color(0x221100), emissiveIntensity: 0.4 });
         const cGeo = new THREE.BoxGeometry(0.7, 0.5, 0.5);
         const mesh = new THREE.Mesh(cGeo, cMat);
@@ -1908,6 +1923,7 @@
     document.getElementById('hud-lvl-text').textContent = 'LVL ' + _plvl;
     document.getElementById('hud-xp-fill').style.width = Math.min(100, (_xpThis / _xpNext) * 100) + '%';
     updateStatsPanel();
+    updateExploredTiles();
     drawMinimap();
     updateDangerBar(calcDangerLevel());
   }
@@ -1945,25 +1961,86 @@
   // ── MINIMAP (top-right) ──
   const mmCanvas = document.getElementById('ui-minimap');
   const mmCtx = mmCanvas.getContext('2d');
-  // allPortals() removed — border system has no fixed portal positions
+
+  function updateExploredTiles() {
+    if (!exploredTiles.length) return;
+    const CELLS = exploredTiles.length;
+    const cx = Math.floor(player.x / FOG_CELL);
+    const cz = Math.floor(player.y / FOG_CELL);
+    const R = 3; // radius in fog cells (~6 tile units)
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        if (dx * dx + dz * dz <= R * R) {
+          const nx = cx + dx, nz = cz + dz;
+          if (nx >= 0 && nx < CELLS && nz >= 0 && nz < CELLS)
+            exploredTiles[nx][nz] = true;
+        }
+      }
+    }
+  }
+
   function drawMinimap() {
-    const W = 120, H = 120, s = W / GRID;
+    const W = 160, H = 160;
+    const s = W / GRID;               // 1.6 px per tile unit
+    const CELLS = exploredTiles.length || 50;
+    const PX = W / CELLS;             // 3.2 px per fog cell
     mmCtx.clearRect(0, 0, W, H);
-    mmCtx.fillStyle = '#111'; mmCtx.fillRect(0, 0, W, H);
-    mmCtx.strokeStyle = '#e8c97a'; mmCtx.lineWidth = 1; mmCtx.strokeRect(0.5, 0.5, W - 1, H - 1);
-    // border exits shown as edge ticks on minimap
+
+    // ── Fog of war layer ──
+    for (let cx = 0; cx < CELLS; cx++) {
+      for (let cz = 0; cz < CELLS; cz++) {
+        mmCtx.fillStyle = (exploredTiles[cx] && exploredTiles[cx][cz]) ? '#1a1a1a' : '#000000';
+        mmCtx.fillRect(cx * PX, cz * PX, PX + 0.5, PX + 0.5);
+      }
+    }
+
     const zone = ZONES[currentZoneId];
+
+    // ── Chest dots (gold, unlooted only, only when explored) ──
+    for (const ch of chests) {
+      if (ch.looted) continue;
+      const fcx = Math.floor(ch.x / FOG_CELL), fcz = Math.floor(ch.y / FOG_CELL);
+      if (exploredTiles[fcx] && exploredTiles[fcx][fcz]) {
+        mmCtx.fillStyle = '#ddaa00';
+        mmCtx.fillRect(ch.x * s - 1.5, ch.y * s - 1.5, 3, 3);
+      }
+    }
+
+    // ── Campfire dot ──
+    if (zone && zone.campfirePos && !zone.isSafe) {
+      const cp = zone.campfirePos;
+      const found = discoveredWaypoints.some(w => w.id === currentZoneId);
+      const fcx = Math.floor(cp.x / FOG_CELL), fcz = Math.floor(cp.y / FOG_CELL);
+      if (exploredTiles[fcx] && exploredTiles[fcx][fcz]) {
+        mmCtx.fillStyle = found ? '#00cccc' : '#444444';
+        const r = found ? 2 : 1.5;
+        mmCtx.fillRect(cp.x * s - r, cp.y * s - r, r * 2, r * 2);
+      }
+    }
+
+    // ── Enemy dots (red, within 20 tile units of player) ──
+    for (const e of enemies) {
+      if (Math.hypot(e.x - player.x, e.y - player.y) > 20) continue;
+      mmCtx.fillStyle = '#cc2200';
+      mmCtx.fillRect(e.x * s - 1, e.y * s - 1, 2, 2);
+    }
+
+    // ── Player dot (white, 3x3) ──
+    mmCtx.fillStyle = '#ffffff';
+    mmCtx.fillRect(player.x * s - 1.5, player.y * s - 1.5, 3, 3);
+
+    // ── Border exit ticks (fixed edges, not player-relative) ──
     if (zone && zone.exits) {
       mmCtx.fillStyle = '#39d6ff';
-      if (zone.exits.north) mmCtx.fillRect(player.x * s - 2, 0, 4, 2);
-      if (zone.exits.south) mmCtx.fillRect(player.x * s - 2, H - 2, 4, 2);
-      if (zone.exits.west)  mmCtx.fillRect(0, player.y * s - 2, 2, 4);
-      if (zone.exits.east)  mmCtx.fillRect(W - 2, player.y * s - 2, 2, 4);
+      if (zone.exits.north) mmCtx.fillRect(W / 2 - 2, 0, 4, 3);
+      if (zone.exits.south) mmCtx.fillRect(W / 2 - 2, H - 3, 4, 3);
+      if (zone.exits.west)  mmCtx.fillRect(0, H / 2 - 2, 3, 4);
+      if (zone.exits.east)  mmCtx.fillRect(W - 3, H / 2 - 2, 3, 4);
     }
-    // enemies (rarity colored)
-    for (const e of enemies) { mmCtx.fillStyle = RARITY_DOT[e.rarity] || '#888888'; mmCtx.fillRect(e.x * s - 1, e.y * s - 1, 2, 2); }
-    // player (white)
-    mmCtx.fillStyle = '#ffffff'; mmCtx.fillRect(player.x * s - 2, player.y * s - 2, 4, 4);
+
+    // ── Border ──
+    mmCtx.strokeStyle = '#e8c97a'; mmCtx.lineWidth = 1;
+    mmCtx.strokeRect(0.5, 0.5, W - 1, H - 1);
     document.getElementById('ui-minimap-label').textContent = ZONES[currentZoneId].name;
   }
 
