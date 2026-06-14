@@ -216,7 +216,7 @@
     <button class="ui-btn" id="btn-home" onclick="goHome()">HOME</button>
     <button class="ui-btn" id="btn-dev" onclick="toggleDev()">DEV</button>
   </div>
-  <div id="portal-label" onclick="tryEnterPortal()"></div>
+  <div id="portal-label" onclick="confirmBorderCross()"></div>
   <div id="campfire-label" onclick="interactCampfire()"></div>
   <div id="toast-notify"></div>
   <div id="fast-travel-panel">
@@ -331,8 +331,11 @@
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+  const GRID = 100;
+  const HALF = GRID / 2;
+
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x3a7d44, 22, 56);
+  scene.fog = new THREE.Fog(0x3a7d44, 30, 90);
 
   const CAM_OFFSET = new THREE.Vector3(0, 18, 12);
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -345,12 +348,12 @@
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 80;
-  sun.shadow.camera.left = -35; sun.shadow.camera.right = 35;
-  sun.shadow.camera.top = 35; sun.shadow.camera.bottom = -35;
+  sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
+  sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
   scene.add(sun); scene.add(sun.target);
 
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(60, 60),
+    new THREE.PlaneGeometry(220, 220),
     new THREE.MeshLambertMaterial({ color: 0x3a7d44 })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -362,8 +365,7 @@
   // ═══════════════════════════════════════════════════════════
   const TILE_W = 64;   // kept for verbatim combat-range math (85/TILE_W, etc.)
   const TILE_H = 32;
-  const GRID   = 30;
-  const HALF   = GRID / 2;                 // tile→world offset (1 tile = 1 unit)
+  // GRID and HALF are defined at top of script (before Three.js setup)
   const toWorldX = tx => tx - HALF;
   const toWorldZ = ty => ty - HALF;
 
@@ -372,7 +374,10 @@
   const RARITY_RANK = { common:0, rare:1, epic:2, legendary:3 };
 
   // Per-zone ground/fog colors (Three.js port)
-  const ZONE_GROUND = { homestead:0x1a1208, ashfields:0x6b4c2a, bleakwood:0x1a2e1a, ironbone:0x3a3535 };
+  const ZONE_GROUND = {
+    homestead:0x1a1208, ashfields:0x6b4c2a, bleakwood:0x1a2e1a, ironbone:0x3a3535,
+    rot_flats:0x2a3a10, veilstone:0x1a1030, cindermaw:0x3a1508, ashen_crown:0x2a2010
+  };
 
   // Enemy shape table — kept for reference; drives mesh selection + base color
   const ENEMY_SHAPE_DEFS = {
@@ -386,6 +391,39 @@
     '__boss':              { color:'#ffffff' },
   };
 
+  // Per-zone environment object definitions
+  const ZONE_ENV = {
+    homestead:   [],
+    ashfields:   [
+      { shape:'box',    w:1.2, h:1.8, d:1.0, color:0x5a5040, count:18 },  // crumbled wall
+      { shape:'cyl',    r:0.3, h:2.5,        color:0x7a6a50, count:12 },  // broken pillar
+    ],
+    bleakwood:   [
+      { shape:'cyl',    r:0.4, h:5.0,        color:0x1a2a0a, count:22 },  // dead tree
+      { shape:'box',    w:0.6, h:0.5, d:0.6, color:0x5a3a1a, count:14 },  // mushroom cluster
+    ],
+    ironbone:    [
+      { shape:'box',    w:2.0, h:1.0, d:2.0, color:0x4a4040, count:15 },  // boulder
+      { shape:'box',    w:1.5, h:2.5, d:1.0, color:0x3a3a40, count:10 },  // rusted hull
+    ],
+    rot_flats:   [
+      { shape:'cyl',    r:0.3, h:3.5,        color:0x2a3a10, count:20 },  // rot tree
+      { shape:'box',    w:0.8, h:0.4, d:0.8, color:0x4a5a20, count:16 },  // spore cluster
+    ],
+    veilstone:   [
+      { shape:'box',    w:0.8, h:4.0, d:0.8, color:0x2a1a50, count:16 },  // stone monolith
+      { shape:'cyl',    r:0.25, h:1.5,       color:0x6644aa, count:12 },  // void crystal
+    ],
+    cindermaw:   [
+      { shape:'box',    w:1.5, h:1.2, d:1.5, color:0x3a1a0a, count:18 },  // lava rock
+      { shape:'cyl',    r:0.35, h:3.0,       color:0x5a2a10, count:10 },  // ash pillar
+    ],
+    ashen_crown: [
+      { shape:'box',    w:1.0, h:5.0, d:1.0, color:0x4a4020, count:14 },  // crown pillar
+      { shape:'cyl',    r:0.5, h:6.0,        color:0x8a7a30, count:8  },  // obelisk
+    ],
+  };
+
   const ZONES = {
     ashfields: {
       name: 'The Ashfields', subtitle: 'Crumbling ruins of the old civilization',
@@ -397,7 +435,8 @@
         { name:'Bone Collector',      hp:65,  damage:6,  speed:0.9, attackSpeed:1.6, xp:13, weight:0.2, color:'#d8cfc0', behavior:'ranged', sizeScale:1.1 },
       ],
       boss: { name:'The Warden', hp:800, damage:30, speed:1.0, attackSpeed:1.0, xp:200 },
-      dropTable: { rarities:['rare'], legendaryChance:0 }, isHome: true, campfirePos: { x:25, y:22 }
+      dropTable: { rarities:['rare'], legendaryChance:0 }, isHome: true, campfirePos: { x:70, y:60 },
+      exits: { south: 'homestead', east: 'bleakwood', north: 'rot_flats' }
     },
     bleakwood: {
       name: 'Bleakwood Hollow', subtitle: 'No light reaches the floor',
@@ -408,7 +447,8 @@
         { name:'Wraith Stalker', hp:130, damage:9,   speed:1.1, attackSpeed:1.0, xp:32, weight:0.4, color:'#9adfb0', behavior:'phasing', sizeScale:1.2 },
       ],
       boss: { name:'The Nightmother', hp:1600, damage:45, speed:1.3, attackSpeed:1.2, xp:500 },
-      dropTable: { rarities:['rare','epic'], legendaryChance:0 }, isHome: false, campfirePos: { x:25, y:22 }
+      dropTable: { rarities:['rare','epic'], legendaryChance:0 }, isHome: false, campfirePos: { x:70, y:60 },
+      exits: { west: 'ashfields', east: 'ironbone' }
     },
     ironbone: {
       name: 'Ironbone Flats', subtitle: 'A battlefield frozen in time',
@@ -419,13 +459,71 @@
         { name:'Revenant',       hp:170, damage:12, speed:1.0, attackSpeed:1.0, xp:45, weight:0.5, color:'#cfd6e0', behavior:'selfheal', sizeScale:1.0 },
       ],
       boss: { name:'General Mourne', hp:3200, damage:75, speed:1.1, attackSpeed:1.1, xp:1200 },
-      dropTable: { rarities:['rare','epic'], legendaryChance:0.05 }, isHome: false, campfirePos: { x:25, y:22 }
+      dropTable: { rarities:['rare','epic'], legendaryChance:0.05 }, isHome: false, campfirePos: { x:70, y:60 },
+      exits: { west: 'bleakwood', south: 'veilstone', east: 'cindermaw' }
     },
     homestead: {
       name: 'Homestead', subtitle: 'Your sanctuary', tierName: 'Homestead',
       recommendedLevel: null, portalColor: '#88dd66', auraColor: null, lootMult: 0,
       enemyTypes: [], boss: null, dropTable: { rarities:['rare'], legendaryChance:0 },
-      isHome: true, isSafe: true
+      isHome: true, isSafe: true,
+      exits: { north: 'ashfields' }
+    },
+    rot_flats: {
+      name: 'Rot Flats', subtitle: 'Festering marshland where nothing is clean',
+      tierName: 'RotFlats', recommendedLevel: '20-35', portalColor: '#88bb33',
+      enemyColor: '#5a7a22', bossColor: '#2a4a0a', auraColor: '#88bb33', lootMult: 6,
+      enemyTypes: [
+        { name:'Festering Crawler', hp:400, damage:20, speed:1.4, attackSpeed:1.2, xp:80,  weight:0.55, color:'#5a7a22', sizeScale:0.9 },
+        { name:'Rot Knight',        hp:600, damage:25, speed:0.8, attackSpeed:0.7, xp:100, weight:0.45, color:'#3d5a1a', sizeScale:1.3 },
+      ],
+      boss: { name:'The Corruptor', hp:8000, damage:100, speed:1.1, attackSpeed:1.0, xp:2000 },
+      dropTable: { rarities:['rare','epic'], legendaryChance:0.08 },
+      isHome: false, campfirePos: { x:70, y:60 },
+      exits: { north: 'ashfields', east: 'veilstone' },
+      unlockRequires: ['ashfields']
+    },
+    veilstone: {
+      name: 'Veilstone Reaches', subtitle: 'Ancient monoliths drunk on void-light',
+      tierName: 'Veilstone', recommendedLevel: '35-55', portalColor: '#7744cc',
+      enemyColor: '#6644aa', bossColor: '#2a1a4a', auraColor: '#7744cc', lootMult: 9,
+      enemyTypes: [
+        { name:'Stone Revenant', hp:900,  damage:35, speed:0.9, attackSpeed:0.8, xp:150, weight:0.5, color:'#6644aa', sizeScale:1.1 },
+        { name:'Veil Phantom',   hp:700,  damage:40, speed:1.6, attackSpeed:1.3, xp:170, weight:0.5, color:'#aa88ee', behavior:'phasing', sizeScale:0.9 },
+      ],
+      boss: { name:'The Blind Watcher', hp:16000, damage:150, speed:1.2, attackSpeed:1.0, xp:5000 },
+      dropTable: { rarities:['epic'], legendaryChance:0.15 },
+      isHome: false, campfirePos: { x:70, y:60 },
+      exits: { west: 'rot_flats', north: 'ironbone', south: 'ashen_crown' },
+      unlockRequires: ['ironbone']
+    },
+    cindermaw: {
+      name: 'Cindermaw Wastes', subtitle: 'Lava channels and ash as far as the eye sees',
+      tierName: 'Cindermaw', recommendedLevel: '55-80', portalColor: '#ff5500',
+      enemyColor: '#cc3300', bossColor: '#441100', auraColor: '#ff5500', lootMult: 13,
+      enemyTypes: [
+        { name:'Cinder Drake', hp:1400, damage:60, speed:1.8, attackSpeed:1.4, xp:250, weight:0.5, color:'#cc3300', sizeScale:1.0 },
+        { name:'Ember Titan',  hp:2000, damage:70, speed:0.5, attackSpeed:0.6, xp:280, weight:0.5, color:'#884400', sizeScale:1.4 },
+      ],
+      boss: { name:'Cindermaw the Eternal', hp:30000, damage:220, speed:1.0, attackSpeed:1.0, xp:12000 },
+      dropTable: { rarities:['epic','legendary'], legendaryChance:0.25 },
+      isHome: false, campfirePos: { x:70, y:60 },
+      exits: { west: 'ironbone', south: 'ashen_crown' },
+      unlockRequires: ['ironbone']
+    },
+    ashen_crown: {
+      name: 'Ashen Crown', subtitle: 'The seat of power. Nothing breathes here for long.',
+      tierName: 'AshenCrown', recommendedLevel: '80-100', portalColor: '#ffd700',
+      enemyColor: '#ccaa00', bossColor: '#4a3a00', auraColor: '#ffd700', lootMult: 20,
+      enemyTypes: [
+        { name:'Crown Guard',    hp:3000, damage:90,  speed:1.0, attackSpeed:0.9, xp:400, weight:0.5, color:'#ccaa00', sizeScale:1.2 },
+        { name:'Ashen Revenant', hp:2500, damage:100, speed:1.3, attackSpeed:1.1, xp:420, weight:0.5, color:'#aaaaaa', behavior:'selfheal', sizeScale:1.0 },
+      ],
+      boss: { name:'The Ashen King', hp:60000, damage:350, speed:0.9, attackSpeed:0.9, xp:30000 },
+      dropTable: { rarities:['legendary'], legendaryChance:0.5 },
+      isHome: false, campfirePos: { x:50, y:50 },
+      exits: { north: 'veilstone', east: 'cindermaw' },
+      unlockRequires: ['veilstone', 'cindermaw']
     }
   };
 
@@ -481,7 +579,7 @@
   const player = {
     x: GRID / 2, y: GRID / 2,
     hp: 100, maxHp: 100,
-    speed: 2,
+    speed: 6,
     isDead: false,
     uiLocked: false,
     currentZone: 'ashfields',
@@ -795,16 +893,28 @@
   }
 
   function openFastTravelUI() {
-    if (discoveredWaypoints.length === 0) { showToast('No waypoints discovered yet'); return; }
     var list = document.getElementById('ft-list');
     list.innerHTML = '';
     discoveredWaypoints.forEach(function(w) {
       var btn = document.createElement('button');
       btn.className = 'ft-btn';
-      btn.textContent = w.name + '  →  Travel';
+      var lvl = ZONES[w.id] ? (ZONES[w.id].recommendedLevel || 'Safe') : '?';
+      btn.textContent = w.name + '  (Lv ' + lvl + ')';
       btn.onclick = function() { fastTravelTo(w.id); };
       list.appendChild(btn);
     });
+    var lockedHints = { rot_flats:'Rot Flats — discover Ashfields campfire', veilstone:'Veilstone — discover Ironbone campfire', cindermaw:'Cindermaw — discover Ironbone campfire', ashen_crown:'Ashen Crown — discover Veilstone & Cindermaw' };
+    Object.entries(lockedHints).forEach(function([id, hint]) {
+      if (!isZoneUnlocked(id)) {
+        var div = document.createElement('div');
+        div.style.cssText = 'color:#555;font:11px monospace;padding:6px 0;letter-spacing:1px;border-top:1px solid #333';
+        div.textContent = hint;
+        list.appendChild(div);
+      }
+    });
+    if (list.children.length === 0) {
+      list.innerHTML = '<div style="color:#666;font:12px monospace">No waypoints discovered yet.</div>';
+    }
     document.getElementById('fast-travel-panel').classList.add('open');
     anyPanelOpen = true; player.uiLocked = true;
   }
@@ -825,23 +935,41 @@
   // ═══════════════════════════════════════════════════════════
   //  ZONES  (logic verbatim; visuals are the Three.js port)
   // ═══════════════════════════════════════════════════════════
-  function getPortals() {
-    const p = [];
-    if (currentZoneId === 'ashfields') {
-      p.push({ x: GRID-2, y: GRID/2, target: 'bleakwood', label: '→ Bleakwood Hollow' });
-    } else if (currentZoneId === 'bleakwood') {
-      p.push({ x: 1, y: GRID/2, target: 'ashfields', label: '← The Ashfields' });
-      p.push({ x: GRID-2, y: GRID/2, target: 'ironbone', label: '→ Ironbone Flats' });
-    } else if (currentZoneId === 'ironbone') {
-      p.push({ x: 1, y: GRID/2, target: 'bleakwood', label: '← Bleakwood Hollow' });
-    } else if (currentZoneId === 'homestead') {
-      p.push({ x: GRID/2, y: GRID-2, target: 'ashfields', label: '← The Ashfields' });
-    }
-    return p;
+  // ── BORDER APPROACH SYSTEM (replaces portal proximity) ──────────────
+  let nearBorder = null;
+
+  function isZoneUnlocked(zoneId) {
+    const z = ZONES[zoneId];
+    if (!z || !z.unlockRequires) return true;
+    return z.unlockRequires.every(req => discoveredWaypoints.some(w => w.id === req));
   }
-  function getHomesteadPortal() {
-    if (currentZoneId !== 'ashfields') return null;
-    return { x: GRID/2, y: 2 };
+
+  function checkBorderApproach() {
+    const zone = ZONES[currentZoneId];
+    if (!zone || !zone.exits || player.isDead) return null;
+    const E = 5; // tiles from edge to show prompt
+    if (zone.exits.north && player.y < E)            return { dir:'north', target: zone.exits.north };
+    if (zone.exits.south && player.y > GRID - 1 - E) return { dir:'south', target: zone.exits.south };
+    if (zone.exits.west  && player.x < E)            return { dir:'west',  target: zone.exits.west };
+    if (zone.exits.east  && player.x > GRID - 1 - E) return { dir:'east',  target: zone.exits.east };
+    return null;
+  }
+
+  function getArrivalPos(fromDir) {
+    const pad = 8;
+    if (fromDir === 'north') return { x: player.x, y: GRID - pad };
+    if (fromDir === 'south') return { x: player.x, y: pad };
+    if (fromDir === 'east')  return { x: pad,       y: player.y };
+    if (fromDir === 'west')  return { x: GRID - pad, y: player.y };
+    return { x: GRID / 2, y: GRID / 2 };
+  }
+
+  function confirmBorderCross() {
+    if (!nearBorder || zoneFading) return;
+    if (!isZoneUnlocked(nearBorder.target)) {
+      showToast('You are not ready for this area'); return;
+    }
+    transitionToZone(nearBorder.target, getArrivalPos(nearBorder.dir));
   }
   function travelToZone(zoneId, arrivalPos) {
     currentZoneId = zoneId; player.currentZone = zoneId;
@@ -849,9 +977,10 @@
     if (!zone.isSafe) spawnEnemies(); else enemies = [];
     lootPiles = [];
     if (arrivalPos) { player.x = arrivalPos.x; player.y = arrivalPos.y; }
-    else if (zoneId === 'homestead') { player.x = 14; player.y = 27; }
+    else if (zoneId === 'homestead') { player.x = 45; player.y = 80; }
     else { player.x = GRID/2; player.y = GRID/2; }
-    setZoneVisuals(zoneId);     // ground color + fog + portals (Three.js port)
+    setZoneVisuals(zoneId);
+    spawnEnvObjects(zoneId);
     spawnZoneCampfire(zoneId);
     showBanner(`${zone.name}\n${zone.subtitle}`);
     saveGame();
@@ -1052,16 +1181,16 @@
   let hsFireLight = null;
 
   const HS_BUILDINGS = [
-    { key:'campfire',   tx:13.5, ty: 5.5, label:'Campfire',        color:'#ff8800', prompt:'Press E — Rest & Recover' },
-    { key:'forge',      tx:20.0, ty: 5.5, label:'Forge',           color:'#ff6600', prompt:'Press E — Smith & Craft' },
-    { key:'shrine',     tx: 7.0, ty:10.0, label:'Shrine',          color:'#cc88ff', prompt:'Press E — Receive Blessing' },
-    { key:'garden',     tx:15.0, ty:13.0, label:'Garden',          color:'#44cc44', prompt:'Press E — Tend Plants' },
-    { key:'watchtower', tx: 3.0, ty:17.0, label:'Watchtower',      color:'#aaaaaa', prompt:'Press E — Survey the Land' },
-    { key:'merchant',   tx:19.0, ty:15.0, label:'Merchant',        color:'#e8c97a', prompt:'Press E — Browse Wares' },
-    { key:'str_guild',  tx: 7.0, ty:20.0, label:"Warriors' Guild", color:'#cc4444', prompt:"Press E — Train & Upgrade" },
-    { key:'rng_guild',  tx:15.0, ty:22.0, label:"Rangers' Guild",  color:'#44aacc', prompt:"Press E — Train & Upgrade" },
-    { key:'mge_guild',  tx:23.0, ty:20.0, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
-    { key:'fast_travel', tx:10.0, ty:13.0, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
+    { key:'campfire',   tx:40, ty:17, label:'Campfire',        color:'#ff8800', prompt:'Press E — Rest & Recover' },
+    { key:'forge',      tx:60, ty:17, label:'Forge',           color:'#ff6600', prompt:'Press E — Smith & Craft' },
+    { key:'shrine',     tx:21, ty:30, label:'Shrine',          color:'#cc88ff', prompt:'Press E — Receive Blessing' },
+    { key:'garden',     tx:45, ty:39, label:'Garden',          color:'#44cc44', prompt:'Press E — Tend Plants' },
+    { key:'watchtower', tx: 9, ty:51, label:'Watchtower',      color:'#aaaaaa', prompt:'Press E — Survey the Land' },
+    { key:'merchant',   tx:57, ty:45, label:'Merchant',        color:'#e8c97a', prompt:'Press E — Browse Wares' },
+    { key:'str_guild',  tx:21, ty:60, label:"Warriors' Guild", color:'#cc4444', prompt:"Press E — Train & Upgrade" },
+    { key:'rng_guild',  tx:45, ty:66, label:"Rangers' Guild",  color:'#44aacc', prompt:"Press E — Train & Upgrade" },
+    { key:'mge_guild',  tx:69, ty:60, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
+    { key:'fast_travel', tx:30, ty:39, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
   ];
 
   const hsBuildingEl = (function() {
@@ -1078,6 +1207,39 @@
     document.body.appendChild(el);
     return el;
   })();
+
+  function interactChest() {
+    if (!nearChest || nearChest.looted || player.isDead) return;
+    nearChest.looted = true;
+    nearChest.mesh.material.color.setHex(0x333322);
+    nearChest.mesh.material.emissiveIntensity = 0;
+    // Loot roll: gold + optional item
+    const goldGain = 50 + Math.floor(Math.random() * 150 * (ZONES[currentZoneId].lootMult || 1));
+    backpack.gold += goldGain;
+    const zone = ZONES[currentZoneId];
+    const rarities = zone.dropTable ? zone.dropTable.rarities : ['rare'];
+    const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+    const pool = GEAR_DB.filter(g => g.rarity === rarity);
+    if (pool.length && Math.random() < 0.65) {
+      const item = { ...pool[Math.floor(Math.random() * pool.length)] };
+      backpack.items.push(item);
+      showToast('Chest: ' + goldGain + 'g + ' + item.name);
+    } else {
+      showToast('Chest: ' + goldGain + ' gold');
+    }
+    saveGame();
+  }
+
+  function updateChestLabel() {
+    if (player.isDead || anyPanelOpen || ZONES[currentZoneId].isSafe) { nearChest = null; return; }
+    let best = null, bd = 2.5;
+    for (const ch of chests) {
+      if (ch.looted) continue;
+      const d = Math.hypot(player.x - ch.x, player.y - ch.y);
+      if (d < bd) { bd = d; best = ch; }
+    }
+    nearChest = best;
+  }
 
   let nearBuilding = null;
   function updateBuildingLabel() {
@@ -1233,34 +1395,65 @@
     addPL(0xaa44cc, 1.8, 7, 8.0, 5.5, 5.0);
   }
 
-  let portalGroup = null;
-  function buildPortals() {
-    if (portalGroup) { scene.remove(portalGroup); portalGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
-    portalGroup = new THREE.Group();
-    const portals = getPortals();
-    const hs = getHomesteadPortal();
-    if (hs) portals.push({ x: hs.x, y: hs.y, target: 'homestead' });
-    for (const p of portals) {
-      const col = ZONES[p.target] ? ZONES[p.target].portalColor : '#ffffff';
-      const ringMat = new THREE.MeshLambertMaterial({ color: col, emissive: new THREE.Color(col), emissiveIntensity: 0.8 });
-      const grp = new THREE.Group();
-      [0.25, 0.6, 0.95].forEach(yy => {
-        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.06, 18, 1, true), ringMat);
-        ring.position.y = yy; grp.add(ring);
-      });
-      grp.position.set(toWorldX(p.x), 0, toWorldZ(p.y));
-      portalGroup.add(grp);
-    }
-    scene.add(portalGroup);
+  // Portal meshes removed — border-walk system replaces them
+  let envGroup = null;
+  let chests = [];         // { x, y, mesh, looted }
+  let nearChest = null;
+  function clearEnvObjects() {
+    if (envGroup) { scene.remove(envGroup); envGroup.traverse(o => { if (o.geometry) o.geometry.dispose(); }); envGroup = null; }
+    chests = [];
+    nearChest = null;
   }
+
+  function spawnEnvObjects(zoneId) {
+    clearEnvObjects();
+    envGroup = new THREE.Group();
+    const defs = ZONE_ENV[zoneId] || [];
+    const campPos = ZONES[zoneId] && ZONES[zoneId].campfirePos;
+    for (const def of defs) {
+      for (let i = 0; i < def.count; i++) {
+        let tx, ty, attempts = 0;
+        do {
+          tx = 3 + Math.random() * (GRID - 6);
+          ty = 3 + Math.random() * (GRID - 6);
+          attempts++;
+        } while (campPos && Math.hypot(tx - campPos.x, ty - campPos.y) < 6 && attempts < 20);
+        const mat = new THREE.MeshLambertMaterial({ color: def.color });
+        let geo;
+        if (def.shape === 'box') geo = new THREE.BoxGeometry(def.w, def.h, def.d);
+        else geo = new THREE.CylinderGeometry(def.r, def.r * 1.1, def.h, 7);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(toWorldX(tx), def.h / 2, toWorldZ(ty));
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        mesh.castShadow = true;
+        envGroup.add(mesh);
+      }
+    }
+    // Spawn 3 treasure chests per combat zone
+    if (!ZONES[zoneId].isSafe) {
+      for (let i = 0; i < 3; i++) {
+        const tx = 5 + Math.random() * (GRID - 10);
+        const ty = 5 + Math.random() * (GRID - 10);
+        const cMat = new THREE.MeshLambertMaterial({ color: 0xaa8800, emissive: new THREE.Color(0x221100), emissiveIntensity: 0.4 });
+        const cGeo = new THREE.BoxGeometry(0.7, 0.5, 0.5);
+        const mesh = new THREE.Mesh(cGeo, cMat);
+        mesh.position.set(toWorldX(tx), 0.25, toWorldZ(ty));
+        mesh.castShadow = true;
+        envGroup.add(mesh);
+        chests.push({ x: tx, y: ty, mesh, looted: false });
+      }
+    }
+    scene.add(envGroup);
+  }
+
   function setZoneVisuals(zoneId) {
     const col = ZONE_GROUND[zoneId] != null ? ZONE_GROUND[zoneId] : 0x3a7d44;
     ground.material.color.setHex(col);
     renderer.setClearColor(col, 1);
     if (zoneId === 'homestead') {
-      scene.fog = new THREE.FogExp2(0x0f0a04, 0.02);
+      scene.fog = new THREE.FogExp2(0x0f0a04, 0.008);
     } else {
-      scene.fog = new THREE.Fog(col, 22, 56);
+      scene.fog = new THREE.Fog(col, 30, 90);
     }
     if (homesteadGroup) {
       scene.remove(homesteadGroup);
@@ -1271,7 +1464,6 @@
       homesteadGroup = null; hsFlame = null; hsFireLight = null;
     }
     if (zoneId === 'homestead') buildHomestead();
-    buildPortals();
   }
 
   // ── 3D → screen projection for HP bars ──
@@ -1353,7 +1545,7 @@
   window.addEventListener('keydown', e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = true; e.preventDefault(); } });
   window.addEventListener('keyup',   e => { if (MOVE_KEYS[e.code]) { keys[MOVE_KEYS[e.code]] = false; e.preventDefault(); } });
   window.addEventListener('keydown', e => {
-    if (e.code === 'KeyE') { if (!anyPanelOpen) { tryEnterPortal(); if (nearCampfire) interactCampfire(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); } }
+    if (e.code === 'KeyE') { if (!anyPanelOpen) { if (nearBorder) confirmBorderCross(); if (nearCampfire) interactCampfire(); if (nearChest) interactChest(); if (nearBuilding && nearBuilding.key === 'fast_travel') openFastTravelUI(); } }
     else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
     else if (e.code === 'Escape') {
       document.getElementById('backpack-overlay').classList.remove('open');
@@ -1407,7 +1599,7 @@
 
     // Movement — keyboard 0.08/frame, joystick speed*dt (phase4 verbatim feel)
     if (!player.uiLocked) {
-      const spd = 0.08;
+      const spd = 0.25;
       if (keys.up)    player.y -= spd;
       if (keys.down)  player.y += spd;
       if (keys.left)  player.x -= spd;
@@ -1426,12 +1618,8 @@
     if (_pdx !== 0 || _pdy !== 0) playerFacing = lerpAngle(playerFacing, Math.atan2(_pdy, _pdx), Math.min(1, 10 * 0.016));
     else if (joy.active) playerFacing = lerpAngle(playerFacing, Math.atan2(joy.z, joy.x), Math.min(1, 10 * 0.016));
 
-    // Portal check
-    for (const portal of getPortals()) {
-      if (Math.hypot(player.x - portal.x, player.y - portal.y) < 1.2) { transitionToZone(portal.target); return; }
-    }
-    const hsPortal = getHomesteadPortal();
-    if (hsPortal && Math.hypot(player.x - hsPortal.x, player.y - hsPortal.y) < 1.2) { transitionToZone('homestead'); return; }
+    // Border approach detection (transition via E key — see keydown handler)
+    nearBorder = checkBorderApproach();
 
     if (anyPanelOpen) return;
 
@@ -1576,7 +1764,8 @@
     var zone = ZONES[currentZoneId];
     if (!zone || zone.isSafe || !zone.recommendedLevel) return 0;
     // Zone base danger (floor per zone difficulty tier)
-    var base = currentZoneId === 'ashfields' ? 20 : currentZoneId === 'bleakwood' ? 50 : currentZoneId === 'ironbone' ? 80 : 0;
+    var ZONE_DANGER = { ashfields:20, bleakwood:45, ironbone:70, rot_flats:80, veilstone:88, cindermaw:94, ashen_crown:100 };
+    var base = ZONE_DANGER[currentZoneId] || 0;
     // Depth bonus: distance from zone spawn center adds up to +20
     var spawnX = GRID / 2, spawnY = GRID / 2;
     var dist = Math.hypot(player.x - spawnX, player.y - spawnY);
@@ -1598,7 +1787,6 @@
     updateStatsPanel();
     drawMinimap();
     updateDangerBar(calcDangerLevel());
-    updatePortalLabel();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1634,19 +1822,21 @@
   // ── MINIMAP (top-right) ──
   const mmCanvas = document.getElementById('ui-minimap');
   const mmCtx = mmCanvas.getContext('2d');
-  function allPortals() {
-    const ps = getPortals().map(p => ({ x:p.x, y:p.y, target:p.target }));
-    const hp = getHomesteadPortal(); if (hp) ps.push({ x:hp.x, y:hp.y, target:'homestead' });
-    return ps;
-  }
+  // allPortals() removed — border system has no fixed portal positions
   function drawMinimap() {
     const W = 120, H = 120, s = W / GRID;
     mmCtx.clearRect(0, 0, W, H);
     mmCtx.fillStyle = '#111'; mmCtx.fillRect(0, 0, W, H);
     mmCtx.strokeStyle = '#e8c97a'; mmCtx.lineWidth = 1; mmCtx.strokeRect(0.5, 0.5, W - 1, H - 1);
-    // portals (cyan)
-    mmCtx.fillStyle = '#39d6ff';
-    for (const p of allPortals()) mmCtx.fillRect(p.x * s - 1.5, p.y * s - 1.5, 3, 3);
+    // border exits shown as edge ticks on minimap
+    const zone = ZONES[currentZoneId];
+    if (zone && zone.exits) {
+      mmCtx.fillStyle = '#39d6ff';
+      if (zone.exits.north) mmCtx.fillRect(player.x * s - 2, 0, 4, 2);
+      if (zone.exits.south) mmCtx.fillRect(player.x * s - 2, H - 2, 4, 2);
+      if (zone.exits.west)  mmCtx.fillRect(0, player.y * s - 2, 2, 4);
+      if (zone.exits.east)  mmCtx.fillRect(W - 2, player.y * s - 2, 2, 4);
+    }
     // enemies (rarity colored)
     for (const e of enemies) { mmCtx.fillStyle = RARITY_DOT[e.rarity] || '#888888'; mmCtx.fillRect(e.x * s - 1, e.y * s - 1, 2, 2); }
     // player (white)
@@ -1786,20 +1976,22 @@
   function devClearSave() { try { localStorage.removeItem('runeportal_save'); } catch(e) {} location.reload(); }
 
   // ── PORTAL PROXIMITY LABEL (within 3 units) + E / tap to enter ──
-  let nearPortal = null;
-  function updatePortalLabel() {
+  // nearPortal removed — border system uses nearBorder instead
+  function updateBorderPrompt() {
     const el = document.getElementById('portal-label');
-    if (player.isDead || anyPanelOpen) { el.style.display = 'none'; nearPortal = null; return; }
-    let best = null, bd = 3;
-    for (const p of allPortals()) { const d = Math.hypot(player.x - p.x, player.y - p.y); if (d < bd) { bd = d; best = p; } }
-    nearPortal = best;
-    if (best) {
-      const zn = ZONES[best.target] ? ZONES[best.target].name : best.target;
-      el.innerHTML = `${zn} &rarr; <b>Press E to enter</b>`;
+    if (player.isDead || anyPanelOpen) { el.style.display = 'none'; return; }
+    if (nearBorder) {
+      const zn = ZONES[nearBorder.target] ? ZONES[nearBorder.target].name : nearBorder.target;
+      const locked = !isZoneUnlocked(nearBorder.target);
+      el.innerHTML = (locked ? '&#128274; ' : '') + zn + ' &rarr; <b>Press E to enter</b>';
       el.style.display = 'block';
-    } else el.style.display = 'none';
+    } else if (nearChest) {
+      el.innerHTML = '&#x1F4E6; Treasure Chest &mdash; <b>Press E to open</b>';
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
   }
-  function tryEnterPortal() { if (nearPortal && !zoneFading) transitionToZone(nearPortal.target); }
 
   // ═══════════════════════════════════════════════════════════
   //  GAME LOOP — single requestAnimationFrame (no PIXI ticker)
@@ -1822,6 +2014,8 @@
     updateHUD();
     updateBuildingLabel();
     updateCampfireLabel();
+    updateChestLabel();
+    updateBorderPrompt();
     if (hsFlame) {
       const t = performance.now();
       hsFlame.scale.y = 0.85 + Math.sin(t * 0.004) * 0.3;
