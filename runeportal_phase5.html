@@ -167,7 +167,7 @@
 
   /* Backpack + Dev full-screen overlays */
   #backpack-overlay, #dev-overlay, #storage-panel, #forge-panel, #merchant-panel,
-  #shrine-panel, #guild-panel, #garden-panel, #campfire-panel {
+  #shrine-panel, #guild-panel, #garden-panel, #campfire-panel, #pool-panel {
     display:none; position:fixed; inset:0; z-index:100;
     background:rgba(26,26,46,0.97); color:#ccc; font-family:'Courier New',monospace;
     flex-direction:column; padding:14px; overflow-y:auto;
@@ -175,7 +175,13 @@
   #backpack-overlay.open, #dev-overlay.open,
   #storage-panel.open, #forge-panel.open,
   #merchant-panel.open, #shrine-panel.open, #guild-panel.open,
-  #garden-panel.open, #campfire-panel.open { display:flex; }
+  #garden-panel.open, #campfire-panel.open, #pool-panel.open { display:flex; }
+  .pool-btn { margin-top:8px; width:100%; padding:8px; font:11px monospace; background:#0a1a2a;
+    color:#44bbff; border:1px solid #44bbff; border-radius:4px; cursor:pointer; }
+  .pool-btn:disabled { opacity:0.4; cursor:default; }
+  .pool-upgrade-btn { margin-top:6px; width:100%; padding:6px; font:10px monospace;
+    background:#1a1a0a; color:#e8c97a; border:1px solid #e8c97a44; border-radius:4px; cursor:pointer; }
+  .pool-upgrade-btn:disabled { opacity:0.35; cursor:default; }
   .stc-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
     background:#1a2a1a; color:#44cc44; border:1px solid #44cc44; border-radius:3px; cursor:pointer; }
   .use-btn { margin-top:5px; width:100%; min-height:30px; font:10px monospace;
@@ -375,6 +381,16 @@
     </div>
     <div id="garden-plot-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px"></div>
     <div id="garden-seed-summary" style="color:#666;font:10px monospace;padding-top:8px;border-top:1px solid #222"></div>
+  </div>
+  <div id="pool-panel">
+    <div class="bp-header">
+      <div>
+        <span style="color:#44bbff;font:13px monospace;letter-spacing:2px">POOL OF REFRESHMENT</span>
+        <span style="color:#888;font:11px monospace;margin-left:10px">Bathe &amp; Restore</span>
+      </div>
+      <button class="bp-close" onclick="closePoolUI()">&#10005;</button>
+    </div>
+    <div id="pool-content"></div>
   </div>
   <div id="campfire-panel">
     <div class="bp-header">
@@ -902,6 +918,16 @@
   };
   let craftQueue = [];
   let gardenPlot = { growing:false, herb:null, startTime:0, duration:120 }; // legacy stub
+  let poolTier = 1;
+  let poolLastUsed = null;
+  let _poolTimer = null;
+
+  const POOL_TIERS = [
+    { tier:1, label:'Murky Pool',   restorePercent:0.30, cooldownMs:5*60000,  upgradeCost:null },
+    { tier:2, label:'Clear Pool',   restorePercent:0.55, cooldownMs:3*60000,  upgradeCost:{ gold:800,  matKey:'iron_ingot',    matName:'Iron Ingot',  qty:5 } },
+    { tier:3, label:'Sacred Pool',  restorePercent:0.75, cooldownMs:90000,    upgradeCost:{ gold:2500, matKey:'runic_dust',    matName:'Runic Dust',  qty:8 } },
+    { tier:4, label:'Blessed Pool', restorePercent:1.0,  cooldownMs:60000,    upgradeCost:{ gold:6000, matKey:'void_shard',    matName:'Void Shard',  qty:5 } },
+  ];
   let gardenPlots = Array.from({length:6}, (_, i) => ({slotId:i, cropId:null, plantedAt:null}));
   let restedBonusClaimed = false;
   let shrineBuff = { active:false, endTime:0, label:'' };
@@ -1658,6 +1684,7 @@
         totalXP: player.totalXP,
         trainingXP: player.trainingXP,
         homedStorage: homedStorage,
+        poolTier: poolTier, poolLastUsed: poolLastUsed,
       }));
     } catch(e) { storageAvailable = false; }
   }
@@ -1697,6 +1724,8 @@
       if (Number.isFinite(d.totalXP))    player.totalXP    = d.totalXP;
       if (Number.isFinite(d.trainingXP)) player.trainingXP = d.trainingXP;
       if (Array.isArray(d.homedStorage)) homedStorage = d.homedStorage;
+      if (Number.isFinite(d.poolTier))    poolTier    = Math.max(1, Math.min(4, d.poolTier));
+      if (Number.isFinite(d.poolLastUsed)) poolLastUsed = d.poolLastUsed;
       if (d.materials && d.materials.runic_dust !== undefined) backpack.materials.runic_dust = d.materials.runic_dust;
     } catch(e) { storageAvailable = false; console.warn('Load failed, starting fresh:', e); }
   }
@@ -1832,6 +1861,7 @@
     { key:'mge_guild',  tx:58, ty:55, label:"Mages' Guild",    color:'#aa44cc', prompt:"Press E — Train & Upgrade" },
     { key:'fast_travel',   tx:50, ty:50, label:'Fast Travel Portal', color:'#66aaff', prompt:'Press E — Fast Travel to Waypoints' },
     { key:'storage_chest', tx:60, ty:46, label:'Storage Chest',      color:'#cc9900', prompt:'Press E — Open Storage' },
+    { key:'pool_refresh',  tx:46, ty:41, label:'Pool of Refreshment', color:'#44bbff', prompt:'Press E — Bathe & Restore HP' },
   ];
 
   const hsBuildingEl = (function() {
@@ -1936,6 +1966,11 @@
       l.position.set(px, py, pz);
       homesteadGroup.add(l);
     }
+
+    // ── 0. POOL OF REFRESHMENT (-4, 0, -9) ──
+    addMesh(new THREE.CylinderGeometry(1.3, 1.3, 0.2, 14), lm(0x7a8890), -4, 0.1, -9);   // stone rim
+    addMesh(new THREE.CylinderGeometry(1.0, 1.0, 0.08, 14), lm(0x224466, 0x2266aa, 0.7), -4, 0.22, -9); // water
+    addPL(0x2266aa, 0.6, 4, -4, 0.5, -9);
 
     // ── 1. CAMPFIRE (-1.5, 0, -9.5) ──
     addMesh(new THREE.CylinderGeometry(1.0, 1.2, 0.25, 10), lm(0x888880), -1.5, 0.125, -9.5);
@@ -2215,7 +2250,8 @@
       if (nearBuilding && nearBuilding.key === 'rng_guild') openGuildUI('rng_guild');
       if (nearBuilding && nearBuilding.key === 'mge_guild') openGuildUI('mge_guild');
       if (nearBuilding && nearBuilding.key === 'campfire')  openCampfireUI();
-      if (nearBuilding && nearBuilding.key === 'garden')    openGardenUI(); } }
+      if (nearBuilding && nearBuilding.key === 'garden')    openGardenUI();
+      if (nearBuilding && nearBuilding.key === 'pool_refresh') openPoolUI(); } }
     else if (e.code === 'KeyB') { toggleBag(); e.preventDefault(); }
     else if (e.code === 'Escape') {
       document.getElementById('backpack-overlay').classList.remove('open');
@@ -2227,6 +2263,7 @@
       document.getElementById('guild-panel').classList.remove('open');
       document.getElementById('garden-panel').classList.remove('open');
       document.getElementById('campfire-panel').classList.remove('open');
+      document.getElementById('pool-panel').classList.remove('open');
       storageOpen = false;
       syncPanelState();
     }
@@ -2690,7 +2727,8 @@
               || document.getElementById('shrine-panel').classList.contains('open')
               || document.getElementById('guild-panel').classList.contains('open')
               || document.getElementById('garden-panel').classList.contains('open')
-              || document.getElementById('campfire-panel').classList.contains('open');
+              || document.getElementById('campfire-panel').classList.contains('open')
+              || document.getElementById('pool-panel').classList.contains('open');
     anyPanelOpen = open;
     player.uiLocked = open;
   }
@@ -2932,6 +2970,99 @@
     gardenPlots[slotId] = { slotId, cropId:null, plantedAt:null };
     saveGame(); renderGarden();
     showToast(qty + '× ' + crop.yield.item + ' collected!');
+  }
+
+  // ── POOL OF REFRESHMENT ──────────────────────────────────────────
+  function openPoolUI() {
+    document.getElementById('pool-panel').classList.add('open');
+    anyPanelOpen = true; player.uiLocked = true;
+    renderPoolPanel();
+    _poolTimer = setInterval(() => {
+      const cd = document.getElementById('pool-countdown');
+      if (cd) cd.textContent = poolCooldownText();
+    }, 1000);
+  }
+  function closePoolUI() {
+    if (_poolTimer) { clearInterval(_poolTimer); _poolTimer = null; }
+    document.getElementById('pool-panel').classList.remove('open');
+    syncPanelState();
+  }
+  function poolCooldownRemaining() {
+    if (!poolLastUsed) return 0;
+    const tier = POOL_TIERS[poolTier - 1];
+    return Math.max(0, poolLastUsed + tier.cooldownMs - Date.now());
+  }
+  function poolCooldownText() {
+    const rem = poolCooldownRemaining();
+    if (rem <= 0) return 'Ready';
+    const s = Math.ceil(rem / 1000), m = Math.floor(s / 60), rs = s % 60;
+    return 'Available in ' + m + 'm ' + rs.toString().padStart(2,'0') + 's';
+  }
+  function renderPoolPanel() {
+    const el = document.getElementById('pool-content'); el.innerHTML = '';
+    const tier = POOL_TIERS[poolTier - 1];
+    const onCooldown = poolCooldownRemaining() > 0;
+    const healAmt = Math.floor(player.maxHp * tier.restorePercent);
+    const cdMinutes = (tier.cooldownMs / 60000).toFixed(0);
+    const cdSec = tier.cooldownMs < 60000 ? tier.cooldownMs / 1000 + ' sec' : cdMinutes + ' min';
+    const sec = document.createElement('div'); sec.className = 'cf-section';
+    sec.innerHTML =
+      '<div class="cf-section-title" style="color:#44bbff">' + tier.label + ' (Tier ' + poolTier + ')</div>'
+      + '<div style="font:12px monospace;color:#e44444;margin-bottom:4px">HP: ' + Math.ceil(player.hp) + ' / ' + player.maxHp + '</div>'
+      + '<div style="font:11px monospace;color:#aabbcc">Restores ' + Math.round(tier.restorePercent * 100) + '% max HP (' + healAmt + ' HP)</div>'
+      + '<div style="font:10px monospace;color:#556677;margin-bottom:6px">Cooldown: ' + cdSec + '</div>'
+      + '<button class="pool-btn" onclick="batheInPool()"' + (onCooldown ? ' disabled' : '') + '>'
+      + (onCooldown ? 'ON COOLDOWN' : 'BATHE') + '</button>'
+      + '<div id="pool-countdown" style="font:10px monospace;color:' + (onCooldown ? '#774422' : '#44bb44') + ';margin-top:5px">'
+      + poolCooldownText() + '</div>';
+    el.appendChild(sec);
+    if (poolTier < 4) {
+      const next = POOL_TIERS[poolTier];
+      const cost = next.upgradeCost;
+      const hasGold = backpack.gold >= cost.gold;
+      const hasMat  = (backpack.materials[cost.matKey] || 0) >= cost.qty;
+      const canAfford = hasGold && hasMat;
+      const upSec = document.createElement('div'); upSec.className = 'cf-section';
+      upSec.innerHTML =
+        '<div class="cf-section-title">Upgrade to ' + next.label + ' (Tier ' + next.tier + ')</div>'
+        + '<div style="font:10px monospace;color:#888">'
+        + 'Restore ' + Math.round(next.restorePercent * 100) + '% HP — '
+        + (next.cooldownMs < 60000 ? next.cooldownMs/1000 + 's' : next.cooldownMs/60000 + 'm') + ' cooldown</div>'
+        + '<div style="font:10px monospace;margin-top:6px">'
+        + 'Cost: <span style="color:' + (hasGold ? '#44cc44' : '#cc4444') + '">' + cost.gold + 'g</span>'
+        + ' + <span style="color:' + (hasMat ? '#44cc44' : '#cc4444') + '">' + cost.matName + ' \xd7' + cost.qty + '</span>'
+        + '<br><span style="color:#555">You have: ' + backpack.gold + 'g | ' + cost.matName + ' \xd7' + (backpack.materials[cost.matKey]||0) + '</span></div>'
+        + '<button class="pool-upgrade-btn" onclick="upgradePool()"' + (canAfford ? '' : ' disabled') + '>'
+        + (canAfford ? 'UPGRADE' : 'Cannot Afford') + '</button>';
+      el.appendChild(upSec);
+    } else {
+      const maxSec = document.createElement('div'); maxSec.className = 'cf-section';
+      maxSec.innerHTML = '<div style="color:#44bbff;font:11px monospace;text-align:center">\u2605 MAX TIER \u2605<br><span style="color:#556">Blessed Pool — Full HP restore</span></div>';
+      el.appendChild(maxSec);
+    }
+  }
+  function batheInPool() {
+    if (poolCooldownRemaining() > 0) { showToast('Still cooling down!'); return; }
+    const tier = POOL_TIERS[poolTier - 1];
+    const healAmt = Math.floor(player.maxHp * tier.restorePercent);
+    const actual = Math.min(healAmt, player.maxHp - player.hp);
+    player.hp = Math.min(player.maxHp, player.hp + healAmt);
+    poolLastUsed = Date.now();
+    showHitSplat(toWorldX(player.x), toWorldZ(player.y), '+' + healAmt + ' HP', '#44bbff');
+    showToast('You feel refreshed. (+' + healAmt + ' HP)');
+    saveGame(); renderPoolPanel();
+  }
+  function upgradePool() {
+    if (poolTier >= 4) return;
+    const next = POOL_TIERS[poolTier];
+    const cost = next.upgradeCost;
+    if (backpack.gold < cost.gold) { showToast('Not enough gold'); return; }
+    if ((backpack.materials[cost.matKey] || 0) < cost.qty) { showToast('Missing ' + cost.matName); return; }
+    backpack.gold -= cost.gold;
+    backpack.materials[cost.matKey] -= cost.qty;
+    poolTier++;
+    showToast('Pool upgraded to ' + POOL_TIERS[poolTier - 1].label + '!');
+    saveGame(); renderPoolPanel();
   }
 
   // ── CAMPFIRE (Homestead rest station) ────────────────────────────
