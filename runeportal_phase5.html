@@ -1123,6 +1123,71 @@
       ? getActiveSetBonuses(Object.values(player.equipped).filter(Boolean)) : [];
   }
 
+  function rollRarity(zoneTier, lootType) {
+    const shift = ZONE_RARITY_SHIFT['tier' + zoneTier] || {};
+    const weights = {};
+    for (const [r, t] of Object.entries(RARITY_TIERS)) {
+      weights[r] = (t.dropWeight || 0) + (shift[r] || 0);
+    }
+    if (lootType === 'boss')  { weights.legendary = (weights.legendary||0) * 2; weights.mythic = (weights.mythic||0) * 2; }
+    if (lootType === 'elite') { weights.epic = (weights.epic||0) * 1.5; weights.rare = (weights.rare||0) * 1.3; }
+    const total = Object.values(weights).reduce((a,b) => a+b, 0);
+    let rv = Math.random() * total;
+    for (const [rarity, w] of Object.entries(weights)) { rv -= w; if (rv <= 0) return rarity; }
+    return 'common';
+  }
+  function pickSetDrop() {
+    if (typeof SET_DEFINITIONS === 'undefined') return null;
+    const owned = new Set(Object.values(player.equipped).filter(Boolean).map(i => i.name));
+    const candidates = [];
+    for (const set of SET_DEFINITIONS) {
+      const missing = set.pieces.filter(p => !owned.has(p));
+      if (!missing.length) continue;
+      const ownedCount = set.pieces.length - missing.length;
+      for (const p of missing) candidates.push({ name:p, priority: ownedCount === 1 ? 2 : 1 });
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a,b) => b.priority - a.priority);
+    const chosen = candidates[0].name;
+    const base = GEAR_DB.find(g => g.name === chosen);
+    if (!base) return null;
+    return { ...base, statBonus: base.statBonus ? { ...base.statBonus } : undefined, rarity:'set' };
+  }
+  function rollGear(zone, lootType) {
+    const zoneTier = ZONE_TIER[currentZoneId] || 1;
+    const rarity = rollRarity(zoneTier, lootType);
+
+    // Set items: player-aware drop with zone gate
+    if (rarity === 'set') {
+      if (zoneTier < 4) return rollGear(zone, lootType);  // re-roll; sets don't drop <T4
+      const setChance = lootType === 'boss' ? 0.0025 : lootType === 'elite' ? 0.0008 : 0.0002;
+      if (Math.random() < setChance) {
+        const setItem = pickSetDrop();
+        if (setItem) return setItem;
+      }
+      // Fallback to legendary if set roll failed or player owns all
+      const legPool = GEAR_DB.filter(g => g.rarity === 'epic' && !g.untradeable);
+      if (!legPool.length) return null;
+      const lb = legPool[Math.floor(Math.random() * legPool.length)];
+      return { ...lb, statBonus: lb.statBonus ? { ...lb.statBonus } : undefined, rarity:'legendary' };
+    }
+
+    // Normal gear: pick type from zone pool, then item from GEAR_DB
+    const typePool = ZONE_GEAR_POOL['tier' + zoneTier] || ['weapon','helmet','chest','legs','boots'];
+    const gearType = typePool[Math.floor(Math.random() * typePool.length)];
+
+    // Filter by type + exact rarity; widen if empty
+    let pool = GEAR_DB.filter(g => g.type === gearType && g.rarity === rarity && !g.untradeable);
+    if (!pool.length) pool = GEAR_DB.filter(g => g.type === gearType && !g.untradeable);
+    if (!pool.length) pool = GEAR_DB.filter(g => !g.untradeable);
+    if (!pool.length) return null;
+
+    const base = pool[Math.floor(Math.random() * pool.length)];
+    const item = { ...base, statBonus: base.statBonus ? { ...base.statBonus } : undefined };
+    item.rarity = rarity;
+    return item;
+  }
+
   // ═══════════════════════════════════════════════════════════
   //  ENEMY SPAWNING  (verbatim)
   // ═══════════════════════════════════════════════════════════
@@ -1172,6 +1237,20 @@
   // ═══════════════════════════════════════════════════════════
   //  LOOT TABLES
   // ═══════════════════════════════════════════════════════════
+  const ZONE_RARITY_SHIFT = {
+    tier1: { mythic:0,    ancient:0,    eternal:0,    set:0    },
+    tier2: { mythic:0.5,  ancient:0,    eternal:0,    set:0    },
+    tier3: { mythic:1.0,  ancient:0,    eternal:0,    set:0    },
+    tier4: { mythic:1.5,  ancient:0.2,  eternal:0,    set:0.01 },
+    tier5: { mythic:2.0,  ancient:0.5,  eternal:0.05, set:0.02 },
+  };
+  const ZONE_GEAR_POOL = {
+    tier1: ['weapon','helmet','chest','legs','boots','hands'],
+    tier2: ['weapon','offhand','helmet','chest','legs','boots','hands','ring'],
+    tier3: ['weapon','offhand','helmet','chest','legs','boots','hands','neck','ring'],
+    tier4: ['weapon','offhand','helmet','chest','legs','boots','hands','neck','back','ring'],
+    tier5: ['weapon','offhand','helmet','chest','legs','boots','hands','neck','back','ring'],
+  };
   const ZONE_TIER = {
     homestead:0, ashfields:1, bleakwood:2, ironbone:3, rot_flats:3,
     veilstone:4, cindermaw:4, ashen_crown:5
@@ -1284,7 +1363,7 @@
         const mat = rollMaterial(zoneTier);
         if (mat) pile.materialDrops.push(mat);
       } else {
-        const item = rollZoneGear(zone, enemy.isBoss);
+        const item = rollGear(zone, lootType);
         if (item) pile.items.push(item);
       }
     }
@@ -2349,7 +2428,13 @@
       if (pile.expiresAt && Date.now() > pile.expiresAt) { lootPiles.splice(i, 1); continue; }
       if (Math.hypot(player.x - pile.x, player.y - pile.y) < 60 / TILE_W) {
         if (pile.gold > 0) { backpack.gold += pile.gold; showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + pile.gold + 'g', '#f0c040'); }
-        for (const item of pile.items) { backpack.items.push(item); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), item.name, rarText(item.rarity)); }
+        for (const item of pile.items) {
+          backpack.items.push(item);
+          const _rc = rarText(item.rarity);
+          const _hi = ['mythic','ancient','eternal','set'].includes(item.rarity);
+          const _label = _hi ? item.name + ' [' + (RARITY_TIERS[item.rarity]||{}).label + ']' : item.name;
+          showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), _label, _rc);
+        }
         if (pile.materialDrop) { backpack.materials[pile.materialDrop] = (backpack.materials[pile.materialDrop] || 0) + 1; const _mi = MATERIAL_DB.find(m => m.id === pile.materialDrop); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), _mi ? _mi.name : pile.materialDrop, '#7ddd55'); }
         if (pile.materialDrops && pile.materialDrops.length) { for (const _md of pile.materialDrops) { backpack.materials[_md.id] = (backpack.materials[_md.id] || 0) + _md.qty; showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), '+' + _md.qty + ' ' + _md.name, matDropColor(_md.id)); } }
         if (pile.foodDrop) { backpack.food.push(pile.foodDrop); showHitSplat(toWorldX(pile.x), toWorldZ(pile.y), pile.foodDrop.name + ' +' + pile.foodDrop.healAmt + 'HP', '#ffaa44'); }
