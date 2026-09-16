@@ -15,12 +15,35 @@ code, no shared save, no shared schema. Open the file directly or serve it stati
 | Codebase | New standalone file, separate save slot |
 | Combat | Virtual joystick + auto-targeted attacks |
 | Pacing | Active-only — no offline progress, no timers |
-| Visuals | Canvas arena for combat, DOM/CSS cards for every menu |
+| Visuals | Rigged skeletal sprites in a canvas arena; DOM inventory grid |
 
-Joystick action and a card-game look pull in opposite directions, so they're split:
-the canvas renders **only** the fight (vector shapes, rarity glow, damage numbers,
-particles, screen shake). Everything you read stats on — backpack, equipment, forge,
-loot reveal, level-up — is DOM/CSS.
+The canvas renders **only** the fight. Everything you read stats on — inventory,
+equipment, forge, loot reveal, level-up — is DOM/CSS.
+
+## Sprite engine
+
+Every character is a **bone hierarchy**, not a flipbook. Each bone bakes its shaded
+body part once into an offscreen canvas (vertical gradient, dark outline, clipped
+specular), so a frame is one `drawImage` per bone. Animation is **procedural**: a
+`pose()` function writes joint angles each frame, giving real interpolated motion
+rather than N fixed frames.
+
+- **9 rig archetypes** — humanoid, quadruped, arachnid, wraith, golem, flyer, blob,
+  worm, eye — mapped from each enemy's existing `shape`, so all 65 enemies are
+  covered by palette and proportion variation.
+- **States**: idle (breathing), walk (limb swing driven by *distance actually
+  travelled*, so slowed or shoved enemies stay in sync), attack (anticipation →
+  strike → recover, and separate draw-and-loose / gather-and-thrust poses for bow
+  and staff), hurt flinch, and a death collapse — enemies leave a body that topples
+  and fades instead of popping out of existence.
+- **Equipped weapons render on the hero** and swing with the arm: blade family,
+  axe, mace, bow with a drawing string, crossbow, gun, staff and orb with emissive
+  tips, tome.
+- Soft contact shadows, depth-sorted draw order, and rig ground-lines/widths
+  **measured from the rig itself** at boot, so shadows and health bars stay correct
+  when proportions change.
+- Palettes are **luminance-aware**: ice and bone enemies were blowing out to flat
+  white silhouettes until the base got pulled down to leave headroom for highlights.
 
 ---
 
@@ -41,6 +64,10 @@ loot reveal, level-up — is DOM/CSS.
 - **Treasure chests** spawn on a kill counter, roll with a rarity floor of Uncommon.
 - **Elites** every 22 kills, **bosses** every 75, with telegraphed charge/slam/barrage/summon patterns.
 - **WebAudio** synthesised SFX — no audio files. Rarity-scaled loot stings.
+- **Inventory grid** — square rarity-framed item cells with glow, ilvl and +N badges,
+  padded to full carrying capacity; tap for the detail sheet.
+- **Graphics tiers** (Sharp / Balanced / Battery) plus an adaptive fallback that
+  drops a tier after sustained slow frames.
 
 ## Controls
 
@@ -59,8 +86,13 @@ Tested headless in Chromium at 390×844 @2x:
 
 - No JS errors across all 5 zones, all 16 weapons, all 10 relics, death/respawn,
   bulk salvage, and a save/load round-trip.
-- **60fps locked** in a saturated Voidspire arena (18 enemies + boss + projectiles +
-  particles): median 16.7ms, p99 16.9ms, **0 frames over 33ms** across 716 frames.
+- **~60fps** in a saturated Voidspire arena (18 rigged enemies + boss + projectiles
+  + particles): median 16.7ms, p99 23.7ms, **0 frames over 33ms**.
+- Rig rendering is **fill-rate bound, not draw-call bound** — established by
+  ablation, not assumption. At DPR 2 the same scene runs ~48fps; at DPR 1.5 it holds
+  60 with every effect on, so the arena canvas caps at 1.5 (the DOM UI is unaffected
+  and stays crisp). A packed part-atlas was tried and measured *slower* — rebuilding
+  an atlas per entity size/flash palette cost more than the texture binds it saved.
 - Balance curve: trash TTK 1.5s → 4.6s across tiers 1→5; bosses 13s → 42s;
   time-to-die with three enemies in contact 40s → 7-12s. Melee tankiest (63%
   mitigation), magic glassiest (38%) but higher burst, ranged highest DPS ceiling.
