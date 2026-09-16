@@ -818,14 +818,47 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   </div></div>
 
   <div id="intro">
+    <noscript><div style="position:fixed;left:10px;right:10px;top:10px;z-index:99999;
+      background:#2a1016;border:1px solid #e0455a;color:#ffd9e0;border-radius:10px;
+      padding:12px;font:13px/1.6 system-ui,sans-serif;text-align:left;">
+      <b>JavaScript is turned off in this viewer.</b><br>
+      RIFTFALL cannot run here. Open this page in Safari or Chrome
+      (or tap the download icon and open the file) to play.
+    </div></noscript>
     <h1>RIFTFALL</h1>
     <div class="sub">Zone Looter</div>
-    <div class="classPick" id="classPick"></div>
+    <div class="classPick" id="classPick"><button class="classOpt" data-cls="melee" style="--cc:#f0955a"><span class="cIc2">⚔️</span><span class="cNm">Vanguard</span><span class="cDs">Sword · high HP</span></button><button class="classOpt" data-cls="range" style="--cc:#6ee7a8"><span class="cIc2">🏹</span><span class="cNm">Warden</span><span class="cDs">Bow · crit speed</span></button><button class="classOpt" data-cls="magic" style="--cc:#8ab4ff"><span class="cIc2">🔮</span><span class="cNm">Riftbinder</span><span class="cDs">Staff · burst AoE</span></button></div>
     <div id="introDesc">Choose your discipline. You can equip any weapon later — this only sets your starting kit and stat leanings.</div>
     <button class="btn pri" style="width:100%;max-width:340px;margin-top:10px;" id="startBtn" disabled>Enter the Rift</button>
   </div>
 
 </div>
+<script>
+/* Boot watchdog. Registered in a separate, earlier script so that a parse
+   error in the main script below is still reported instead of failing silent. */
+window.__bootOk = false; window.__bootErr = null;
+window.addEventListener('error', function(e){
+  if(!window.__bootErr) window.__bootErr =
+    (e.message||'error')+'  @line '+(e.lineno||'?')+':'+(e.colno||'?');
+});
+setTimeout(function(){
+  if(window.__bootOk) return;
+  try{
+    if(document.getElementById('bootErrBox')) return;
+    var d = document.createElement('div');
+    d.id = 'bootErrBox';
+    d.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:99999;'+
+      'background:#2a1016;border:1px solid #e0455a;color:#ffd9e0;border-radius:10px;'+
+      'padding:10px;font:11px/1.5 ui-monospace,Menlo,monospace;text-align:left;'+
+      'white-space:pre-wrap;word-break:break-word;max-height:60%;overflow:auto;';
+    d.textContent = 'RIFTFALL did not start.\n'+
+      (window.__bootErr || 'No error captured - the script was blocked or cut short.')+
+      '\n\nscript bytes seen: '+(window.__scriptEnd||0)+
+      '\nUA: '+navigator.userAgent;
+    document.body.appendChild(d);
+  }catch(_){}
+}, 2500);
+</script>
 <script>
 "use strict";
 /* ================================================================
@@ -4348,6 +4381,7 @@ function boot(){
 }
 
 /* boot or intro */
+window.__scriptEnd = 1;
 buildIntro();
 if(loadGame()){
   $('intro').classList.add('gone');
@@ -4357,6 +4391,7 @@ if(loadGame()){
   running = false;
 }
 requestAnimationFrame(loop);
+window.__bootOk = true;
 </script>
 </body>
 </html>
