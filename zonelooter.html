@@ -1671,7 +1671,7 @@ function resizeCanvas(){
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W+'px'; cv.style.height = H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  buildBackdrop();
+  if(S) buildBackdrop();
 }
 window.addEventListener('resize', ()=>{ resizeCanvas(); });
 
@@ -1701,43 +1701,56 @@ function drawGlow(x,y,col,size,alpha){
   ctx.globalAlpha = 1;
 }
 
-/* parallax backdrop, rebuilt on zone change/resize */
-let backdrop=null, bdMotes=[];
+/* ================================================================
+   WORLD — an explorable zone, not a survival arena
+   ----------------------------------------------------------------
+   The zone is several screens wide with a camera that follows the
+   player. Enemies live in fixed CAMPS and idle at home until you walk
+   into their aggro radius; pulling one alerts its packmates. Wander too
+   far from home and they leash back and heal. Clear a camp and it stays
+   clear until it respawns, so you choose your fights and get breathing
+   room between them.
+   ================================================================ */
+const WORLD = {w:1600, h:1900};
+let cam = {x:0, y:0};
+let packs = [], props = [], chests = [], nearChest = null;
+
+/* ---------- tiling ground ---------- */
+let bdTile=null, bdPattern=null, bdMotes=[];
+const TILE = 512;
 function buildBackdrop(){
   const z = ZONE_BY_ID[S?S.zone:'verdant'];
-  backdrop = document.createElement('canvas');
-  backdrop.width = Math.round(W); backdrop.height = Math.round(H);
-  const g = backdrop.getContext('2d');
-  const grd = g.createLinearGradient(0,0,0,H);
-  grd.addColorStop(0, z.sky); grd.addColorStop(0.55, z.sky2); grd.addColorStop(1, z.ground);
-  g.fillStyle = grd; g.fillRect(0,0,W,H);
-  /* ground texture blobs */
-  for(let i=0;i<70;i++){
-    const x=Math.random()*W, y=Math.random()*H, r=rnd(14,70);
-    g.globalAlpha = rnd(0.02,0.07);
-    g.fillStyle = i%3===0 ? z.accent : '#ffffff';
-    g.beginPath(); g.ellipse(x,y,r,r*rnd(0.35,0.7),rnd(0,3.14),0,6.283); g.fill();
-  }
+  bdTile = document.createElement('canvas');
+  bdTile.width = bdTile.height = TILE;
+  const g = bdTile.getContext('2d');
+  g.fillStyle = shade(z.ground,-0.34); g.fillRect(0,0,TILE,TILE);
+  /* wrap each blob to all 9 offsets so the tile has no visible seam */
+  const blob=(x,y,r,col,a,sq,rot)=>{
+    g.globalAlpha=a; g.fillStyle=col;
+    for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){
+      g.beginPath(); g.ellipse(x+ox*TILE, y+oy*TILE, r, r*sq, rot, 0, 6.283); g.fill();
+    }
+  };
+  for(let i=0;i<30;i++)
+    blob(Math.random()*TILE, Math.random()*TILE, rnd(18,78),
+         i%4===0 ? z.accent : z.sky,
+         rnd(0.014,0.040), rnd(0.35,0.8), rnd(0,3.14));
+  for(let i=0;i<22;i++)
+    blob(Math.random()*TILE, Math.random()*TILE, rnd(5,17), shade(z.sky2,-0.2),
+         rnd(0.12,0.26), rnd(0.5,1), 0);
   g.globalAlpha=1;
-  /* rift cracks */
-  g.strokeStyle = z.accent; g.globalAlpha=0.10; g.lineWidth=1.4;
-  for(let i=0;i<7;i++){
-    g.beginPath(); let x=Math.random()*W, y=Math.random()*H; g.moveTo(x,y);
-    for(let j=0;j<5;j++){ x+=rnd(-46,46); y+=rnd(-46,46); g.lineTo(x,y); }
-    g.stroke();
-  }
-  g.globalAlpha=1;
+  bdPattern = ctx.createPattern(bdTile, 'repeat');
   bdMotes = [];
-  for(let i=0;i<26;i++) bdMotes.push({x:Math.random()*W,y:Math.random()*H,
-    r:rnd(0.7,2.2),s:rnd(5,22),a:rnd(0.12,0.4)});
+  for(let i=0;i<30;i++) bdMotes.push({x:Math.random()*TILE*3, y:Math.random()*TILE*3,
+    r:rnd(0.7,2.2), s:rnd(5,22), a:rnd(0.12,0.4)});
 }
 
 /* ================================================================
    ENTITIES
    ================================================================ */
-let P=null, foes=[], shots=[], parts=[], drops=[], fx=[], chest=null;
-let kills=0, elitePity=0, bossPity=0, chestPity=0, shake=0, running=false, paused=true;
-let bossRef=null, waveT=0;
+let P=null, foes=[], shots=[], parts=[], drops=[], fx=[];
+let kills=0, shake=0, running=false, paused=true;
+let bossRef=null;
 
 function zoneLvl(){
   const z = ZONE_BY_ID[S.zone];
@@ -1750,59 +1763,125 @@ function makePlayer(){
     hitStreak:{},chainHit:0,bulwark:0,bulwarkT:0,dead:false,flash:0,
     an:newAnim(), t:0, px:0, py:0};
 }
-/* Enemies tear in through the rift rather than walking from off-screen —
-   keeps the arena dense on a phone-sized viewport. Always >=MIN_SPAWN_D away. */
-const MIN_SPAWN_D = 150, MAX_SPAWN_D = 290;
-function spawnPoint(){
-  const px = P?P.x:W/2, py = P?P.y:H*0.62;
-  for(let i=0;i<14;i++){
-    const a = rnd(0,6.283), d = rnd(MIN_SPAWN_D,MAX_SPAWN_D);
-    const x = px+Math.cos(a)*d, y = py+Math.sin(a)*d;
-    if(x>24 && x<W-24 && y>70 && y<H-24) return {x,y};
-  }
-  /* fallback: push to the far side of the arena */
-  return {x: px<W/2 ? W-40 : 40, y: clamp(py + (py<H/2?190:-190), 74, H-30)};
-}
-function makeFoe(def, rank){
+function makeFoe(def, rank, hx, hy){
   const z = ZONE_BY_ID[S.zone], L = zoneLvl();
   const hpN = TIER_HP_NORM[z.tier-1], dmgN = TIER_DMG_NORM[z.tier-1];
   let hp = TUNE.eHp(L)*(def.hp/hpN)*(1+(z.tier-1)*0.12);
   if(rank===1) hp *= TUNE.eliteHp;
   if(rank===2) hp *= TUNE.bossHp;
-  const p = spawnPoint();
+  if(hx==null){ hx = P?P.x+rnd(-180,180):W/2; hy = P?P.y+rnd(-180,180):H/2; }
   const f = {
-    def, rank:rank||0, x:p.x, y:p.y, r:def.size, hp, max:hp,
+    def, rank:rank||0, x:hx, y:hy, r:def.size, hp, max:hp,
     dmg: TUNE.eDmg(L)*(def.dmg/dmgN), spd: 42 + def.spd*30, lvl:L,
     icd:0, st:0, t:rnd(0,3), vx:0,vy:0, flash:0, born:0,
     burn:0,burnD:0,pois:0,poisD:0,slow:0,slowA:0,stun:0,
     ang:rnd(0,6.28), pat:0, patT:0, tele:0,
     an:newAnim(), px:0, py:0,
+    /* camp behaviour */
+    home:{x:hx,y:hy}, state:'idle', wt:rnd(0,2), wx:hx, wy:hy,
+    aggroR: rank===2?250:rank===1?200:158,
+    leashR: rank===2?620:470,
+    pack:null,
   };
-  /* keep the boss clear of the HUD + boss bar at the top of the arena */
-  if(def.ai==='boss'){ f.x=W/2; f.y=Math.max(H*0.30, 126+def.size); f.spd=24+def.spd*22; f.warp=1.1; }
+  if(def.ai==='boss') f.spd = 24+def.spd*22;
   return f;
 }
-function spawnWave(){
+
+/* ---------- camps ---------- */
+function makePack(kind,pos){ return {kind, x:pos.x, y:pos.y, cleared:false, respawn:0, members:[]}; }
+function spawnPack(pk){
   const z = ZONE_BY_ID[S.zone];
-  const maxAlive = 8 + Math.min(10, Math.floor(z.tier*2));
-  if(bossRef) return;
-  if(foes.length >= maxAlive) return;
-  foes.push(makeFoe(pick(z.enemies),0));
+  pk.members.length = 0;
+  const ringPos=(n,rad)=>{
+    const out=[];
+    for(let i=0;i<n;i++){ const a=i/n*6.283+rnd(0,0.9), d=rad*rnd(0.45,1);
+      out.push([Math.cos(a)*d, Math.sin(a)*d]); }
+    return out;
+  };
+  const add=(def,rank,ox,oy)=>{
+    const f = makeFoe(def, rank,
+      clamp(pk.x+ox, 40, WORLD.w-40), clamp(pk.y+oy, 40, WORLD.h-40));
+    f.pack = pk; f.warp = 0.5; foes.push(f); pk.members.push(f);
+  };
+  if(pk.kind==='boss'){
+    add(z.boss,2,0,0);
+    for(const [ox,oy] of ringPos(2,96)) add(pick(z.enemies),0,ox,oy);
+  } else if(pk.kind==='elite'){
+    add(pick(z.elites),1,0,0);
+    for(const [ox,oy] of ringPos(rint(2,3),84)) add(pick(z.enemies),0,ox,oy);
+  } else {
+    for(const [ox,oy] of ringPos(rint(3,5),74)) add(pick(z.enemies),0,ox,oy);
+  }
+  pk.cleared = false; pk.respawn = 0;
 }
-function spawnElite(){
-  const z = ZONE_BY_ID[S.zone];
-  const f = makeFoe(pick(z.elites),1);
-  foes.push(f); toast('⚠ Elite: '+f.def.n); sfx('boss'); shake=8;
-}
-function spawnBoss(){
-  const z = ZONE_BY_ID[S.zone];
-  bossRef = makeFoe(z.boss,2);
-  foes.push(bossRef);
-  $('bossName').textContent = z.boss.n;
-  $('bossBar').classList.add('on');
-  toast('☠ '+z.boss.n+' awakens'); sfx('boss'); shake=16; buzz(120);
+function aggroPack(f){
+  if(f.state==='aggro') return;
+  f.state = 'aggro';
+  if(f.pack) for(const m of f.pack.members)
+    if(m.state==='idle' && Math.hypot(m.x-f.x, m.y-f.y) < 200) m.state='aggro';
+  if(f.rank===2){
+    bossRef = f;
+    $('bossName').textContent = f.def.n;
+    $('bossBar').classList.add('on');
+    toast('☠ '+f.def.n); sfx('boss'); shake=12; buzz(90);
+  } else if(f.rank===1 && !f.alerted){
+    f.alerted = 1; toast('⚠ '+f.def.n); sfx('boss'); shake=5;
+  }
 }
 
+/* ---------- zone generation ---------- */
+function buildZoneWorld(){
+  const z = ZONE_BY_ID[S.zone];
+  WORLD.w = Math.round(clamp(W*3.4, 1350, 2100));
+  WORLD.h = Math.round(clamp(H*2.9, 1650, 2500));
+  buildBackdrop();
+
+  foes.length=0; packs.length=0; props.length=0; chests.length=0;
+  shots.length=0; parts.length=0; drops.length=0; fx.length=0;
+  if(typeof corpses!=='undefined') corpses.length=0;
+  bossRef=null; nearChest=null;
+  $('bossBar').classList.remove('on'); $('prompt').style.display='none';
+
+  /* enter from the south edge */
+  P.x = WORLD.w*0.5; P.y = WORLD.h - 190;
+  cam.x = clamp(P.x-W/2, 0, Math.max(0,WORLD.w-W));
+  cam.y = clamp(P.y-H/2, 0, Math.max(0,WORLD.h-H));
+
+  for(let i=0;i<110;i++)
+    props.push({x:rnd(24,WORLD.w-24), y:rnd(24,WORLD.h-24),
+      r:rnd(9,30), k:Math.floor(Math.random()*3), a:rnd(0,6.283)});
+
+  const spots = [];
+  const place=(minD, fromPlayer)=>{
+    for(let t=0;t<250;t++){
+      const x=rnd(150,WORLD.w-150), y=rnd(150,WORLD.h-150);
+      if(Math.hypot(x-P.x,y-P.y) < fromPlayer) continue;
+      let ok=true;
+      for(const s of spots) if(Math.hypot(x-s.x,y-s.y) < minD){ ok=false; break; }
+      if(ok){ spots.push({x,y}); return {x,y}; }
+    }
+    const f={x:rnd(150,WORLD.w-150), y:rnd(150,WORLD.h-150)}; spots.push(f); return f;
+  };
+  for(let i=0;i<6+z.tier;i++) packs.push(makePack('normal', place(300, 420)));
+  for(let i=0;i<2;i++)        packs.push(makePack('elite',  place(340, 620)));
+  /* boss sits as far from the entrance as the layout allows */
+  let best=null, bd=-1;
+  for(let t=0;t<160;t++){
+    const p={x:rnd(170,WORLD.w-170), y:rnd(170,WORLD.h-170)};
+    let near=1e9; for(const s of spots) near=Math.min(near, Math.hypot(p.x-s.x,p.y-s.y));
+    if(near<300) continue;
+    const d=Math.hypot(p.x-P.x,p.y-P.y);
+    if(d>bd){ bd=d; best=p; }
+  }
+  packs.push(makePack('boss', best||{x:WORLD.w/2, y:190}));
+  for(const pk of packs) spawnPack(pk);
+
+  for(let i=0;i<3;i++){
+    const c=place(260, 300);
+    chests.push({x:c.x, y:c.y, r:16, t:rnd(0,3), open:false, respawn:0});
+  }
+}
+function campsCleared(){ let n=0; for(const p of packs) if(p.cleared) n++; return n; }
 /* particles */
 function burst(x,y,col,n,spd,life,size){
   const cap = 260;
@@ -1820,7 +1899,8 @@ function fct(x,y,txt,cls){
   if(fctCount>26) return;
   const e = document.createElement('div');
   e.className = 'dmg'+(cls?' '+cls:'');
-  e.textContent = txt; e.style.left = x+'px'; e.style.top = y+'px';
+  e.textContent = txt;
+  e.style.left = (x-cam.x)+'px'; e.style.top = (y-cam.y)+'px';   /* world -> screen */
   fctEl.appendChild(e); fctCount++;
   setTimeout(()=>{ e.remove(); fctCount--; }, 880);
 }
@@ -1851,6 +1931,7 @@ function rollHit(mult){
 function damageFoe(f, dmg, crit, opts){
   opts = opts||{};
   f.hp -= dmg; f.flash = 0.12; f.an.hurt = 1;
+  if(f.state!=='aggro') aggroPack(f);
   if(!opts.silent){
     fct(f.x, f.y-f.r-6, Math.round(dmg).toString(), crit?'crit':'');
     if(crit){ sfx('crit'); shake=Math.max(shake,5); } else sfx('hit');
@@ -1921,12 +2002,23 @@ function killFoe(f){
     }
   }
   if(f===bossRef){ bossRef=null; $('bossBar').classList.remove('on'); }
+  if(f.pack){
+    const mi = f.pack.members.indexOf(f);
+    if(mi>=0) f.pack.members.splice(mi,1);
+    if(f.pack.members.length===0 && !f.pack.cleared){
+      f.pack.cleared = true; f.pack.respawn = 55;
+      const lbl = f.pack.kind==='boss' ? 'Boss camp cleared'
+                : f.pack.kind==='elite' ? 'Elite camp cleared' : 'Camp cleared';
+      toast('✔ '+lbl+'  ('+(campsCleared())+'/'+packs.length+')');
+      ring(f.pack.x, f.pack.y, '#5ed39a', 20, 130, 0.6);
+      sfx('chest');
+    }
+  }
 
   kills++; S.meta.kills++;
   S.zoneKills[S.zone] = (S.zoneKills[S.zone]||0)+1;
   gainXp(TUNE.eXp(f.lvl, f.rank));
   rollDrops(f);
-  elitePity++; bossPity++; chestPity++;
 }
 function detonate(f){
   ring(f.x,f.y,'#ff9a4c',10,86,0.32);
@@ -1980,14 +2072,10 @@ function genZoneItem(z, rank){
   if(kindRoll<0.86) return rollItem({kind:'offhand',ilvl,rar});
   return rollItem({kind:'trinket',ilvl,rar});
 }
-function spawnChest(){
-  chest = {x:rnd(60,W-60), y:rnd(110,H-130), r:16, t:0, opened:false};
-  toast('✦ A treasure chest materialises');
-  sfx('cast');
-}
 function openChest(){
-  if(!chest || chest.opened) return;
-  chest.opened = true;
+  const c = nearChest;
+  if(!c || c.open) return;
+  c.open = true; c.respawn = 95;
   S.meta.chests++;
   const z = ZONE_BY_ID[S.zone];
   const got = [];
@@ -2002,10 +2090,10 @@ function openChest(){
   const g = Math.round(rnd(40,90)*z.tier*(1+zoneLvl()*0.4)*(1+D.goldF/100));
   gainGold(g);
   addMat(z.mats[0], rint(2,4+z.tier));
-  burst(chest.x,chest.y,'#e8b44a',34,240,0.7,3.5);
-  ring(chest.x,chest.y,'#e8b44a',8,110,0.45);
+  burst(c.x,c.y,'#e8b44a',34,240,0.7,3.5);
+  ring(c.x,c.y,'#e8b44a',8,110,0.45);
   sfx('chest'); buzz(80); shake=7;
-  chest = null; $('prompt').style.display='none';
+  nearChest = null; $('prompt').style.display='none';
   markAlert();
   showLoot(got, g);
 }
@@ -2282,7 +2370,7 @@ function update(dt){
       P.x += ix*sp*dt; P.y += iy*sp*dt;
       const m=Math.hypot(ix,iy)||1; P.fx=ix/m; P.fy=iy/m;
     }
-    P.x = clamp(P.x, 16, W-16); P.y = clamp(P.y, 58, H-16);
+    P.x = clamp(P.x, 18, WORLD.w-18); P.y = clamp(P.y, 18, WORLD.h-18);
 
     P.atkCd  = Math.max(0,P.atkCd-dt);
     P.dashCd = Math.max(0,P.dashCd-dt);
@@ -2328,6 +2416,34 @@ function update(dt){
     const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1);
     const ai = f.def.ai;
 
+    /* --- camp states --- */
+    if(f.state==='idle'){
+      if(d < f.aggroR){ aggroPack(f); }
+      else {
+        if(d < 1100){                       /* far camps cost nothing to idle */
+          f.wt -= dt;
+          if(f.wt<=0){ f.wt=rnd(1.8,3.6); f.wx=f.home.x+rnd(-36,36); f.wy=f.home.y+rnd(-36,36); }
+          const wx=f.wx-f.x, wy=f.wy-f.y, wd=Math.hypot(wx,wy);
+          if(wd>4){ f.x+=wx/wd*sp*0.26*dt; f.y+=wy/wd*sp*0.26*dt; }
+        }
+        if(f.hp<f.max) f.hp=Math.min(f.max, f.hp+f.max*0.22*dt);
+        continue;
+      }
+    }
+    if(f.state==='return'){
+      const hx=f.home.x-f.x, hy=f.home.y-f.y, hd=Math.hypot(hx,hy)||1;
+      f.x+=hx/hd*f.spd*1.6*dt; f.y+=hy/hd*f.spd*1.6*dt;
+      f.hp=Math.min(f.max, f.hp+f.max*0.55*dt);
+      if(hd<18){ f.state='idle'; f.hp=f.max; f.alerted=0; if(f===bossRef){ bossRef=null;
+        $('bossBar').classList.remove('on'); } }
+      continue;
+    }
+    if(Math.hypot(f.x-f.home.x, f.y-f.home.y) > f.leashR){
+      f.state='return';
+      if(f===bossRef){ bossRef=null; $('bossBar').classList.remove('on'); }
+      continue;
+    }
+
     if(ai==='chase' || ai==='splitter'){
       f.x+=nx*sp*dt; f.y+=ny*sp*dt;
     }
@@ -2368,7 +2484,7 @@ function update(dt){
       hurtPlayer(f.dmg*(f.rank===2?1.35:1), f.lvl);
       if(D.thorns>0) damageFoe(f, D.thorns, false, {silent:true,noProc:true});
     }
-    f.x = clamp(f.x,-40,W+40); f.y = clamp(f.y,-40,H+40);
+    f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
   }
 
   /* ---- soft separation ----
@@ -2422,7 +2538,7 @@ function update(dt){
       }
     }
     s.x+=s.vx*dt; s.y+=s.vy*dt;
-    if(s.life<=0 || s.x<-30||s.x>W+30||s.y<-30||s.y>H+30){ shots.splice(i,1); continue; }
+    if(s.life<=0 || s.x<-30||s.x>WORLD.w+30||s.y<-30||s.y>WORLD.h+30){ shots.splice(i,1); continue; }
 
     if(s.own==='p'){
       for(const f of foes.slice()){
@@ -2475,19 +2591,27 @@ function update(dt){
     if(d.life>1.1) drops.splice(i,1);
   }
 
-  /* ---- spawns ---- */
-  waveT -= dt;
-  if(waveT<=0){ waveT = Math.max(0.25, 1.1 - z.tier*0.12); spawnWave(); }
-  if(!bossRef && elitePity>=22){ elitePity=0; spawnElite(); }
-  if(!bossRef && bossPity>=75){ bossPity=0; spawnBoss(); }
-  if(!chest && chestPity>=32){ chestPity=0; spawnChest(); }
-
-  /* chest prompt */
-  if(chest){
-    chest.t+=dt;
-    const near = Math.hypot(P.x-chest.x,P.y-chest.y) < 54;
-    $('prompt').style.display = near?'block':'none';
+  /* ---- camps respawn once you are well away from them ---- */
+  for(const pk of packs){
+    if(!pk.cleared) continue;
+    pk.respawn -= dt;
+    if(pk.respawn<=0 && Math.hypot(P.x-pk.x, P.y-pk.y) > 520) spawnPack(pk);
   }
+
+  /* ---- chests ---- */
+  nearChest = null;
+  for(const c of chests){
+    c.t += dt;
+    if(c.open){ c.respawn-=dt; if(c.respawn<=0 && Math.hypot(P.x-c.x,P.y-c.y)>420){ c.open=false; } continue; }
+    if(Math.hypot(P.x-c.x, P.y-c.y) < 56) nearChest = c;
+  }
+  $('prompt').style.display = nearChest ? 'block' : 'none';
+
+  /* ---- camera ---- */
+  const tcx = clamp(P.x - W/2, 0, Math.max(0, WORLD.w-W));
+  const tcy = clamp(P.y - H/2, 0, Math.max(0, WORLD.h-H));
+  const k = Math.min(1, dt*7.5);
+  cam.x += (tcx-cam.x)*k; cam.y += (tcy-cam.y)*k;
 
   if(shake>0) shake = Math.max(0, shake-dt*36);
   syncHud();
@@ -3411,16 +3535,63 @@ function render(){
   ctx.save();
   if(shake>0.2) ctx.translate(rnd(-shake,shake)*0.5, rnd(-shake,shake)*0.5);
 
-  if(backdrop && GFX.backdrop) ctx.drawImage(backdrop,0,0,W,H);
-  else { ctx.fillStyle=z.sky2; ctx.fillRect(0,0,W,H); }
+  ctx.translate(-cam.x, -cam.y);
+  const vx0=cam.x, vy0=cam.y, vx1=cam.x+W, vy1=cam.y+H;
+
+  if(bdPattern && GFX.backdrop){ ctx.fillStyle=bdPattern; ctx.fillRect(vx0,vy0,W,H); }
+  else { ctx.fillStyle=z.ground; ctx.fillRect(vx0,vy0,W,H); }
+
+  /* world edge: darkened band so the boundary reads as terrain, not a bug */
+  ctx.fillStyle='rgba(0,0,0,.42)';
+  if(vx0<0) ctx.fillRect(vx0,vy0,-vx0,H);
+  if(vy0<0) ctx.fillRect(vx0,vy0,W,-vy0);
+  if(vx1>WORLD.w) ctx.fillRect(WORLD.w,vy0,vx1-WORLD.w,H);
+  if(vy1>WORLD.h) ctx.fillRect(vx0,WORLD.h,W,vy1-WORLD.h);
+
+  /* scenery */
+  for(const pr of props){
+    if(pr.x<vx0-40||pr.x>vx1+40||pr.y<vy0-40||pr.y>vy1+40) continue;
+    ctx.globalAlpha=0.5;
+    ctx.fillStyle='#000'; ctx.beginPath();
+    ctx.ellipse(pr.x, pr.y+pr.r*0.42, pr.r*0.82, pr.r*0.3, 0,0,6.283); ctx.fill();
+    ctx.globalAlpha=1;
+    if(pr.k===0){                       /* boulder */
+      ctx.fillStyle=shade(z.ground,0.18); ctx.beginPath();
+      ctx.ellipse(pr.x,pr.y,pr.r*0.85,pr.r*0.62,pr.a,0,6.283); ctx.fill();
+      ctx.fillStyle=shade(z.ground,0.34); ctx.beginPath();
+      ctx.ellipse(pr.x-pr.r*0.18,pr.y-pr.r*0.18,pr.r*0.45,pr.r*0.3,pr.a,0,6.283); ctx.fill();
+    } else if(pr.k===1){                /* crystal shard */
+      ctx.fillStyle=z.accent; ctx.globalAlpha=0.55;
+      ctx.beginPath(); ctx.moveTo(pr.x,pr.y-pr.r);
+      ctx.lineTo(pr.x+pr.r*0.34,pr.y+pr.r*0.4); ctx.lineTo(pr.x-pr.r*0.34,pr.y+pr.r*0.4);
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+    } else {                            /* scrub */
+      ctx.strokeStyle=shade(z.ground,0.30); ctx.lineWidth=2; ctx.lineCap='round';
+      for(let i=0;i<4;i++){ const a=pr.a+i*0.7;
+        ctx.beginPath(); ctx.moveTo(pr.x,pr.y+pr.r*0.35);
+        ctx.lineTo(pr.x+Math.cos(a-1.57)*pr.r*0.6, pr.y+pr.r*0.35-Math.abs(Math.sin(a))*pr.r);
+        ctx.stroke(); }
+    }
+  }
+
+  /* camp markers on the ground */
+  for(const pk of packs){
+    if(pk.x<vx0-120||pk.x>vx1+120||pk.y<vy0-120||pk.y>vy1+120) continue;
+    const col = pk.kind==='boss'?'#f43f5e':pk.kind==='elite'?'#fb923c':z.accent;
+    ctx.globalAlpha = pk.cleared?0.10:0.24;
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.setLineDash([7,9]);
+    ctx.beginPath(); ctx.arc(pk.x,pk.y, pk.kind==='normal'?92:112, 0, 6.283); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+  }
 
   /* drifting motes */
   const now = performance.now()/1000;
   ctx.fillStyle = z.accent;
   for(const m of bdMotes){
-    const yy = (m.y - now*m.s) % H; const ny = yy<0? yy+H : yy;
+    const yy=(m.y - now*m.s) % H, ny=(yy<0?yy+H:yy)+vy0;
+    const xx=m.x % W, nx=(xx<0?xx+W:xx)+vx0;
     ctx.globalAlpha = m.a*0.55;
-    ctx.beginPath(); ctx.arc(m.x, ny, m.r, 0, 6.283); ctx.fill();
+    ctx.beginPath(); ctx.arc(nx, ny, m.r, 0, 6.283); ctx.fill();
   }
   ctx.globalAlpha=1;
 
@@ -3457,15 +3628,17 @@ function render(){
     ctx.globalAlpha=1;
   }
 
-  /* chest */
-  if(chest){
-    const b = Math.sin(chest.t*3)*2;
-    drawGlow(chest.x,chest.y+b,'#e8b44a',34,0.4+Math.sin(chest.t*3)*0.1);
-    ctx.fillStyle='#7a5a24'; ctx.fillRect(chest.x-15,chest.y-8+b,30,18);
+  /* chests */
+  for(const c of chests){
+    if(c.open) continue;
+    if(c.x<vx0-40||c.x>vx1+40||c.y<vy0-40||c.y>vy1+40) continue;
+    const b = Math.sin(c.t*3)*2;
+    drawGlow(c.x,c.y+b,'#e8b44a',34,0.4+Math.sin(c.t*3)*0.1);
+    ctx.fillStyle='#7a5a24'; ctx.fillRect(c.x-15,c.y-8+b,30,18);
     ctx.fillStyle='#a8762c';
-    ctx.beginPath(); ctx.ellipse(chest.x,chest.y-8+b,15,9,0,Math.PI,0); ctx.fill();
-    ctx.fillStyle='#e8b44a'; ctx.fillRect(chest.x-3,chest.y-6+b,6,10);
-    ctx.strokeStyle='#4a3512'; ctx.lineWidth=1.6; ctx.strokeRect(chest.x-15,chest.y-8+b,30,18);
+    ctx.beginPath(); ctx.ellipse(c.x,c.y-8+b,15,9,0,Math.PI,0); ctx.fill();
+    ctx.fillStyle='#e8b44a'; ctx.fillRect(c.x-3,c.y-6+b,6,10);
+    ctx.strokeStyle='#4a3512'; ctx.lineWidth=1.6; ctx.strokeRect(c.x-15,c.y-8+b,30,18);
   }
 
   /* depth-sorted characters: whoever stands lower on screen draws in front */
@@ -3473,7 +3646,11 @@ function render(){
   for(const c of corpses) _zList.push(c);
   for(const f of foes)    _zList.push(f);
   _zList.sort((a,b)=> (a.y+(a.r||0)) - (b.y+(b.r||0)));
-  for(const e of _zList) e.corpse ? drawCorpse(e) : drawFoe(e);
+  for(const e of _zList){
+    const m = (e.r||20)*3 + 40;
+    if(e.x<vx0-m||e.x>vx1+m||e.y<vy0-m||e.y>vy1+m) continue;   /* off-camera */
+    e.corpse ? drawCorpse(e) : drawFoe(e);
+  }
   /* Hero always draws last. Depth-sorting him too is more "correct", but on a
      phone a pack closing in buries the one thing you must never lose track of. */
   if(!P.dead) drawPlayer();
@@ -3507,6 +3684,65 @@ function render(){
   }
   ctx.globalAlpha=1;
   ctx.restore();
+  drawMinimap();
+}
+
+/* ---------- minimap ---------- */
+const MM = 78;
+function drawMinimap(){
+  const z = ZONE_BY_ID[S.zone];
+  const ox = W-MM-8, oy = 104;
+  const s = MM/Math.max(WORLD.w, WORLD.h);
+  const mw = WORLD.w*s, mh = WORLD.h*s;
+  ctx.save();
+  ctx.globalAlpha=0.82;
+  ctx.fillStyle='rgba(6,8,14,.85)';
+  ctx.fillRect(ox-2,oy-2,mw+4,mh+4);
+  ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=1;
+  ctx.strokeRect(ox-2.5,oy-2.5,mw+5,mh+5);
+
+  for(const c of chests){ if(c.open) continue;
+    ctx.fillStyle='#e8b44a';
+    ctx.fillRect(ox+c.x*s-1.5, oy+c.y*s-1.5, 3.5, 3.5); }
+
+  for(const pk of packs){
+    const col = pk.kind==='boss'?'#f43f5e':pk.kind==='elite'?'#fb923c':'#e0455a';
+    ctx.globalAlpha = pk.cleared?0.22:0.95;
+    ctx.fillStyle = col;
+    const r = pk.kind==='boss'?3.6:pk.kind==='elite'?2.8:2.2;
+    ctx.beginPath(); ctx.arc(ox+pk.x*s, oy+pk.y*s, r, 0, 6.283); ctx.fill();
+  }
+  ctx.globalAlpha=0.9;
+
+  /* camera window */
+  ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1;
+  ctx.strokeRect(ox+cam.x*s, oy+cam.y*s, W*s, H*s);
+
+  /* player */
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath(); ctx.arc(ox+P.x*s, oy+P.y*s, 2.6, 0, 6.283); ctx.fill();
+  ctx.restore();
+
+  /* arrow to the nearest uncleared camp when it is off screen */
+  let best=null, bd=1e9;
+  for(const pk of packs){
+    if(pk.cleared) continue;
+    const d=Math.hypot(pk.x-P.x, pk.y-P.y);
+    if(d<bd){ bd=d; best=pk; }
+  }
+  if(best){
+    const sx=best.x-cam.x, sy=best.y-cam.y;
+    if(sx<20||sx>W-20||sy<70||sy>H-90){
+      const a=Math.atan2(best.y-P.y, best.x-P.x);
+      const cx=W/2+Math.cos(a)*(Math.min(W,H)*0.36);
+      const cy=H/2+Math.sin(a)*(Math.min(W,H)*0.36);
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(a);
+      ctx.globalAlpha=0.55;
+      ctx.fillStyle = best.kind==='boss'?'#f43f5e':best.kind==='elite'?'#fb923c':'#e6e9f2';
+      ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(-7,-7); ctx.lineTo(-7,7);
+      ctx.closePath(); ctx.fill(); ctx.restore(); ctx.globalAlpha=1;
+    }
+  }
 }
 
 /* ================================================================
@@ -3523,7 +3759,7 @@ function syncHud(){
   setBar('xpBar', S.xp/TUNE.xpNeed(S.lvl));
   $('lvlPill').textContent = S.lvl;
   $('hudGold').textContent = '🪙 '+fmt(S.gold);
-  $('hudKills').textContent = kills+' kills';
+  $('hudKills').textContent = '⚑ '+campsCleared()+'/'+packs.length+' · '+kills+' kills';
   $('hudZone').textContent = ZONE_BY_ID[S.zone].n;
   if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max); }
   /* cooldown wipes */
@@ -4151,12 +4387,10 @@ $('zoneList').addEventListener('click', e=>{
 });
 function travelTo(id){
   S.zone = id;
-  foes.length=0; shots.length=0; parts.length=0; drops.length=0; fx.length=0;
-  corpses.length=0; chest=null; bossRef=null; kills=0; elitePity=0; bossPity=0; chestPity=0;
-  $('bossBar').classList.remove('on'); $('prompt').style.display='none';
+  kills=0;
   computeStats();
-  P.x=W/2; P.y=H*0.62; P.hp=D.maxHp; P.mp=D.maxMp; P.dead=false;
-  buildBackdrop();
+  P.hp=D.maxHp; P.mp=D.maxMp; P.dead=false;
+  buildZoneWorld();
   toast('Entering '+ZONE_BY_ID[id].n);
   sfx('cast');
   renderZones(); saveGame();
@@ -4288,11 +4522,10 @@ $('lvlOk').addEventListener('click', ()=>{
 });
 $('deathOk').addEventListener('click', ()=>{
   $('deathWrap').classList.remove('open');
-  foes.length=0; shots.length=0; parts.length=0; drops.length=0; fx.length=0;
-  corpses.length=0; chest=null; bossRef=null; kills=0; elitePity=0; bossPity=0; chestPity=Math.max(chestPity,20);
-  $('bossBar').classList.remove('on'); $('prompt').style.display='none';
+  kills=0;
   computeStats();
-  P.dead=false; P.hp=D.maxHp; P.mp=D.maxMp; P.x=W/2; P.y=H*0.62; P.inv=1.6;
+  P.dead=false; P.hp=D.maxHp; P.mp=D.maxMp; P.inv=2.0;
+  buildZoneWorld();
   showTab('pMenu');
   saveGame();
 });
@@ -4367,7 +4600,7 @@ function boot(){
   makePlayer();
   if(S.hp && S.hp<=D.maxHp) P.hp=S.hp;
   if(S.mp && S.mp<=D.maxMp) P.mp=S.mp;
-  buildBackdrop();
+  buildZoneWorld();
   syncPotBtn(); syncHud();
   renderBag(); renderGear(); renderCraft(); renderZones(); renderMenu();
   running = true; paused = false;

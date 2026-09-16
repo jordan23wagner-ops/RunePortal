@@ -15,6 +15,7 @@ code, no shared save, no shared schema. Open the file directly or serve it stati
 | Codebase | New standalone file, separate save slot |
 | Combat | Virtual joystick + auto-targeted attacks |
 | Pacing | Active-only — no offline progress, no timers |
+| Structure | Explorable zone with enemy camps you choose to pull |
 | Visuals | Rigged skeletal sprites in a canvas arena; DOM inventory grid |
 
 The canvas renders **only** the fight. Everything you read stats on — inventory,
@@ -46,6 +47,23 @@ rather than N fixed frames.
   white silhouettes until the base got pulled down to leave headroom for highlights.
 
 ---
+
+## Zone structure
+
+Each zone is a world several screens across with a camera that follows you — not a
+fixed arena. Enemies live in **camps** and idle at home until you walk into their
+aggro radius; pulling one alerts its packmates, so you fight **3–5 at a time**, not
+a continuous horde. Walk away and they leash back to camp and heal. Clear a camp and
+it stays clear for ~55s, and only respawns once you are 520px away.
+
+- ~10 camps per zone: 6+tier normal, 2 elite, 1 boss placed as far from the entrance
+  as the layout allows. 30–45 enemies alive in the world.
+- You enter at the south edge, ~500px from the nearest camp, and explore outward.
+- Minimap (top right) shows camps by kind, chests, the camera window and you;
+  an edge arrow points at the nearest uncleared camp.
+- 3 chests scattered in the world, respawning 95s after opening.
+- Camps cleared is tracked in the HUD (`⚑ 3/10`).
+- Off-camera characters are culled from both AI and drawing.
 
 ## Systems
 
@@ -93,6 +111,10 @@ Tested headless in Chromium at 390×844 @2x:
   60 with every effect on, so the arena canvas caps at 1.5 (the DOM UI is unaffected
   and stays crisp). A packed part-atlas was tried and measured *slower* — rebuilding
   an atlas per entity size/flash palette cost more than the texture binds it saved.
+- Camp loop, measured: everything idle at spawn and outside aggro range; stepping
+  inside wakes the whole pack (3/3) and no other camp; **max 3 enemies engaged at
+  once**; a level-1 character clears a camp in 7–12s finishing at 61–79% HP.
+  Leash traced end to end: chase to 466px from home → return → idle at 33px, healed.
 - Balance curve: trash TTK 1.5s → 4.6s across tiers 1→5; bosses 13s → 42s;
   time-to-die with three enemies in contact 40s → 7-12s. Melee tankiest (63%
   mitigation), magic glassiest (38%) but higher burst, ranged highest DPS ceiling.
