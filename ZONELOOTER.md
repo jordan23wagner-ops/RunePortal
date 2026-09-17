@@ -24,10 +24,21 @@ equipment, forge, loot reveal, level-up — is DOM/CSS.
 ## Sprite engine
 
 Every character is a **bone hierarchy**, not a flipbook. Each bone bakes its shaded
-body part once into an offscreen canvas (vertical gradient, dark outline, clipped
-specular), so a frame is one `drawImage` per bone. Animation is **procedural**: a
-`pose()` function writes joint angles each frame, giving real interpolated motion
-rather than N fixed frames.
+body part once into an offscreen canvas, so a frame is one `drawImage` per bone.
+Animation is **procedural**: a `pose()` function writes joint angles each frame,
+giving real interpolated motion rather than N fixed frames.
+
+**Lighting.** Each part is lit by a two-light model baked into the sprite: a warm
+key (`#fff0cf`) clipped to the upper edge and a cool bounce (`#5f7fc0`) along the
+lower, on top of the body gradient. The first pass used a single flat white
+specular ellipse on every part, which is why stone, fur, chitin and ectoplasm all
+read as the same plastic.
+
+**Materials.** Nine rigs, seven surface treatments, applied per family and baked
+once: `metal` (tight hard specular), `stone` (speckle, heavier outline), `fur`
+(soft dabs along the silhouette), `chitin` (segment banding + gloss), `ecto`
+(no outline, inner glow), `goo` (large wobbling highlight), `feather` (chevron
+vanes). Cost is zero at run time — it is all in the bake.
 
 - **9 rig archetypes** — humanoid, quadruped, arachnid, wraith, golem, flyer, blob,
   worm, eye — mapped from each enemy's existing `shape`, so all 65 enemies are
@@ -45,6 +56,12 @@ rather than N fixed frames.
   when proportions change.
 - Palettes are **luminance-aware**: ice and bone enemies were blowing out to flat
   white silhouettes until the base got pulled down to leave headroom for highlights.
+- **Silhouette and pose.** The humanoid carries pauldrons, because a stick-figure
+  torso loses its shoulder line first at 30px. Attack and hurt deltas were roughly
+  doubled on blob, eye, worm, flyer and arachnid, which previously read as static
+  in a side-by-side of idle/walk/attack/hurt. Characters are drawn at **1.15×**
+  via a `VIS` constant applied only in the draw calls — `f.r` remains the
+  collision radius, so nothing about balance moves.
 
 ---
 
@@ -84,8 +101,10 @@ exploration rather than a corridor.
   the minimap, or steer the off-screen camp arrow.
 - Minimap (top right) shows camps by kind, chests, the camera window and you;
   an edge arrow points at the nearest uncleared camp.
-- 5 chests scattered in the world, respawning 150s after opening and only once
-  you are 800px away.
+- **2 chests** per zone, at least 1100px apart and 900px from the entrance
+  (measured over 40 layouts: 858–2811px apart, nearest ~1750px from spawn, in a
+  world whose diagonal is 5363px). They respawn 150s after opening and only once
+  you are 800px away. A chest should be a find, not a fixture.
 - Camps cleared is tracked in the HUD (`⚑ 3/10`).
 - Off-camera characters are culled from both AI and drawing.
 

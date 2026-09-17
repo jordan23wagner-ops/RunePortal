@@ -1919,8 +1919,9 @@ function buildZoneWorld(){
   }
   packs.push(makePack('boss', best||{x:WORLD.w/2, y:190}));
 
-  for(let i=0;i<5;i++){
-    const c=place(560, 640);
+  /* Two per zone, far apart. A chest should be a find, not a fixture. */
+  for(let i=0;i<2;i++){
+    const c=place(1100, 900);
     chests.push({x:c.x, y:c.y, r:16, t:rnd(0,3), open:false, respawn:0});
   }
 
@@ -2851,6 +2852,13 @@ function shade(hex, amt){
   return '#'+h(r)+h(g)+h(b);
 }
 function lum(hex){ const [r,g,b]=hex2rgb(hex); return (0.299*r+0.587*g+0.114*b)/255; }
+function mix(h1,h2,t){
+  const [r1,g1,b1]=hex2rgb(h1), [r2,g2,b2]=hex2rgb(h2);
+  const h=v=>Math.round(v).toString(16).padStart(2,'0');
+  return '#'+h(lerp(r1,r2,t))+h(lerp(g1,g2,t))+h(lerp(b1,b2,t));
+}
+const KEY_COL = '#fff0cf';   /* warm key light along the upper edge */
+const BNC_COL = '#5f7fc0';   /* cool bounce along the lower edge */
 const palCache = {};
 function paletteFor(col, col2){
   const key = col+col2;
@@ -2866,17 +2874,23 @@ function paletteFor(col, col2){
     mid:  base,
     lite: shade(base, 0.24),
     rim:  shade(base, 0.50),
-    glow: shade(col,  0.72) };
+    glow: shade(col,  0.72),
+    /* a real two-light model: warm key catching the upper edge, cool bounce
+       filling the lower. One flat white specular on every part was why stone,
+       fur, chitin and ectoplasm all read as the same plastic. */
+    key1:   mix(shade(base, 0.62), KEY_COL, 0.40),
+    bounce: mix(base, BNC_COL, 0.45) };
   palCache[key] = p; return p;
 }
 
 /* ---------- baked body parts ---------- */
 const partCache = {}; let partOrder = [];
 const PAD = 5;
-function bakePart(shape, len, wid, pal, role, taper){
+function bakePart(shape, len, wid, pal, role, taper, mat){
   len = Math.max(4, Math.round(len)); wid = Math.max(4, Math.round(wid));
   taper = taper==null?1:taper;
-  const key = shape+'_'+len+'_'+wid+'_'+role+'_'+taper+'_'+pal.key;
+  mat = mat || 'flesh';
+  const key = shape+'_'+len+'_'+wid+'_'+role+'_'+taper+'_'+mat+'_'+pal.key;
   const hit = partCache[key]; if(hit) return hit;
   if(partOrder.length > 1400) delete partCache[partOrder.shift()];
   partOrder.push(key);
@@ -2886,14 +2900,15 @@ function bakePart(shape, len, wid, pal, role, taper){
   c.width = cw; c.height = ch;
   const g = c.getContext('2d');
   g.translate(PAD, PAD+wid/2);
-  paintPart(g, shape, len, wid, pal, role, taper);
+  paintPart(g, shape, len, wid, pal, role, taper, mat);
   const out = {cv:c, ox:PAD, oy:PAD+wid/2};
   partCache[key] = out; return out;
 }
 
 /* Paints one body part at the current origin (bone base, vertically centred). */
-function paintPart(g, shape, len, wid, pal, role, taper){
+function paintPart(g, shape, len, wid, pal, role, taper, mat){
   taper = taper==null?1:taper;
+  mat = mat || 'flesh';
   const base = pal[role] || pal.mid;
   g.beginPath();
   if(shape==='orb'){
@@ -2918,20 +2933,114 @@ function paintPart(g, shape, len, wid, pal, role, taper){
   }
 
   const L  = lum(base);
-  const up = lerp(0.54, 0.14, L), dn = lerp(-0.32,-0.50,L);
+  const up = lerp(0.56, 0.15, L), dn = lerp(-0.36,-0.54,L);
   const grd = g.createLinearGradient(0,-wid/2,0,wid/2);
   grd.addColorStop(0,    shade(base, up));
   grd.addColorStop(0.26, shade(base, up*0.40));
   grd.addColorStop(0.62, base);
   grd.addColorStop(1,    shade(base, dn));
   g.fillStyle = grd; g.fill();
-  g.lineWidth = Math.max(1.5, wid*0.11);
-  g.strokeStyle = pal.out; g.stroke();
-  /* specular sheen, clipped to the part */
+
+  /* Ectoplasm has no hard edge — an outline is what made ghosts read as solid
+     rubber. Stone gets a heavier one. */
+  if(mat!=='ecto'){
+    g.lineWidth = Math.max(1.5, wid*(mat==='stone'?0.155:0.11));
+    g.strokeStyle = pal.out; g.stroke();
+  }
+
+  /* Everything below is clipped to the part, so strokes land as INNER edges. */
   g.save(); g.clip();
-  g.globalAlpha = 0.22; g.fillStyle = '#ffffff';
-  g.beginPath(); g.ellipse(len*0.40,-wid*0.25, len*0.38, wid*0.14, 0,0,6.283); g.fill();
+
+  /* key light: warm, tight to the upper edge */
+  const kg = g.createLinearGradient(0,-wid/2, 0, wid*0.18);
+  kg.addColorStop(0, pal.key1);
+  kg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.strokeStyle = kg; g.lineWidth = Math.max(1.8, wid*0.30);
+  g.globalAlpha = 0.9; g.stroke();
+
+  /* bounce: cool, weaker, along the lower edge */
+  const bg = g.createLinearGradient(0, wid*0.04, 0, wid/2);
+  bg.addColorStop(0, 'rgba(255,255,255,0)');
+  bg.addColorStop(1, pal.bounce);
+  g.strokeStyle = bg; g.lineWidth = Math.max(1.4, wid*0.20);
+  g.globalAlpha = 0.55; g.stroke();
+  g.globalAlpha = 1;
+
+  paintMaterial(g, mat, len, wid, pal, base);
   g.restore();
+}
+
+/* Per-family surface treatment. Baked once per part, so this costs nothing at
+   run time — it is the difference between nine rigs made of one plastic and
+   nine rigs made of stone, fur, chitin, metal, ectoplasm and goo. */
+function paintMaterial(g, mat, len, wid, pal, base){
+  if(mat==='metal'){
+    g.globalAlpha=0.46; g.fillStyle='#ffffff';
+    g.beginPath(); g.ellipse(len*0.44,-wid*0.28, len*0.33, wid*0.070,0,0,6.283); g.fill();
+    g.globalAlpha=0.20;
+    g.beginPath(); g.ellipse(len*0.54,-wid*0.10, len*0.28, wid*0.050,0,0,6.283); g.fill();
+  } else if(mat==='stone'){
+    const n = clamp(Math.round(len*wid/110), 3, 22);
+    for(let i=0;i<n;i++){
+      g.globalAlpha = i%2 ? 0.13 : 0.16;
+      g.fillStyle = i%2 ? '#ffffff' : '#000000';
+      g.beginPath();
+      g.arc(Math.random()*len, (Math.random()-0.5)*wid*0.86,
+            Math.max(0.8, wid*rnd(0.045,0.085)), 0, 6.283);
+      g.fill();
+    }
+  } else if(mat==='fur'){
+    const n = clamp(Math.round(len/3.4), 4, 26);
+    g.fillStyle = shade(base, 0.30);
+    for(let i=0;i<n;i++){
+      g.globalAlpha = 0.20 + (i%3)*0.045;
+      const t=i/n;
+      g.beginPath();
+      g.ellipse(t*len, -wid*0.40 + Math.sin(i*2.1)*wid*0.07,
+                wid*0.17, wid*0.11, 0.55, 0, 6.283);
+      g.fill();
+    }
+  } else if(mat==='chitin'){
+    const segs = clamp(Math.round(len/Math.max(4, wid*0.62)), 2, 9);
+    g.strokeStyle = pal.out; g.globalAlpha=0.32;
+    g.lineWidth = Math.max(0.9, wid*0.055);
+    for(let i=1;i<segs;i++){
+      const x = len*i/segs;
+      g.beginPath(); g.moveTo(x,-wid*0.5); g.lineTo(x-wid*0.13, wid*0.5); g.stroke();
+    }
+    g.globalAlpha=0.34; g.fillStyle='#ffffff';
+    g.beginPath(); g.ellipse(len*0.34,-wid*0.30, len*0.27, wid*0.085,0,0,6.283); g.fill();
+  } else if(mat==='ecto'){
+    g.globalAlpha=0.26; g.fillStyle=pal.glow;
+    g.beginPath(); g.ellipse(len*0.5,0, len*0.52, wid*0.44,0,0,6.283); g.fill();
+    g.globalAlpha=0.16; g.fillStyle='#ffffff';
+    g.beginPath(); g.ellipse(len*0.34,-wid*0.18, len*0.30, wid*0.18,0,0,6.283); g.fill();
+  } else if(mat==='goo'){
+    g.globalAlpha=0.32; g.fillStyle='#ffffff';
+    g.beginPath(); g.ellipse(len*0.33,-wid*0.24, len*0.25, wid*0.19, 0.30,0,6.283); g.fill();
+    g.globalAlpha=0.15;
+    g.beginPath(); g.ellipse(len*0.64, wid*0.20, len*0.19, wid*0.11,0,0,6.283); g.fill();
+  } else if(mat==='feather'){
+    const n = clamp(Math.round(len/6), 3, 10);
+    g.strokeStyle = pal.out; g.globalAlpha=0.24;
+    g.lineWidth = Math.max(0.8, wid*0.045);
+    for(let i=1;i<n;i++){
+      const x = len*i/n;
+      g.beginPath(); g.moveTo(x,-wid*0.42); g.lineTo(x-wid*0.20,0); g.lineTo(x, wid*0.42);
+      g.stroke();
+    }
+  } else if(mat==='cloth'){
+    g.strokeStyle = pal.out; g.globalAlpha=0.16;
+    g.lineWidth = Math.max(0.8, wid*0.04);
+    for(let i=1;i<3;i++){
+      const x = len*i/3;
+      g.beginPath(); g.moveTo(x,-wid*0.40); g.lineTo(x-wid*0.06, wid*0.40); g.stroke();
+    }
+  } else {                                   /* flesh — soft, wide sheen */
+    g.globalAlpha = 0.20; g.fillStyle = '#ffffff';
+    g.beginPath(); g.ellipse(len*0.40,-wid*0.25, len*0.36, wid*0.13, 0,0,6.283); g.fill();
+  }
+  g.globalAlpha = 1;
 }
 
 /* ---------- rig definitions ----------
@@ -2941,13 +3050,17 @@ const B_ = (n,p,ox,oy,ang,len,w,role,z,o)=>Object.assign({n,p,ox,oy,ang,len,w,ro
 const RIGS = {
 
 /* ===== HUMANOID — player, knights, riftsworn ===== */
-human:{ sc:0.76, foot:1.02, bones:[
+human:{ sc:0.76, foot:1.02, mat:'metal', bones:[
   B_('torso',null,  0,    0,   -1.5708, 0.74,0.68,'mid', 3),
   B_('head', 'torso',0.70, 0,    0,      0.54,0.56,'lite',6,{shape:'orb'}),
   B_('armF', 'torso',0.58, 0.19, 2.75,   0.42,0.20,'dark',2),
   B_('foreF','armF', 0.42, 0,    0.30,   0.40,0.17,'dark',2,{taper:0.85}),
   B_('armN', 'torso',0.58,-0.19, 2.75,   0.44,0.21,'mid', 7),
   B_('foreN','armN', 0.44, 0,    0.30,   0.42,0.18,'mid', 7,{taper:0.85}),
+  /* pauldrons: the stick-figure torso had no shoulder line, which is the first
+     thing you lose at 30px. These widen the silhouette where it counts. */
+  B_('pauF', 'torso',0.56, 0.20, -0.55,  0.34,0.30,'dark',3,{shape:'orb',dx:-0.17}),
+  B_('pauN', 'torso',0.56,-0.20, -0.55,  0.37,0.33,'lite',8,{shape:'orb',dx:-0.19}),
   B_('legF', null,   0.15, 0.06, 1.5708, 0.44,0.23,'dark',1),
   B_('shinF','legF', 0.44, 0,    0,      0.44,0.20,'dark',1,{taper:0.82}),
   B_('footF','shinF',0.42, 0,   -1.25,   0.27,0.15,'dark',1),
@@ -2961,12 +3074,13 @@ pose(A,st){
   A.armF=0.12+br*0.06;  A.armN=-0.12-br*0.06;
   A.foreF=0.22; A.foreN=0.22;
   A._y = -br*0.022;
+  A.pauF=A.armF*0.30; A.pauN=A.armN*0.30;
   if(w>0){
-    A.legF += s*0.78*w;              A.legN += -s*0.78*w;
-    A.shinF+= Math.max(0,-s)*0.85*w; A.shinN+= Math.max(0,s)*0.85*w;
-    A.armF += -s*0.66*w;             A.armN += s*0.66*w;
-    A.torso+= 0.07*w;  A.head -= 0.05*w;
-    A._y   += -Math.abs(Math.sin(st.ph))*0.06*w;
+    A.legF += s*0.98*w;              A.legN += -s*0.98*w;
+    A.shinF+= Math.max(0,-s)*1.05*w; A.shinN+= Math.max(0,s)*1.05*w;
+    A.armF += -s*0.82*w;             A.armN += s*0.82*w;
+    A.torso+= 0.09*w;  A.head -= 0.06*w;
+    A._y   += -Math.abs(Math.sin(st.ph))*0.075*w;
   }
   if(st.atk>=0){
     const a=st.atk;
@@ -3002,7 +3116,7 @@ pose(A,st){
 }},
 
 /* ===== QUADRUPED — wolves, boars, hounds, crocs ===== */
-quad:{ sc:0.94, foot:0.82, bones:[
+quad:{ sc:0.94, foot:0.82, mat:'fur', bones:[
   B_('body', null,   0,   -0.12,-0.06, 1.16,0.74,'mid', 4),
   B_('tail', 'body', 0.02, 0,    3.30, 0.62,0.21,'dark',2,{taper:0.22}),
   B_('neck', 'body', 1.06,-0.10,-0.66, 0.34,0.38,'mid', 5),
@@ -3022,8 +3136,8 @@ pose(A,st){
   A.earF=Math.sin(st.time*2.1)*0.10; A.earN=Math.sin(st.time*2.4+1)*0.10;
   A._y=-br*0.015;
   if(w>0){  /* diagonal gait */
-    A.lFF+= s*0.62*w;  A.lBN+= s*0.62*w;
-    A.lFN+=-s*0.62*w;  A.lBF+=-s*0.62*w;
+    A.lFF+= s*0.82*w;  A.lBN+= s*0.82*w;
+    A.lFN+=-s*0.82*w;  A.lBF+=-s*0.82*w;
     A.body+= 0.04*w; A.tail += -s*0.30*w;
     A._y += -Math.abs(s)*0.05*w;
   }
@@ -3037,7 +3151,7 @@ pose(A,st){
 }},
 
 /* ===== ARACHNID — spriggans, spiders, shards, sporelings ===== */
-arach:{ sc:0.99, foot:0.78, bones:(function(){
+arach:{ sc:0.99, foot:0.78, mat:'chitin', bones:(function(){
   const out=[B_('body',null,0,-0.10,0,0.86,0.74,'mid',5,{shape:'orb',dx:-0.43})];
   const A0=[-2.50,-2.05,-1.55,-0.62,-1.10,0.45];
   for(let i=0;i<6;i++){
@@ -3058,14 +3172,15 @@ pose(A,st){
   }
   if(st.atk>=0){
     const d = st.atk<0.35 ? st.atk/0.35 : 1-(st.atk-0.35)/0.65;
-    A._y += -0.20*d; A.body += -0.25*d;
-    for(let i=0;i<3;i++) A['L'+i] += -0.45*d;
+    A._y += -0.34*d; A.body += -0.40*d;
+    for(let i=0;i<3;i++) A['L'+i] += -0.75*d;
+    for(let i=0;i<3;i++) A['K'+i] += -0.35*d;
   }
   if(st.hurt>0){ A.body+=0.25*st.hurt; A._x=-0.09*st.hurt; }
 }},
 
 /* ===== WRAITH — wisps, ash wraiths, ice wraiths, witches ===== */
-wraith:{ sc:0.82, foot:1.10, ghost:1, bones:[
+wraith:{ sc:0.82, foot:1.10, mat:'ecto', ghost:1, bones:[
   B_('torso',null,   0,   0,   -1.5708,0.66,0.54,'mid', 3),
   B_('head', 'torso',0.62,0,    0,      0.52,0.48,'lite',6,{shape:'orb'}),
   B_('armF', 'torso',0.52, 0.16,2.45,   0.46,0.14,'dark',2,{taper:0.55}),
@@ -3092,7 +3207,7 @@ pose(A,st){
 }},
 
 /* ===== GOLEM — husks, slag, frost golems, colossi ===== */
-golem:{ sc:0.86, foot:0.98, bones:[
+golem:{ sc:0.86, foot:0.98, mat:'stone', bones:[
   B_('torso',null,   0,   -0.04,-1.5708,0.86,1.00,'mid', 3),
   B_('head', 'torso',0.80,0,     0,     0.46,0.52,'dark',6,{shape:'orb'}),
   B_('armF', 'torso',0.62, 0.42, 2.60,  0.54,0.30,'dark',2),
@@ -3125,7 +3240,7 @@ pose(A,st){
 }},
 
 /* ===== FLYER — crows, swarms, embers, flies ===== */
-flyer:{ sc:0.94, foot:1.25, ghost:1, bones:[
+flyer:{ sc:0.94, foot:1.25, mat:'feather', ghost:1, bones:[
   B_('body', null,   0,    0,    0,     0.66,0.78,'mid', 4,{shape:'orb',dx:-0.33}),
   B_('wingF','body', 0.02,-0.08,-2.45,  1.02,0.60,'dark',1,{shape:'wing'}),
   B_('wingN','body', 0.02, 0.08,-2.45,  1.08,0.64,'mid', 8,{shape:'wing'}),
@@ -3141,13 +3256,14 @@ pose(A,st){
   A._y=-0.14+Math.sin(st.time*4)*0.07;
   if(st.atk>=0){
     const d = st.atk<0.35 ? st.atk/0.35 : 1-(st.atk-0.35)/0.65;
-    A.body+=0.42*d; A.head+=0.3*d; A._y+=0.12*d;
+    A.body+=0.62*d; A.head+=0.45*d; A.beak+=0.4*d; A._y+=0.26*d;
+    A.wingF+=-0.5*d; A.wingN+=0.5*d;
   }
   if(st.hurt>0){ A.body+=0.3*st.hurt; A._x=-0.12*st.hurt; }
 }},
 
 /* ===== BLOB — husks, bloaters, bergspawn, the Unmade ===== */
-blob:{ sc:1.55, foot:0.94, bones:[
+blob:{ sc:1.55, foot:0.94, mat:'goo', bones:[
   B_('body',null, 0,-0.02, 0, 1.02,0.94,'mid',4,{shape:'orb',dx:-0.51}),
   B_('lumpF','body',-0.30, 0.16, 0, 0.44,0.40,'dark',3,{shape:'orb',dx:-0.22}),
   B_('lumpN','body', 0.32, 0.20, 0, 0.38,0.34,'lite',5,{shape:'orb',dx:-0.19}),
@@ -3161,13 +3277,14 @@ pose(A,st){
   A._y = -Math.max(0,b)*0.10*(0.4+w);
   if(st.atk>=0){
     const d = st.atk<0.3 ? st.atk/0.3 : 1-(st.atk-0.3)/0.7;
-    st._sx = 1-0.18*d; st._sy = 1+0.24*d; A._y += -0.20*d;
+    st._sx = 1-0.30*d; st._sy = 1+0.42*d; A._y += -0.34*d;
+    A.lumpF += 0.5*d; A.lumpN += -0.5*d;
   }
   if(st.hurt>0){ st._sx += 0.14*st.hurt; st._sy -= 0.14*st.hurt; }
 }},
 
 /* ===== WORM — salamanders, leeches, spire worms, bosses ===== */
-worm:{ sc:1.05, foot:0.86, bones:(function(){
+worm:{ sc:1.05, foot:0.86, mat:'chitin', bones:(function(){
   const out=[B_('head',null,0,-0.06,0,0.68,0.62,'lite',9,{shape:'orb',dx:-0.16})];
   let p='head', ox=0.04;
   for(let i=1;i<=4;i++){
@@ -3185,13 +3302,14 @@ pose(A,st){
   A._y=Math.sin(st.time*3.0)*0.03;
   if(st.atk>=0){
     const d = st.atk<0.3 ? st.atk/0.3 : 1-(st.atk-0.3)/0.7;
-    A.head += -0.5*d; A._y += -0.16*d;
+    A.head += -0.72*d; A._y += -0.26*d;
+    A.s1 += 0.55*d; A.s2 += -0.45*d; A.s3 += 0.3*d;
   }
   if(st.hurt>0){ A.head+=0.3*st.hurt; A._x=-0.1*st.hurt; }
 }},
 
 /* ===== EYE — watchers, fenwatchers, the Rift Itself ===== */
-eye:{ sc:0.92, foot:1.18, ghost:1, bones:(function(){
+eye:{ sc:0.92, foot:1.18, mat:'ecto', ghost:1, bones:(function(){
   const out=[];
   for(let i=0;i<8;i++)
     out.push(B_('t'+i,null,0,0,i*0.7854,0.92,0.17,i<4?'dark':'mid',i<4?1:2,{taper:0.16}));
@@ -3203,8 +3321,8 @@ pose(A,st){
   A._y=Math.sin(st.time*1.8)*0.05;
   if(st.atk>=0){
     const d = st.atk<0.3 ? st.atk/0.3 : 1-(st.atk-0.3)/0.7;
-    st._sx=1+0.16*d; st._sy=1+0.16*d;
-    for(let i=0;i<8;i++) A['t'+i]+=0.4*d;
+    st._sx=1+0.30*d; st._sy=1-0.16*d;
+    for(let i=0;i<8;i++) A['t'+i]+=0.85*d;
   }
   if(st.hurt>0){ st._sx=1-0.14*st.hurt; st._sy=1+0.14*st.hurt; }
 }},
@@ -3263,7 +3381,8 @@ function partsFor(rig, pal, r){
   let arr = rig.pcache.get(key);
   if(arr) return arr;
   if(rig.pcache.size > 60) rig.pcache.clear();
-  arr = rig.draw.map(b => bakePart(b.shape||'capsule', b.len*ri, b.w*ri, pal, b.role, b.taper));
+  arr = rig.draw.map(b => bakePart(b.shape||'capsule', b.len*ri, b.w*ri, pal, b.role,
+                                   b.taper, b.mat || rig.mat));
   rig.pcache.set(key, arr);
   return arr;
 }
@@ -3497,6 +3616,9 @@ function wpnKindFor(arch){
 
 /* ---------- shared animation state ---------- */
 const ATK_DUR = 0.42;
+/* Characters were genuinely small on a phone. VIS scales what is DRAWN only —
+   f.r stays the collision/contact radius, so nothing about balance moves. */
+const VIS = 1.15;
 const GFX = {parts:1, detail:1, shadow:1, glow:1, backdrop:1, weapon:1};
 const _ST = {};
 function baseState(an, time){
@@ -3568,14 +3690,14 @@ function drawFoe(f){
     ctx.beginPath(); ctx.arc(f.x,f.y,f.r+8,0,6.283); ctx.stroke(); ctx.globalAlpha=1;
   }
   st._sx = 1; st._sy = 1;
-  drawChar(rigName, pal, f.x, f.y, f.r*scale, st, alpha);
+  drawChar(rigName, pal, f.x, f.y, f.r*scale*VIS, st, alpha);
 
   if(f.slowA>0) drawGlow(f.x,f.y,'#8fd8ff',f.r*1.5,0.22);
   if(f.burn>0) drawGlow(f.x,f.y,'#ff8a3c',f.r*1.3,0.20);
   if(f.pois>0) drawGlow(f.x,f.y,'#a3e635',f.r*1.3,0.18);
 
   if(f.hp < f.max*0.999 && f!==bossRef && f.born>=warpT){
-    const rg = RIGS[rigName], rr = f.r*rg.sc;
+    const rg = RIGS[rigName], rr = f.r*VIS*rg.sc;
     const w = clamp(rr*rg.halfW*0.95, 15, 42), hpct = clamp(f.hp/f.max,0,1);
     const by = f.y + rr*rg.topPx - 6;
     ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(f.x-w/2, by, w, 3);
@@ -3597,7 +3719,7 @@ function drawCorpse(c){
   st._sx=1; st._sy=1;
   st.accent = shade(c.def.col, 0.4);
   drawChar(rigName, paletteFor(shade(c.def.col,-0.25), shade(c.def.col2,-0.3)),
-    c.x, c.y + e*c.r*0.35, c.r*(1-e*0.10), st, 1-Math.max(0,(k-0.55)/0.45));
+    c.x, c.y + e*c.r*0.35, c.r*VIS*(1-e*0.10), st, 1-Math.max(0,(k-0.55)/0.45));
 }
 
 /* ---------- player ---------- */
@@ -3616,7 +3738,7 @@ function drawPlayer(){
   ctx.globalAlpha=1;
   drawGlow(P.x,P.y,col,P.r*2.0,P.inv>0?0.55:0.26);
 
-  drawChar('human', PLAYER_PAL(cls, P.flash>0), P.x, P.y, P.r,
+  drawChar('human', PLAYER_PAL(cls, P.flash>0), P.x, P.y, P.r*VIS,
     st, P.inv>0 ? (0.5+Math.sin(performance.now()/45)*0.28) : 1);
 
   if(P.bulwark>0){
