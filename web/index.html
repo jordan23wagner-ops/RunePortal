@@ -164,7 +164,9 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 /* ============================================================
    TOUCH CONTROLS
    ============================================================ */
-#stickZone{position:absolute;left:0;bottom:0;width:48%;height:58%;z-index:12;}
+/* Full playable area. The action buttons sit above this (z-index 14+), so a
+   touch that starts on a button targets the button and never reaches here. */
+#stickZone{position:absolute;inset:0;z-index:12;}
 #stick{
   position:absolute;width:112px;height:112px;border-radius:50%;
   border:2px solid rgba(255,255,255,.14);background:rgba(20,24,38,.35);
@@ -188,19 +190,24 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   background:linear-gradient(180deg,rgba(40,48,74,.92),rgba(22,27,43,.92));
   border:2px solid var(--line2);
   display:flex;align-items:center;justify-content:center;
-  font-size:22px;box-shadow:0 4px 14px rgba(0,0,0,.5);
+  font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.5);
   overflow:hidden;
 }
-.actBtn.big{width:74px;height:74px;font-size:27px;}
+.actBtn.big{width:74px;height:74px;font-size:25px;}
 .actBtn:active{transform:scale(.93);}
 .actBtn .cd{
   position:absolute;inset:0;background:rgba(6,8,14,.72);
   transform-origin:bottom;transform:scaleY(0);pointer-events:none;
 }
 .actBtn .qty{
-  position:absolute;bottom:2px;right:5px;font-size:10px;font-weight:800;
-  color:var(--txt);text-shadow:0 1px 2px #000;
+  position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
+  min-width:18px;padding:0 4px;border-radius:9px;
+  background:rgba(6,8,14,.92);border:1px solid var(--line2);
+  font-size:10px;line-height:14px;font-weight:800;text-align:center;
+  color:var(--txt);
 }
+/* lift the icon so the badge underneath it stays legible */
+#btnPot > span:first-child{transform:translateY(-6px);}
 .actBtn.rdy{border-color:var(--gold);box-shadow:0 0 14px rgba(232,180,74,.35),0 4px 14px rgba(0,0,0,.5);}
 .actBtn.off{opacity:.4;}
 #btnSkill{border-color:#6f7dd6;}
@@ -1671,6 +1678,7 @@ function resizeCanvas(){
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W+'px'; cv.style.height = H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
+  hudH = Math.round($('hud').getBoundingClientRect().height);
   if(S) buildBackdrop();
 }
 window.addEventListener('resize', ()=>{ resizeCanvas(); });
@@ -2106,17 +2114,24 @@ function curWeapon(){ const w=S.equip.weapon; return (w&&WEAPONS[w.arch])||UNARM
 
 let mv = {x:0,y:0,active:false,id:null};
 const stickEl=$('stick'), nubEl=$('stickNub'), stickZone=$('stickZone');
-let stickBase={x:0,y:0};
+let stickBase={x:0,y:0}, stickOrigin={x:0,y:0};
+const STICK_R = 56, STICK_MAX = 46;
 
 function stickStart(e){
   const t = e.changedTouches? e.changedTouches[0] : e;
   const r = $('arenaWrap').getBoundingClientRect();
+  const px = t.clientX-r.left, py = t.clientY-r.top;
   mv.active=true; mv.id = t.identifier!=null?t.identifier:'m';
-  stickBase = {x:t.clientX-r.left, y:t.clientY-r.top};
-  stickEl.style.left = (stickBase.x-56)+'px';
-  stickEl.style.top  = (stickBase.y-56)+'px';
+  mv.x=0; mv.y=0;
+  /* input origin is exactly where the finger landed... */
+  stickOrigin = {x:px, y:py};
+  /* ...but the ring is clamped so it is never cut off at an edge */
+  stickBase = {x: clamp(px, STICK_R+2, r.width  - STICK_R - 2),
+               y: clamp(py, STICK_R+2, r.height - STICK_R - 2)};
+  stickEl.style.left = (stickBase.x-STICK_R)+'px';
+  stickEl.style.top  = (stickBase.y-STICK_R)+'px';
+  nubEl.style.transform = 'none';
   stickEl.classList.add('on');
-  stickMove(e);
 }
 function stickMove(e){
   if(!mv.active) return;
@@ -2125,8 +2140,8 @@ function stickMove(e){
   for(const c of list){ if((c.identifier!=null?c.identifier:'m')===mv.id) t=c; }
   if(!t) return;
   const r = $('arenaWrap').getBoundingClientRect();
-  let dx = (t.clientX-r.left)-stickBase.x, dy = (t.clientY-r.top)-stickBase.y;
-  const d = Math.hypot(dx,dy), max = 46;
+  let dx = (t.clientX-r.left)-stickOrigin.x, dy = (t.clientY-r.top)-stickOrigin.y;
+  const d = Math.hypot(dx,dy), max = STICK_MAX;
   if(d>max){ dx = dx/d*max; dy = dy/d*max; }
   nubEl.style.transform = 'translate('+dx+'px,'+dy+'px)';
   const mag = Math.min(1, d/max);
@@ -3689,9 +3704,10 @@ function render(){
 
 /* ---------- minimap ---------- */
 const MM = 78;
+let hudH = 104;
 function drawMinimap(){
   const z = ZONE_BY_ID[S.zone];
-  const ox = W-MM-8, oy = 104;
+  const ox = W-MM-8, oy = hudH + 32;   /* below the HUD and the boss bar */
   const s = MM/Math.max(WORLD.w, WORLD.h);
   const mw = WORLD.w*s, mh = WORLD.h*s;
   ctx.save();

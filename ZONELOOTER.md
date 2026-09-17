@@ -89,7 +89,10 @@ it stays clear for ~55s, and only respawns once you are 520px away.
 
 ## Controls
 
-Left thumb drags anywhere to move · ⚔️ hold to attack (auto-targets nearest) ·
+**Drag anywhere in the playable area to move** — the joystick is dynamic: it appears
+under your finger wherever you touch, and is clamped so the ring is never cut off at
+a screen edge. Touches that start on an action button never steer. ⚔️ hold to attack
+(auto-targets nearest) ·
 ✦ weapon skill · 💨 dash (i-frames) · 🧪 draught.
 Desktop: WASD · Space · Q · E · R · F.
 
