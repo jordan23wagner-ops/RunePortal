@@ -56,12 +56,23 @@ aggro radius; pulling one alerts its packmates, so you fight **3–5 at a time**
 a continuous horde. Walk away and they leash back to camp and heal. Clear a camp and
 it stays clear for ~55s, and only respawns once you are 520px away.
 
-- ~10 camps per zone: 6+tier normal, 2 elite, 1 boss placed as far from the entrance
-  as the layout allows. 30–45 enemies alive in the world.
-- You enter at the south edge, ~500px from the nearest camp, and explore outward.
+A zone is **2700×4634** at phone size — roughly 7 screens wide by 5.5 tall, double
+the linear size of the first pass (4× the area) so the walk between fights is
+exploration rather than a corridor.
+
+- 12–16 camps per zone: 7+tier normal, 3 elite, 1 boss placed as far from the
+  entrance as the layout allows. 47–63 enemies alive in the world.
+- Camps are placed by dart-throwing with a **guaranteed 620px gap** (roughly two
+  screens), so pulling one can never bleed into its neighbour. Measured over 30
+  generated layouts: closest pair **632–699px**, average nearest neighbour
+  **739–823px**, zero layouts that fell back. The fallback keeps the roomiest
+  candidate rather than dumping a camp at random — that path was the only way two
+  camps could still land on top of each other.
+- You enter at the south edge, ~950px from the nearest camp, and explore outward.
 - Minimap (top right) shows camps by kind, chests, the camera window and you;
   an edge arrow points at the nearest uncleared camp.
-- 3 chests scattered in the world, respawning 95s after opening.
+- 5 chests scattered in the world, respawning 150s after opening and only once
+  you are 800px away.
 - Camps cleared is tracked in the HUD (`⚑ 3/10`).
 - Off-camera characters are culled from both AI and drawing.
 
@@ -79,7 +90,7 @@ it stays clear for ~55s, and only respawns once you are 520px away.
 - **Upgrade** any item to +10 (+6% per rank).
 - **10 craftable relics**, each with a unique mechanical power (burn, chill, poison,
   chain-extension, stacking damage reduction, detonations, extra pierce…).
-- **Treasure chests** spawn on a kill counter, roll with a rarity floor of Uncommon.
+- **Treasure chests** hold 2–3 items; only the *first* rolls with an Uncommon floor.
 - **Elites** every 22 kills, **bosses** every 75, with telegraphed charge/slam/barrage/summon patterns.
 - **WebAudio** synthesised SFX — no audio files. Rarity-scaled loot stings.
 - **Inventory grid** — square rarity-framed item cells with glow, ilvl and +N badges,
@@ -120,8 +131,14 @@ Tested headless in Chromium at 390×844 @2x:
 
 - No JS errors across all 5 zones, all 16 weapons, all 10 relics, death/respawn,
   bulk salvage, and a save/load round-trip.
-- **~60fps** in a saturated Voidspire arena (18 rigged enemies + boss + projectiles
-  + particles): median 16.7ms, p99 23.7ms, **0 frames over 33ms**.
+- **~60fps in the 4× world** with 64 rigged enemies alive plus projectiles and
+  particles: median 16.7ms, p99 17.0ms, **0 frames over 33ms**. The bigger zone
+  costs almost nothing — off-camera characters are culled from both AI and
+  drawing, and idle camps beyond 1100px skip their wander step entirely.
+  (The perf harness itself had a bug worth recording: it set `P.hp = 1e9` to
+  survive the sample, but `update()` clamps `P.hp` to `D.maxHp` every frame, so
+  the player quietly died and stopped attacking — under-measuring the load. It
+  now raises the ceiling, `D.maxHp`, instead.)
 - Rig rendering is **fill-rate bound, not draw-call bound** — established by
   ablation, not assumption. At DPR 2 the same scene runs ~48fps; at DPR 1.5 it holds
   60 with every effect on, so the arena canvas caps at 1.5 (the DOM UI is unaffected
@@ -134,12 +151,26 @@ Tested headless in Chromium at 390×844 @2x:
   buttons), Hero, Forge, Rifts, Camp — stops exactly at the tab bar top when scrolled
   fully down. The same test fails every panel against the pre-fix layout.
 - Camp loop, measured: everything idle at spawn and outside aggro range; stepping
-  inside wakes the whole pack (3/3) and no other camp; **max 3 enemies engaged at
-  once**; a level-1 character clears a camp in 7–12s finishing at 61–79% HP.
-  Leash traced end to end: chase to 451px from home → return → idle at 38px, healed.
+  inside wakes the whole pack (5/5) and no other camp; **max 5 enemies engaged at
+  once**; a level-1 character clears a camp in 10.1s finishing at 33% HP.
+  Leash traced end to end: chase to 430px from home → return → idle at 12px, healed.
 - Stick magnitude swept 0→400px from the ring centre: 22% at 10px, 50% at 23px, and
   **100% at 46px (the ring) and at every distance beyond it**, diagonals included;
   release returns to 0. Tapping the minimap steers instead of opening anything.
+- Drop curve, 40k rolls per source. The first pass used `[620,270,86,20,4]` with a
+  fat tier/rank amplifier and floored **every** chest item to Uncommon, which put a
+  rare-or-better on 28% of tier-1 chest items — a backpack of blues and purples
+  inside three minutes. Now `[820,148,27,4.4,0.6]` with a gentler amplifier:
+
+  | Source | rare+ was | **rare+ now** | epic+ was | **epic+ now** |
+  |---|---|---|---|---|
+  | T1 trash | 11.0% | **3.3%** | 2.4% | **0.5%** |
+  | T1 chest | 28.4% | **6.0%** | 8.0% | **1.0%** |
+  | T5 chest | 40.9% | **13.1%** | 12.0% | **2.6%** |
+  | T5 boss  | 43.2% | **18.2%** | 12.7% | **3.9%** |
+
+  Item *quantity* is close to where it was (trash 7.5%→7%, elite 50%→45%) — the
+  bag still fills, it fills with commons.
 - Balance curve: trash TTK 1.5s → 4.6s across tiers 1→5; bosses 13s → 42s;
   time-to-die with three enemies in contact 40s → 7-12s. Melee tankiest (63%
   mitigation), magic glassiest (38%) but higher burst, ranged highest DPS ceiling.
