@@ -1686,15 +1686,31 @@ function applyGfx(tier){
   GFX.parts=1; GFX.backdrop=1; GFX.weapon=1;
   resizeCanvas();
 }
+/* The camera draws the world magnified. W/H stay the WORLD viewport (so camera
+   clamping, culling and the minimap keep working in world units) while SW/SH are
+   the real screen size in CSS pixels. Screen-space overlays reset the transform
+   themselves. A character went from 37px tall on an 860px screen — about 4% of
+   the height, which is why per-part material shading was invisible. */
+let ZOOM = 1.8, SW = 360, SH = 560;
+/* On-screen pixels per world unit. Body parts are baked at THIS resolution
+   instead of at world scale: before, a part baked at r world px was blown up by
+   DPR (and now ZOOM) at draw time, so every sprite was a magnified thumbnail. */
+function sprScale(){ return ZOOM*DPR; }
 function resizeCanvas(){
   const r = $('arenaWrap').getBoundingClientRect();
   DPR = Math.min(dprCap, window.devicePixelRatio||1);
-  W = Math.max(200, r.width); H = Math.max(240, r.height);
-  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
-  cv.style.width = W+'px'; cv.style.height = H+'px';
-  ctx.setTransform(DPR,0,0,DPR,0,0);
+  SW = Math.max(200, r.width); SH = Math.max(240, r.height);
+  W = SW/ZOOM; H = SH/ZOOM;
+  cv.width = Math.round(SW*DPR); cv.height = Math.round(SH*DPR);
+  cv.style.width = SW+'px'; cv.style.height = SH+'px';
+  ctx.setTransform(DPR*ZOOM,0,0,DPR*ZOOM,0,0);
   hudH = Math.round($('hud').getBoundingClientRect().height);
-  if(S) buildBackdrop();
+  if(S){ buildBackdrop(); clearPartCache(); }
+}
+function clearPartCache(){
+  for(const k in partCache) delete partCache[k];
+  partOrder.length = 0;
+  for(const k in RIGS) if(RIGS[k].pcache) RIGS[k].pcache.clear();
 }
 window.addEventListener('resize', ()=>{ resizeCanvas(); });
 
@@ -1866,8 +1882,10 @@ function buildZoneWorld(){
   /* Double the linear size of the zone (4x the area) so camps have real
      distance between them and the walk between fights is exploration, not a
      hallway. */
-  WORLD.w = Math.round(clamp(W*6.8, 2700, 4200));
-  WORLD.h = Math.round(clamp(H*5.8, 3300, 5000));
+  /* Sized off the SCREEN, not the zoomed world viewport — deriving it from W/H
+     meant zooming the camera in silently shrank every zone. */
+  WORLD.w = Math.round(clamp(SW*6.8, 2700, 4200));
+  WORLD.h = Math.round(clamp(SH*5.8, 3300, 5000));
   buildBackdrop();
 
   foes.length=0; packs.length=0; props.length=0; chests.length=0;
@@ -1971,7 +1989,7 @@ function fct(x,y,txt,cls){
   const e = document.createElement('div');
   e.className = 'dmg'+(cls?' '+cls:'');
   e.textContent = txt;
-  e.style.left = (x-cam.x)+'px'; e.style.top = (y-cam.y)+'px';   /* world -> screen */
+  e.style.left = ((x-cam.x)*ZOOM)+'px'; e.style.top = ((y-cam.y)*ZOOM)+'px';  /* world -> screen */
   fctEl.appendChild(e); fctCount++;
   setTimeout(()=>{ e.remove(); fctCount--; }, 880);
 }
@@ -2892,7 +2910,7 @@ function bakePart(shape, len, wid, pal, role, taper, mat){
   mat = mat || 'flesh';
   const key = shape+'_'+len+'_'+wid+'_'+role+'_'+taper+'_'+mat+'_'+pal.key;
   const hit = partCache[key]; if(hit) return hit;
-  if(partOrder.length > 1400) delete partCache[partOrder.shift()];
+  if(partOrder.length > 600) delete partCache[partOrder.shift()];   /* entries are ~7x the pixels now */
   partOrder.push(key);
 
   const cw = len+PAD*2, ch = wid+PAD*2;
@@ -3376,7 +3394,8 @@ function solveRig(rig, A, r){
    atlas whenever an entity size or flash palette appeared cost more than the
    texture binds it saved.) */
 function partsFor(rig, pal, r){
-  const ri = Math.round(r);
+  /* bake at on-screen resolution, not world resolution */
+  const ri = Math.round(r*sprScale());
   const key = pal.key+'|'+ri;
   let arr = rig.pcache.get(key);
   if(arr) return arr;
@@ -3392,6 +3411,10 @@ function drawRigParts(rig, B, pal, r, M){
   const parts = partsFor(rig, pal, r);
   const dl = rig.draw, pool = rig.Bpool;
   const Ma=M.a, Mb=M.b, Mc=M.c, Md=M.d, Me=M.e, Mf=M.f;
+  /* parts are baked sprScale() times larger than world size, so the linear part
+     of each bone matrix is scaled back down by k — the translation is untouched,
+     which scales the sprite about its bone origin. */
+  const k = 1/sprScale();
   for(let i=0;i<dl.length;i++){
     const b = dl[i], t = pool[b.i], p = parts[i];
     const bc = Math.cos(t.a), bs = Math.sin(t.a);
@@ -3401,8 +3424,8 @@ function drawRigParts(rig, B, pal, r, M){
       le += dx*bc - dy*bs; lf += dx*bs + dy*bc;
     }
     ctx.setTransform(
-      Ma*bc + Mc*bs,  Mb*bc + Md*bs,
-      Ma*-bs + Mc*bc, Mb*-bs + Md*bc,
+      (Ma*bc + Mc*bs)*k,  (Mb*bc + Md*bs)*k,
+      (Ma*-bs + Mc*bc)*k, (Mb*-bs + Md*bc)*k,
       Ma*le + Mc*lf + Me, Mb*le + Md*lf + Mf);
     ctx.drawImage(p.cv, -p.ox, -p.oy);
   }
@@ -3783,7 +3806,7 @@ function PLAYER_PAL(cls, hit){
 function render(){
   const z = ZONE_BY_ID[S.zone];
   ctx.save();
-  if(shake>0.2) ctx.translate(rnd(-shake,shake)*0.5, rnd(-shake,shake)*0.5);
+  if(shake>0.2){ const k=0.5/ZOOM; ctx.translate(rnd(-shake,shake)*k, rnd(-shake,shake)*k); }
 
   ctx.translate(-cam.x, -cam.y);
   const vx0=cam.x, vy0=cam.y, vx1=cam.x+W, vy1=cam.y+H;
@@ -3944,7 +3967,10 @@ const MM = 94;
 let hudH = 104;
 function drawMinimap(){
   const z = ZONE_BY_ID[S.zone];
-  const ox = W-MM-8, oy = hudH + 32;   /* below the HUD and the boss bar */
+  /* HUD-space overlay: reset to screen pixels so the map does not inherit the
+     camera zoom (W/H are world units now). */
+  ctx.save(); ctx.setTransform(DPR,0,0,DPR,0,0);
+  const ox = SW-MM-8, oy = hudH + 32;   /* below the HUD and the boss bar */
   const s = MM/Math.max(WORLD.w, WORLD.h);
   const mw = WORLD.w*s, mh = WORLD.h*s;
   ctx.save();
@@ -3985,11 +4011,11 @@ function drawMinimap(){
     if(d<bd){ bd=d; best=pk; }
   }
   if(best){
-    const sx=best.x-cam.x, sy=best.y-cam.y;
-    if(sx<20||sx>W-20||sy<70||sy>H-90){
+    const sx=(best.x-cam.x)*ZOOM, sy=(best.y-cam.y)*ZOOM;
+    if(sx<20||sx>SW-20||sy<70||sy>SH-90){
       const a=Math.atan2(best.y-P.y, best.x-P.x);
-      const cx=W/2+Math.cos(a)*(Math.min(W,H)*0.36);
-      const cy=H/2+Math.sin(a)*(Math.min(W,H)*0.36);
+      const cx=SW/2+Math.cos(a)*(Math.min(SW,SH)*0.36);
+      const cy=SH/2+Math.sin(a)*(Math.min(SW,SH)*0.36);
       ctx.save(); ctx.translate(cx,cy); ctx.rotate(a);
       ctx.globalAlpha=0.55;
       ctx.fillStyle = best.kind==='boss'?'#f43f5e':best.kind==='elite'?'#fb923c':'#e6e9f2';
@@ -3997,7 +4023,7 @@ function drawMinimap(){
       ctx.closePath(); ctx.fill(); ctx.restore(); ctx.globalAlpha=1;
     }
   }
-
+  ctx.restore();                      /* back to the zoomed world transform */
 }
 
 /* ================================================================
