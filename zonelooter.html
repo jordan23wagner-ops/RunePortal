@@ -914,8 +914,12 @@ const RARITY = [
   {id:5,name:'Relic',    col:'#f43f5e',aff:0,mult:2.25,sal:20}, // crafted only
 ];
 
-/* base drop weights, shifted up by zone tier + enemy rank + luck */
-const RARITY_BASE = [620,270,86,20,4];
+/* Base drop weights, shifted up by zone tier + enemy rank + luck.
+   Deliberately steep: a blue should be a small event, not the floor. The
+   first pass ran [620,270,86,20,4] with a fat tier/rank amplifier, which put
+   a rare-or-better on 28% of every chest item in tier 1 — a full backpack of
+   blues and purples inside three minutes. */
+const RARITY_BASE = [820,148,27,4.4,0.6];
 
 /* ================================================================
    CORE STATS
@@ -1349,9 +1353,9 @@ function wipeSave(){ localStorage.removeItem(SAVE_KEY); location.reload(); }
 function rollRarity(tier, rank, luck){
   const w = RARITY_BASE.slice();
   /* zone tier pushes weight upward */
-  const shift = (tier-1)*0.55 + (rank||0)*1.25 + (luck||0)/55;
-  for(let i=1;i<5;i++) w[i] *= (1 + shift*(i*0.62));
-  w[0] = Math.max(40, w[0] - shift*130);
+  const shift = (tier-1)*0.42 + (rank||0)*0.85 + (luck||0)/70;
+  for(let i=1;i<5;i++) w[i] *= (1 + shift*(i*0.55));
+  w[0] = Math.max(60, w[0] - shift*150);
   let t=0; for(const x of w) t+=x;
   let r=Math.random()*t;
   for(let i=0;i<5;i++){ r-=w[i]; if(r<=0) return i; }
@@ -1851,8 +1855,11 @@ function aggroPack(f){
 /* ---------- zone generation ---------- */
 function buildZoneWorld(){
   const z = ZONE_BY_ID[S.zone];
-  WORLD.w = Math.round(clamp(W*3.4, 1350, 2100));
-  WORLD.h = Math.round(clamp(H*2.9, 1650, 2500));
+  /* Double the linear size of the zone (4x the area) so camps have real
+     distance between them and the walk between fights is exploration, not a
+     hallway. */
+  WORLD.w = Math.round(clamp(W*6.8, 2700, 4200));
+  WORLD.h = Math.round(clamp(H*5.8, 3300, 5000));
   buildBackdrop();
 
   foes.length=0; packs.length=0; props.length=0; chests.length=0;
@@ -1866,37 +1873,47 @@ function buildZoneWorld(){
   cam.x = clamp(P.x-W/2, 0, Math.max(0,WORLD.w-W));
   cam.y = clamp(P.y-H/2, 0, Math.max(0,WORLD.h-H));
 
-  for(let i=0;i<110;i++)
+  for(let i=0;i<420;i++)
     props.push({x:rnd(24,WORLD.w-24), y:rnd(24,WORLD.h-24),
       r:rnd(9,30), k:Math.floor(Math.random()*3), a:rnd(0,6.283)});
 
   const spots = [];
+  /* Dart-throwing with a best-effort fallback: if no candidate clears minD,
+     keep the roomiest one seen rather than dumping a camp at random — that
+     fallback was the one path that could still put two camps on top of
+     each other. */
   const place=(minD, fromPlayer)=>{
-    for(let t=0;t<250;t++){
+    let best=null, bestD=-1;
+    for(let t=0;t<400;t++){
       const x=rnd(150,WORLD.w-150), y=rnd(150,WORLD.h-150);
       if(Math.hypot(x-P.x,y-P.y) < fromPlayer) continue;
-      let ok=true;
-      for(const s of spots) if(Math.hypot(x-s.x,y-s.y) < minD){ ok=false; break; }
-      if(ok){ spots.push({x,y}); return {x,y}; }
+      let near=1e9;
+      for(const s of spots){ const d=Math.hypot(x-s.x,y-s.y); if(d<near) near=d; }
+      if(near>=minD){ spots.push({x,y}); return {x,y}; }
+      if(near>bestD){ bestD=near; best={x,y}; }
     }
-    const f={x:rnd(150,WORLD.w-150), y:rnd(150,WORLD.h-150)}; spots.push(f); return f;
+    const f = best || {x:rnd(150,WORLD.w-150), y:rnd(150,WORLD.h-150)};
+    spots.push(f); return f;
   };
-  for(let i=0;i<6+z.tier;i++) packs.push(makePack('normal', place(300, 420)));
-  for(let i=0;i<2;i++)        packs.push(makePack('elite',  place(340, 620)));
+  /* minD is the guaranteed gap between camps — roughly two screens, so
+     pulling one can never bleed into its neighbour and you get real downtime
+     between fights. fromPlayer keeps the entrance quiet. */
+  for(let i=0;i<7+z.tier;i++) packs.push(makePack('normal', place(620, 760)));
+  for(let i=0;i<3;i++)        packs.push(makePack('elite',  place(680, 1100)));
   /* boss sits as far from the entrance as the layout allows */
   let best=null, bd=-1;
-  for(let t=0;t<160;t++){
+  for(let t=0;t<240;t++){
     const p={x:rnd(170,WORLD.w-170), y:rnd(170,WORLD.h-170)};
     let near=1e9; for(const s of spots) near=Math.min(near, Math.hypot(p.x-s.x,p.y-s.y));
-    if(near<300) continue;
+    if(near<620) continue;
     const d=Math.hypot(p.x-P.x,p.y-P.y);
     if(d>bd){ bd=d; best=p; }
   }
   packs.push(makePack('boss', best||{x:WORLD.w/2, y:190}));
   for(const pk of packs) spawnPack(pk);
 
-  for(let i=0;i<3;i++){
-    const c=place(260, 300);
+  for(let i=0;i<5;i++){
+    const c=place(560, 640);
     chests.push({x:c.x, y:c.y, r:16, t:rnd(0,3), open:false, respawn:0});
   }
 }
@@ -2069,7 +2086,9 @@ function rollDrops(f){
   if(rank===2){ addMat(z.cat,1); drops.push({x:f.x,y:f.y,t:'mat',k:z.cat,v:1,life:0,vx:0,vy:-40}); }
 
   /* gear */
-  const iChance = rank===2 ? 1 : rank===1 ? 0.5 : 0.075;
+  /* Quantity is close to where it was — it was the QUALITY curve that made
+     the bag fill with blues. Drown the player in commons, not in epics. */
+  const iChance = rank===2 ? 1 : rank===1 ? 0.45 : 0.07;
   const n = rank===2 ? 3 : 1;
   for(let i=0;i<n;i++){
     if(Math.random()>iChance) continue;
@@ -2094,14 +2113,18 @@ function genZoneItem(z, rank){
 function openChest(){
   const c = nearChest;
   if(!c || c.open) return;
-  c.open = true; c.respawn = 95;
+  c.open = true; c.respawn = 150;
   S.meta.chests++;
   const z = ZONE_BY_ID[S.zone];
   const got = [];
   const n = rint(2,3);
   for(let i=0;i<n;i++){
     const ilvl = clamp(Math.round(zoneLvl()+rnd(0,3)),1,99);
-    const rar  = Math.max(1, rollRarity(z.tier, 1.4, D.luck));
+    /* A chest is a good roll, not a guaranteed one. Only the FIRST item gets
+       the Uncommon floor — flooring all of them is what made every chest read
+       as a jackpot. */
+    const rar  = i===0 ? Math.max(1, rollRarity(z.tier, 0.8, D.luck))
+                       : rollRarity(z.tier, 0.8, D.luck);
     const k = pick(['weapon','armor','armor','offhand','trinket']);
     const it = rollItem({kind:k, ilvl, rar});
     if(bagAdd(it)) got.push(it);
@@ -2629,14 +2652,14 @@ function update(dt){
   for(const pk of packs){
     if(!pk.cleared) continue;
     pk.respawn -= dt;
-    if(pk.respawn<=0 && Math.hypot(P.x-pk.x, P.y-pk.y) > 520) spawnPack(pk);
+    if(pk.respawn<=0 && Math.hypot(P.x-pk.x, P.y-pk.y) > 900) spawnPack(pk);
   }
 
   /* ---- chests ---- */
   nearChest = null;
   for(const c of chests){
     c.t += dt;
-    if(c.open){ c.respawn-=dt; if(c.respawn<=0 && Math.hypot(P.x-c.x,P.y-c.y)>420){ c.open=false; } continue; }
+    if(c.open){ c.respawn-=dt; if(c.respawn<=0 && Math.hypot(P.x-c.x,P.y-c.y)>800){ c.open=false; } continue; }
     if(Math.hypot(P.x-c.x, P.y-c.y) < 56) nearChest = c;
   }
   $('prompt').style.display = nearChest ? 'block' : 'none';
@@ -3722,7 +3745,8 @@ function render(){
 }
 
 /* ---------- minimap ---------- */
-const MM = 78;
+/* bigger world, so the map is the primary navigation tool — give it room */
+const MM = 94;
 let hudH = 104;
 function drawMinimap(){
   const z = ZONE_BY_ID[S.zone];
