@@ -87,6 +87,15 @@ it stays clear for ~55s, and only respawns once you are 520px away.
 - **Graphics tiers** (Sharp / Balanced / Battery) plus an adaptive fallback that
   drops a tier after sustained slow frames.
 
+## Layout
+
+The artifact host pads `:root` by the safe-area insets, which shifts a flow-layout
+app down by the inset. `#app` is therefore `position:fixed; inset:0` (immune to root
+padding, no measured height), with an in-flow spacer keeping the document tall for
+embeds that size a frame to content. A `#stage` flex child holds the arena *and* the
+panels, so a panel is geometrically bounded by the tab bar and can never hide the
+tail of a scrolled list behind it.
+
 ## Controls
 
 **Drag anywhere in the playable area to move** — the joystick is dynamic: it appears
@@ -114,6 +123,12 @@ Tested headless in Chromium at 390×844 @2x:
   60 with every effect on, so the arena canvas caps at 1.5 (the DOM UI is unaffected
   and stays crisp). A packed part-atlas was tried and measured *slower* — rebuilding
   an atlas per entity size/flash palette cost more than the texture binds it saved.
+- Layout, measured against a copy wrapped in the host's own CSS with 59/34px insets
+  applied inline (env() resolves to 0 in headless Chromium, so the insets must be set
+  on documentElement or the tab bar measures 45px instead of its real 79px): app and
+  HUD flush at top 0, tab bar on screen, and every panel — Bag (incl. its footer
+  buttons), Hero, Forge, Rifts, Camp — stops exactly at the tab bar top when scrolled
+  fully down. The same test fails every panel against the pre-fix layout.
 - Camp loop, measured: everything idle at spawn and outside aggro range; stepping
   inside wakes the whole pack (3/3) and no other camp; **max 3 enemies engaged at
   once**; a level-1 character clears a camp in 7–12s finishing at 61–79% HP.
