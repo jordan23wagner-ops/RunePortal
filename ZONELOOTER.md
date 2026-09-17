@@ -69,6 +69,19 @@ exploration rather than a corridor.
   candidate rather than dumping a camp at random — that path was the only way two
   camps could still land on top of each other.
 - You enter at the south edge, ~950px from the nearest camp, and explore outward.
+- **Travel sprint.** The space between camps is the point — it is what lets you
+  back out of a fight without dragging the neighbouring camp in — but crossing it
+  read as dead air. Out of combat you now wind up to **+85% move speed** over
+  0.75s + 0.7s, and drop to a walk the instant anything aggros within 560px or
+  lands a hit. It winds up gently and dies instantly, so it never applies while
+  you are kiting. Crossing 1600px of open ground: **9.5s → 5.8s (64% faster)**.
+- **Roamers.** 4+tier lone wanderers live in the gaps. Each is a pack of exactly
+  one, so `aggroPack` has nobody to wake — a roamer can never chain-pull a camp
+  onto you. They are placed by a scorer that maximises distance to *camp centres*
+  specifically (the generic placer once put one 189px from a camp, close enough
+  that fighting it dragged the camp in); measured over 210 placements the closest
+  is **560px**. They do not count toward the ⚑ tally, draw a camp ring, appear on
+  the minimap, or steer the off-screen camp arrow.
 - Minimap (top right) shows camps by kind, chests, the camera window and you;
   an edge arrow points at the nearest uncleared camp.
 - 5 chests scattered in the world, respawning 150s after opening and only once
@@ -111,6 +124,9 @@ tail of a scrolled list behind it.
 
 ## Controls
 
+Out of combat you break into a run automatically (see **Travel sprint**); any
+aggro or hit drops you straight back to walking pace.
+
 **Drag anywhere in the playable area to move** — the joystick is dynamic: it appears
 under your finger wherever you touch, and is clamped so the ring is never cut off at
 a screen edge. Touches that start on an action button never steer. The nub is clamped
@@ -133,10 +149,14 @@ Tested headless in Chromium at 390×844 @2x:
 
 - No JS errors across all 5 zones, all 16 weapons, all 10 relics, death/respawn,
   bulk salvage, and a save/load round-trip.
-- **~60fps in the 4× world** with 64 rigged enemies alive plus projectiles and
-  particles: median 16.7ms, p99 17.0ms, **0 frames over 33ms**. The bigger zone
-  costs almost nothing — off-camera characters are culled from both AI and
-  drawing, and idle camps beyond 1100px skip their wander step entirely.
+- **~60fps in the 4× world** with 65–75 rigged enemies alive plus projectiles and
+  particles. Over 5 runs: 59.8–60fps, median **16.7ms**, p99 **17.0–18.2ms**, with
+  0–5 isolated frames over 33ms per 716 (≤0.7%, max 20–55ms) that look like GC in
+  headless rather than a steady cost — the p99 is unchanged by the roamers. (An
+  earlier single run reported a flat "0 frames over 33ms"; with more samples the
+  honest figure is "usually 0, occasionally two or three".) The bigger zone costs
+  almost nothing — off-camera characters are culled from both AI and drawing, and
+  idle camps beyond 1100px skip their wander step entirely.
   (The perf harness itself had a bug worth recording: it set `P.hp = 1e9` to
   survive the sample, but `update()` clamps `P.hp` to `D.maxHp` every frame, so
   the player quietly died and stopped attacking — under-measuring the load. It
