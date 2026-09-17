@@ -100,7 +100,11 @@ tail of a scrolled list behind it.
 
 **Drag anywhere in the playable area to move** — the joystick is dynamic: it appears
 under your finger wherever you touch, and is clamped so the ring is never cut off at
-a screen edge. Touches that start on an action button never steer. ⚔️ hold to attack
+a screen edge. Touches that start on an action button never steer. The nub is clamped
+to the ring for looks only: direction comes from the raw finger vector and magnitude
+saturates at 1, so once you are past the ring you hold full speed however far you drag
+(clamping the vector *and* dividing by the raw distance made speed decay as `max/d`).
+⚔️ hold to attack
 (auto-targets nearest) ·
 ✦ weapon skill · 💨 dash (i-frames) · 🧪 draught.
 Desktop: WASD · Space · Q · E · R · F.
@@ -132,7 +136,10 @@ Tested headless in Chromium at 390×844 @2x:
 - Camp loop, measured: everything idle at spawn and outside aggro range; stepping
   inside wakes the whole pack (3/3) and no other camp; **max 3 enemies engaged at
   once**; a level-1 character clears a camp in 7–12s finishing at 61–79% HP.
-  Leash traced end to end: chase to 466px from home → return → idle at 33px, healed.
+  Leash traced end to end: chase to 451px from home → return → idle at 38px, healed.
+- Stick magnitude swept 0→400px from the ring centre: 22% at 10px, 50% at 23px, and
+  **100% at 46px (the ring) and at every distance beyond it**, diagonals included;
+  release returns to 0. Tapping the minimap steers instead of opening anything.
 - Balance curve: trash TTK 1.5s → 4.6s across tiers 1→5; bosses 13s → 42s;
   time-to-die with three enemies in contact 40s → 7-12s. Melee tankiest (63%
   mitigation), magic glassiest (38%) but higher burst, ranged highest DPS ceiling.

@@ -2132,9 +2132,6 @@ function stickStart(e){
   const t = e.changedTouches? e.changedTouches[0] : e;
   const r = $('arenaWrap').getBoundingClientRect();
   const px = t.clientX-r.left, py = t.clientY-r.top;
-  if(px>=mmRect.x-6 && px<=mmRect.x+mmRect.w+6 && py>=mmRect.y-6 && py<=mmRect.y+mmRect.h+6){
-    showVp = !showVp; sfx('buy'); return;          /* minimap tap = diagnostics */
-  }
   mv.active=true; mv.id = t.identifier!=null?t.identifier:'m';
   mv.x=0; mv.y=0;
   /* input origin is exactly where the finger landed... */
@@ -2154,13 +2151,21 @@ function stickMove(e){
   for(const c of list){ if((c.identifier!=null?c.identifier:'m')===mv.id) t=c; }
   if(!t) return;
   const r = $('arenaWrap').getBoundingClientRect();
-  let dx = (t.clientX-r.left)-stickOrigin.x, dy = (t.clientY-r.top)-stickOrigin.y;
+  const dx = (t.clientX-r.left)-stickOrigin.x, dy = (t.clientY-r.top)-stickOrigin.y;
   const d = Math.hypot(dx,dy), max = STICK_MAX;
-  if(d>max){ dx = dx/d*max; dy = dy/d*max; }
-  nubEl.style.transform = 'translate('+dx+'px,'+dy+'px)';
-  const mag = Math.min(1, d/max);
-  if(d>3){ mv.x = (dx/Math.max(d,1))*mag; mv.y = (dy/Math.max(d,1))*mag; }
-  else { mv.x=0; mv.y=0; }
+
+  /* nub is clamped to the ring, purely visual */
+  const k = d>max ? max/d : 1;
+  nubEl.style.transform = 'translate('+(dx*k)+'px,'+(dy*k)+'px)';
+
+  /* Direction comes from the RAW vector and magnitude saturates at 1, so once
+     you are past the ring you keep full speed no matter how far you drag.
+     (Dividing the CLAMPED vector by the raw distance made speed decay as
+     max/d — half speed at twice the ring radius.) */
+  if(d > 4){
+    const inv = 1/d, mag = Math.min(1, d/max);
+    mv.x = dx*inv*mag; mv.y = dy*inv*mag;
+  } else { mv.x = 0; mv.y = 0; }
 }
 function stickEnd(e){
   const list = e.changedTouches||[e];
@@ -3718,11 +3723,10 @@ function render(){
 
 /* ---------- minimap ---------- */
 const MM = 78;
-let hudH = 104, mmRect = {x:0,y:0,w:0,h:0}, showVp = false;
+let hudH = 104;
 function drawMinimap(){
   const z = ZONE_BY_ID[S.zone];
   const ox = W-MM-8, oy = hudH + 32;   /* below the HUD and the boss bar */
-  mmRect = {x:ox-2, y:oy-2, w:MM+4, h:WORLD.h*(MM/Math.max(WORLD.w,WORLD.h))+4};
   const s = MM/Math.max(WORLD.w, WORLD.h);
   const mw = WORLD.w*s, mh = WORLD.h*s;
   ctx.save();
@@ -3775,25 +3779,6 @@ function drawMinimap(){
     }
   }
 
-  if(showVp){
-    const v = readVp();
-    const lines = [
-      'innerH '+v.innerH+'  clientH '+v.clientH,
-      'vvH '+v.vvH+'  vvTop '+v.vvTop+'  scale '+v.vvScale,
-      'screenH '+v.screenH+'  dpr '+v.dpr,
-      'safeT '+v.safeT+'  safeB '+v.safeB,
-      'app '+v.appH+'  tab '+v.tabTop+'-'+v.tabBot,
-      v.tabBot<=v.innerH ? 'tab bar FITS' : 'tab bar OVER by '+(v.tabBot-v.innerH),
-    ];
-    ctx.save();
-    ctx.font='11px ui-monospace,Menlo,monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
-    const wMax = Math.max.apply(null, lines.map(l=>ctx.measureText(l).width));
-    ctx.fillStyle='rgba(6,8,14,.92)'; ctx.fillRect(8, hudH+10, wMax+14, lines.length*15+12);
-    ctx.strokeStyle='#e8b44a'; ctx.lineWidth=1; ctx.strokeRect(8.5, hudH+10.5, wMax+13, lines.length*15+11);
-    ctx.fillStyle='#e8b44a';
-    lines.forEach((l,i)=>ctx.fillText(l, 15, hudH+17+i*15));
-    ctx.restore();
-  }
 }
 
 /* ================================================================
@@ -4650,7 +4635,6 @@ $('startBtn').addEventListener('click', ()=>{
    screen, which buries the tab bar. No single API is trustworthy, so take the
    smallest sane reading of all of them, then self-correct: after layout, if the
    tab bar still sits below the visible bottom, shrink by exactly the overflow. */
-let vpInfo = {};
 function viewportH(){
   const vv = window.visualViewport;
   const cands = [];
@@ -4673,28 +4657,7 @@ if(window.visualViewport) window.visualViewport.addEventListener('resize', ()=>f
 /* the in-app browser's chrome can settle after load without firing resize */
 [120,400,1200].forEach(ms=>setTimeout(()=>fitViewport(), ms));
 
-/* tap the minimap to toggle a viewport readout (diagnostics on a device I
-   cannot reach any other way) */
-function readVp(){
-  const vv = window.visualViewport;
-  const app = $('app').getBoundingClientRect(), tb = $('tabbar').getBoundingClientRect();
-  const probe = document.createElement('div');
-  probe.style.cssText='position:fixed;top:0;left:0;height:env(safe-area-inset-top,0px);'+
-                      'width:env(safe-area-inset-bottom,0px);visibility:hidden;';
-  document.body.appendChild(probe);
-  const ps = probe.getBoundingClientRect();
-  document.body.removeChild(probe);
-  return {
-    innerH: window.innerHeight,
-    clientH: document.documentElement.clientHeight,
-    vvH: vv? Math.round(vv.height):0, vvTop: vv? Math.round(vv.offsetTop||0):0,
-    vvScale: vv? +(vv.scale||1).toFixed(2):1,
-    screenH: window.screen? window.screen.height:0,
-    safeT: Math.round(ps.height), safeB: Math.round(ps.width),
-    appH: Math.round(app.height), tabTop: Math.round(tb.top), tabBot: Math.round(tb.bottom),
-    dpr: +(window.devicePixelRatio||1).toFixed(2),
-  };
-}
+
 
 function boot(){
   fitViewport();
