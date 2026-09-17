@@ -1692,6 +1692,19 @@ function applyGfx(tier){
    themselves. A character went from 37px tall on an 860px screen — about 4% of
    the height, which is why per-part material shading was invisible. */
 let ZOOM = 1.8, SW = 360, SH = 560;
+/* ---------- 3/4 PROJECTION ----------
+   The world stays a flat plane in (x,y) — collision, AI, aggro radii, camp
+   spacing and the minimap are all unchanged. Only the DRAW is projected: the
+   ground plane is squashed vertically by YSQ and characters counter-scale back
+   to upright, so they stand on the plane instead of lying on it.
+
+   Axis-aligned rather than true 45 degree dimetric on purpose: rotating the
+   movement axes would mean re-deriving world generation, camp placement, the
+   joystick mapping and the minimap onto a diamond grid, for a look that reads
+   almost identically without a tile grid. */
+const YSQ = 0.62;
+function py(y){ return y*YSQ; }            /* world y -> projected y */
+function wy(sy){ return sy/YSQ; }          /* projected y -> world y */
 /* On-screen pixels per world unit. Body parts are baked at THIS resolution
    instead of at world scale: before, a part baked at r world px was blown up by
    DPR (and now ZOOM) at draw time, so every sprite was a magnified thumbnail. */
@@ -1763,20 +1776,43 @@ function buildBackdrop(){
   bdTile.width = bdTile.height = TILE;
   const g = bdTile.getContext('2d');
   g.fillStyle = shade(z.ground,-0.34); g.fillRect(0,0,TILE,TILE);
-  /* wrap each blob to all 9 offsets so the tile has no visible seam */
+  /* wrap each mark to all 9 offsets so the tile has no visible seam */
   const blob=(x,y,r,col,a,sq,rot)=>{
     g.globalAlpha=a; g.fillStyle=col;
     for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){
       g.beginPath(); g.ellipse(x+ox*TILE, y+oy*TILE, r, r*sq, rot, 0, 6.283); g.fill();
     }
   };
+  const stroke=(x,y,len,ang,w,col,a)=>{
+    g.globalAlpha=a; g.strokeStyle=col; g.lineWidth=w; g.lineCap='round';
+    for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){
+      g.beginPath();
+      g.moveTo(x+ox*TILE, y+oy*TILE);
+      g.lineTo(x+ox*TILE+Math.cos(ang)*len, y+oy*TILE+Math.sin(ang)*len);
+      g.stroke();
+    }
+  };
+  /* broad tonal patches — the ground was one flat wash with a few soft blobs */
+  for(let i=0;i<26;i++)
+    blob(Math.random()*TILE, Math.random()*TILE, rnd(40,130),
+         i%3===0 ? z.accent : z.sky, rnd(0.020,0.055), rnd(0.30,0.7), rnd(0,3.14));
+  /* mid-scale dirt/moss patches */
+  for(let i=0;i<38;i++)
+    blob(Math.random()*TILE, Math.random()*TILE, rnd(12,38),
+         i%2 ? shade(z.ground,0.16) : shade(z.ground,-0.22),
+         rnd(0.10,0.24), rnd(0.45,0.9), rnd(0,3.14));
+  /* pebbles */
+  for(let i=0;i<46;i++)
+    blob(Math.random()*TILE, Math.random()*TILE, rnd(1.4,3.6),
+         i%3===0 ? shade(z.ground,0.42) : shade(z.sky2,-0.15),
+         rnd(0.22,0.46), rnd(0.55,1), 0);
+  /* scratches and cracks give the eye something to track when you move */
   for(let i=0;i<30;i++)
-    blob(Math.random()*TILE, Math.random()*TILE, rnd(18,78),
-         i%4===0 ? z.accent : z.sky,
-         rnd(0.014,0.040), rnd(0.35,0.8), rnd(0,3.14));
-  for(let i=0;i<22;i++)
-    blob(Math.random()*TILE, Math.random()*TILE, rnd(5,17), shade(z.sky2,-0.2),
-         rnd(0.12,0.26), rnd(0.5,1), 0);
+    stroke(Math.random()*TILE, Math.random()*TILE, rnd(9,34), rnd(0,6.283),
+           rnd(0.7,1.7), shade(z.ground,-0.42), rnd(0.10,0.26));
+  for(let i=0;i<24;i++)
+    stroke(Math.random()*TILE, Math.random()*TILE, rnd(6,18), rnd(0,6.283),
+           rnd(0.6,1.3), shade(z.accent,-0.20), rnd(0.07,0.16));
   g.globalAlpha=1;
   bdPattern = ctx.createPattern(bdTile, 'repeat');
   bdMotes = [];
@@ -1897,11 +1933,17 @@ function buildZoneWorld(){
   /* enter from the south edge */
   P.x = WORLD.w*0.5; P.y = WORLD.h - 190;
   cam.x = clamp(P.x-W/2, 0, Math.max(0,WORLD.w-W));
-  cam.y = clamp(P.y-H/2, 0, Math.max(0,WORLD.h-H));
+  cam.y = clamp(py(P.y)-H/2, 0, Math.max(0,py(WORLD.h)-H));
 
-  for(let i=0;i<420;i++)
+  for(let i=0;i<420;i++){
+    const roll = Math.random();
+    /* 0 rock · 1 crystal · 2 grass tuft · 3 tree — weighted so grass carpets the
+       ground and trees are landmarks */
+    const k = roll<0.20?0 : roll<0.27?1 : roll<0.88?2 : 3;
     props.push({x:rnd(24,WORLD.w-24), y:rnd(24,WORLD.h-24),
-      r:rnd(9,30), k:Math.floor(Math.random()*3), a:rnd(0,6.283)});
+      r: k===3 ? rnd(15,24) : k===2 ? rnd(7,14) : rnd(9,22),
+      k, a:rnd(0,6.283), s:rnd(0.85,1.15)});
+  }
 
   const spots = [];
   /* Dart-throwing with a best-effort fallback: if no candidate clears minD,
@@ -1989,7 +2031,7 @@ function fct(x,y,txt,cls){
   const e = document.createElement('div');
   e.className = 'dmg'+(cls?' '+cls:'');
   e.textContent = txt;
-  e.style.left = ((x-cam.x)*ZOOM)+'px'; e.style.top = ((y-cam.y)*ZOOM)+'px';  /* world -> screen */
+  e.style.left = ((x-cam.x)*ZOOM)+'px'; e.style.top = ((py(y)-cam.y)*ZOOM)+'px';  /* world -> screen */
   fctEl.appendChild(e); fctCount++;
   setTimeout(()=>{ e.remove(); fctCount--; }, 880);
 }
@@ -2756,7 +2798,7 @@ function update(dt){
 
   /* ---- camera ---- */
   const tcx = clamp(P.x - W/2, 0, Math.max(0, WORLD.w-W));
-  const tcy = clamp(P.y - H/2, 0, Math.max(0, WORLD.h-H));
+  const tcy = clamp(py(P.y) - H/2, 0, Math.max(0, py(WORLD.h)-H));
   const k = Math.min(1, dt*7.5);
   cam.x += (tcx-cam.x)*k; cam.y += (tcy-cam.y)*k;
 
@@ -3665,13 +3707,19 @@ function drawChar(rigName, pal, x, y, r, st, alpha){
   const rr = r*rig.sc;
   const A = poseRig(rig, st);
   const B = solveRig(rig, A, rr);
-  const gy = y + rr*rig.footPx, sw = rr*rig.halfW;
+  const sw = rr*rig.halfW;
+  /* The contact point is the entity's world position projected onto the plane.
+     The shadow is drawn in ground space (so it is already an ellipse), then the
+     body counter-scales by 1/YSQ to stand upright and lifts by footPx so its
+     feet land exactly on that contact point. */
   if(GFX.shadow){
-    if(!rig.ghost) drawShadow(x, gy, sw*0.92, sw*0.30, (alpha==null?1:alpha)*0.8);
-    else           drawShadow(x, gy+rr*0.18, sw*0.62, sw*0.20, (alpha==null?1:alpha)*0.35);
+    if(!rig.ghost) drawShadow(x, y, sw*0.95, sw*0.95*0.55, (alpha==null?1:alpha)*0.8);
+    else           drawShadow(x, y+rr*0.10, sw*0.66, sw*0.66*0.50, (alpha==null?1:alpha)*0.35);
   }
   ctx.save();
-  ctx.translate(x + (A._x||0)*rr, y + (A._y||0)*rr);
+  ctx.translate(x, y);
+  ctx.scale(1, 1/YSQ);                     /* back to upright */
+  ctx.translate((A._x||0)*rr, -rr*rig.footPx + (A._y||0)*rr);
   if(st.rot) ctx.rotate(st.rot);
   ctx.scale(st.flip*(st._sx||1), (st._sy||1));
   if(alpha!=null && alpha<1) ctx.globalAlpha = alpha;
@@ -3722,16 +3770,20 @@ function drawFoe(f){
   if(f.hp < f.max*0.999 && f!==bossRef && f.born>=warpT){
     const rg = RIGS[rigName], rr = f.r*VIS*rg.sc;
     const w = clamp(rr*rg.halfW*0.95, 15, 42), hpct = clamp(f.hp/f.max,0,1);
-    const by = f.y + rr*rg.topPx - 6;
-    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(f.x-w/2, by, w, 3);
+    /* drawn upright above the head, so it is not flattened by the ground plane */
+    ctx.save();
+    ctx.translate(f.x, f.y); ctx.scale(1, 1/YSQ);
+    const by = rr*rg.topPx - rr*rg.footPx - 6;
+    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(-w/2, by, w, 3);
     ctx.fillStyle = f.rank? '#ff9a4c':'#e0455a';
-    ctx.fillRect(f.x-w/2, by, w*hpct, 3);
+    ctx.fillRect(-w/2, by, w*hpct, 3);
+    ctx.restore();
   }
 }
 
 /* ---------- corpses: enemies collapse instead of vanishing ---------- */
 let corpses = [];
-const _zList = [];
+const _zList = [], _props = [];
 function drawCorpse(c){
   const rigName = RIG_FOR[c.def.shape] || 'human';
   const k = clamp(c.t/0.75, 0, 1);
@@ -3803,48 +3855,120 @@ function PLAYER_PAL(cls, hit){
   return paletteFor('#aeb8e4','#545c86');
 }
 
+function drawProp(pr, z){
+  const r = pr.r, s = pr.s||1;
+  ctx.save();
+  ctx.translate(pr.x, pr.y);
+  /* contact shadow, still in ground space -> already an ellipse */
+  ctx.globalAlpha = pr.k===2 ? 0.22 : 0.42;
+  ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(0,0, r*0.80, r*0.80*0.52, 0,0,6.283); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.scale(1, 1/YSQ);                    /* upright from here */
+
+  if(pr.k===0){                            /* rock */
+    const lit = shade(z.ground, 0.30), dk = shade(z.ground,-0.30);
+    const g = ctx.createLinearGradient(0,-r*0.9,0,r*0.2);
+    g.addColorStop(0, lit); g.addColorStop(1, dk);
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.moveTo(-r*0.70, 0);
+    ctx.lineTo(-r*0.50,-r*0.62*s);
+    ctx.lineTo( r*0.05,-r*0.86*s);
+    ctx.lineTo( r*0.62,-r*0.44*s);
+    ctx.lineTo( r*0.74, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=shade(z.ground,-0.62); ctx.lineWidth=1.6; ctx.stroke();
+    ctx.fillStyle=shade(z.ground,0.46); ctx.globalAlpha=0.55;
+    ctx.beginPath();
+    ctx.moveTo(-r*0.42,-r*0.56*s); ctx.lineTo(r*0.02,-r*0.78*s); ctx.lineTo(r*0.1,-r*0.52*s);
+    ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+
+  } else if(pr.k===1){                     /* crystal */
+    drawGlow(0,-r*0.6*s, z.accent, r*1.5, 0.30);
+    const g = ctx.createLinearGradient(-r*0.3,-r*1.3*s, r*0.3, 0);
+    g.addColorStop(0, shade(z.accent,0.55)); g.addColorStop(1, shade(z.accent,-0.35));
+    ctx.fillStyle=g; ctx.globalAlpha=0.92;
+    ctx.beginPath();
+    ctx.moveTo(0,-r*1.35*s); ctx.lineTo(r*0.40,-r*0.30); ctx.lineTo(r*0.16,0);
+    ctx.lineTo(-r*0.26,0); ctx.lineTo(-r*0.42,-r*0.40); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=shade(z.accent,-0.55); ctx.lineWidth=1.3; ctx.stroke();
+    ctx.globalAlpha=0.55; ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.moveTo(-r*0.06,-r*1.22*s); ctx.lineTo(r*0.10,-r*0.34);
+    ctx.lineTo(-r*0.02,-r*0.34); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+
+  } else if(pr.k===2){                     /* grass tuft */
+    /* thin, many, and tinted toward the zone accent — five thick grey strokes
+       fanning symmetrically read as a check mark, not vegetation */
+    ctx.lineCap='round';
+    for(let i=0;i<7;i++){
+      const a2 = pr.a + i*0.897;
+      const lean = Math.sin(a2)*r*0.62;
+      const h = r*(0.85 + 0.55*Math.abs(Math.cos(a2*1.7)))*s;
+      ctx.strokeStyle = shade(z.accent, -0.34 + (i%3)*0.06);
+      ctx.lineWidth = Math.max(0.9, r*0.10);
+      ctx.globalAlpha = 0.72;
+      ctx.beginPath();
+      ctx.moveTo(lean*0.12, 0);
+      ctx.quadraticCurveTo(lean*0.45, -h*0.62, lean, -h);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+  } else {                                 /* tree */
+    const trunk = shade(z.ground,-0.48);
+    ctx.fillStyle=trunk;
+    ctx.beginPath();
+    ctx.moveTo(-r*0.11,0); ctx.lineTo(-r*0.07,-r*0.95*s);
+    ctx.lineTo(r*0.07,-r*0.95*s); ctx.lineTo(r*0.11,0); ctx.closePath(); ctx.fill();
+    const canopy = (cx,cy,cr,tone)=>{
+      const g = ctx.createRadialGradient(cx-cr*0.35, cy-cr*0.45, cr*0.1, cx, cy, cr);
+      g.addColorStop(0, shade(z.accent, 0.10+tone));
+      g.addColorStop(1, shade(z.accent,-0.58+tone*0.5));
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.ellipse(cx,cy,cr,cr*0.88,0,0,6.283); ctx.fill();
+    };
+    canopy(-r*0.34,-r*1.10*s, r*0.50, -0.10);
+    canopy( r*0.32,-r*1.18*s, r*0.46, -0.16);
+    canopy( 0,     -r*1.48*s, r*0.58,  0.04);
+    ctx.globalAlpha=0.30; ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.ellipse(-r*0.18,-r*0.98*s, r*0.42, r*0.26,0,0,6.283); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+}
+
 function render(){
   const z = ZONE_BY_ID[S.zone];
   ctx.save();
   if(shake>0.2){ const k=0.5/ZOOM; ctx.translate(rnd(-shake,shake)*k, rnd(-shake,shake)*k); }
 
   ctx.translate(-cam.x, -cam.y);
-  const vx0=cam.x, vy0=cam.y, vx1=cam.x+W, vy1=cam.y+H;
+  /* From here on the canvas is the GROUND PLANE: every world coordinate drawn
+     lands projected, and circles become the ellipses you want for decals,
+     shadows and camp rings. Characters undo this inside drawChar. */
+  ctx.scale(1, YSQ);
+  /* the visible rectangle in WORLD units (taller than H because of the squash) */
+  const vx0=cam.x, vx1=cam.x+W, vy0=wy(cam.y), vy1=wy(cam.y+H);
+  const vh = vy1-vy0;
 
-  if(bdPattern && GFX.backdrop){ ctx.fillStyle=bdPattern; ctx.fillRect(vx0,vy0,W,H); }
-  else { ctx.fillStyle=z.ground; ctx.fillRect(vx0,vy0,W,H); }
+  if(bdPattern && GFX.backdrop){ ctx.fillStyle=bdPattern; ctx.fillRect(vx0,vy0,W,vh); }
+  else { ctx.fillStyle=z.ground; ctx.fillRect(vx0,vy0,W,vh); }
 
   /* world edge: darkened band so the boundary reads as terrain, not a bug */
   ctx.fillStyle='rgba(0,0,0,.42)';
-  if(vx0<0) ctx.fillRect(vx0,vy0,-vx0,H);
+  if(vx0<0) ctx.fillRect(vx0,vy0,-vx0,vh);
   if(vy0<0) ctx.fillRect(vx0,vy0,W,-vy0);
-  if(vx1>WORLD.w) ctx.fillRect(WORLD.w,vy0,vx1-WORLD.w,H);
+  if(vx1>WORLD.w) ctx.fillRect(WORLD.w,vy0,vx1-WORLD.w,vh);
   if(vy1>WORLD.h) ctx.fillRect(vx0,WORLD.h,W,vy1-WORLD.h);
 
-  /* scenery */
+  /* Scenery is gathered here but DRAWN in the depth-sorted pass below — a tree
+     standing in front of a wolf has to cover it, which a flat scenery layer
+     underneath everything can never do. */
+  _props.length = 0;
   for(const pr of props){
-    if(pr.x<vx0-40||pr.x>vx1+40||pr.y<vy0-40||pr.y>vy1+40) continue;
-    ctx.globalAlpha=0.5;
-    ctx.fillStyle='#000'; ctx.beginPath();
-    ctx.ellipse(pr.x, pr.y+pr.r*0.42, pr.r*0.82, pr.r*0.3, 0,0,6.283); ctx.fill();
-    ctx.globalAlpha=1;
-    if(pr.k===0){                       /* boulder */
-      ctx.fillStyle=shade(z.ground,0.18); ctx.beginPath();
-      ctx.ellipse(pr.x,pr.y,pr.r*0.85,pr.r*0.62,pr.a,0,6.283); ctx.fill();
-      ctx.fillStyle=shade(z.ground,0.34); ctx.beginPath();
-      ctx.ellipse(pr.x-pr.r*0.18,pr.y-pr.r*0.18,pr.r*0.45,pr.r*0.3,pr.a,0,6.283); ctx.fill();
-    } else if(pr.k===1){                /* crystal shard */
-      ctx.fillStyle=z.accent; ctx.globalAlpha=0.55;
-      ctx.beginPath(); ctx.moveTo(pr.x,pr.y-pr.r);
-      ctx.lineTo(pr.x+pr.r*0.34,pr.y+pr.r*0.4); ctx.lineTo(pr.x-pr.r*0.34,pr.y+pr.r*0.4);
-      ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
-    } else {                            /* scrub */
-      ctx.strokeStyle=shade(z.ground,0.30); ctx.lineWidth=2; ctx.lineCap='round';
-      for(let i=0;i<4;i++){ const a=pr.a+i*0.7;
-        ctx.beginPath(); ctx.moveTo(pr.x,pr.y+pr.r*0.35);
-        ctx.lineTo(pr.x+Math.cos(a-1.57)*pr.r*0.6, pr.y+pr.r*0.35-Math.abs(Math.sin(a))*pr.r);
-        ctx.stroke(); }
-    }
+    if(pr.x<vx0-60||pr.x>vx1+60||pr.y<vy0-90||pr.y>vy1+90) continue;
+    _props.push(pr);
   }
 
   /* camp markers on the ground */
@@ -3862,7 +3986,7 @@ function render(){
   const now = performance.now()/1000;
   ctx.fillStyle = z.accent;
   for(const m of bdMotes){
-    const yy=(m.y - now*m.s) % H, ny=(yy<0?yy+H:yy)+vy0;
+    const yy=(m.y - now*m.s) % vh, ny=(yy<0?yy+vh:yy)+vy0;
     const xx=m.x % W, nx=(xx<0?xx+W:xx)+vx0;
     ctx.globalAlpha = m.a*0.55;
     ctx.beginPath(); ctx.arc(nx, ny, m.r, 0, 6.283); ctx.fill();
@@ -3891,8 +4015,9 @@ function render(){
       ctx.fillStyle='#e8b44a'; ctx.beginPath(); ctx.arc(d.x,d.y,4.5,0,6.283); ctx.fill();
       ctx.fillStyle='#fff3c4'; ctx.beginPath(); ctx.arc(d.x-1.3,d.y-1.3,1.6,0,6.283); ctx.fill();
     } else if(d.t==='mat'){
+      ctx.save(); ctx.translate(d.x,d.y); ctx.scale(1,1/YSQ);
       ctx.font='14px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(MATS[d.k].ic, d.x, d.y);
+      ctx.fillText(MATS[d.k].ic, 0, 0); ctx.restore();
     } else {
       const c=RARITY[d.it.rar].col;
       drawGlow(d.x,d.y,c,16,0.7*a);
@@ -3907,20 +4032,27 @@ function render(){
     if(c.open) continue;
     if(c.x<vx0-40||c.x>vx1+40||c.y<vy0-40||c.y>vy1+40) continue;
     const b = Math.sin(c.t*3)*2;
-    drawGlow(c.x,c.y+b,'#e8b44a',34,0.4+Math.sin(c.t*3)*0.1);
-    ctx.fillStyle='#7a5a24'; ctx.fillRect(c.x-15,c.y-8+b,30,18);
+    drawGlow(c.x,c.y,'#e8b44a',34,0.4+Math.sin(c.t*3)*0.1);   /* ground pool */
+    ctx.save(); ctx.translate(c.x,c.y); ctx.scale(1,1/YSQ);   /* box stands up */
+    const yb = -18+b;
+    ctx.fillStyle='#000'; ctx.globalAlpha=0.35;
+    ctx.beginPath(); ctx.ellipse(0,0,17,17*0.55,0,0,6.283); ctx.fill(); ctx.globalAlpha=1;
+    ctx.fillStyle='#7a5a24'; ctx.fillRect(-15,yb,30,18);
     ctx.fillStyle='#a8762c';
-    ctx.beginPath(); ctx.ellipse(c.x,c.y-8+b,15,9,0,Math.PI,0); ctx.fill();
-    ctx.fillStyle='#e8b44a'; ctx.fillRect(c.x-3,c.y-6+b,6,10);
-    ctx.strokeStyle='#4a3512'; ctx.lineWidth=1.6; ctx.strokeRect(c.x-15,c.y-8+b,30,18);
+    ctx.beginPath(); ctx.ellipse(0,yb,15,9,0,Math.PI,0); ctx.fill();
+    ctx.fillStyle='#e8b44a'; ctx.fillRect(-3,yb+2,6,10);
+    ctx.strokeStyle='#4a3512'; ctx.lineWidth=1.6; ctx.strokeRect(-15,yb,30,18);
+    ctx.restore();
   }
 
   /* depth-sorted characters: whoever stands lower on screen draws in front */
   _zList.length = 0;
   for(const c of corpses) _zList.push(c);
   for(const f of foes)    _zList.push(f);
-  _zList.sort((a,b)=> (a.y+(a.r||0)) - (b.y+(b.r||0)));
+  for(const pr of _props) _zList.push(pr);
+  _zList.sort((a,b)=> a.y - b.y);          /* ground contact point decides order */
   for(const e of _zList){
+    if(e.k!==undefined && e.s!==undefined){ drawProp(e, z); continue; }   /* prop */
     const m = (e.r||20)*3 + 40;
     if(e.x<vx0-m||e.x>vx1+m||e.y<vy0-m||e.y>vy1+m) continue;   /* off-camera */
     e.corpse ? drawCorpse(e) : drawFoe(e);
@@ -3996,7 +4128,7 @@ function drawMinimap(){
 
   /* camera window */
   ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1;
-  ctx.strokeRect(ox+cam.x*s, oy+cam.y*s, W*s, H*s);
+  ctx.strokeRect(ox+cam.x*s, oy+wy(cam.y)*s, W*s, wy(H)*s);
 
   /* player */
   ctx.fillStyle='#ffffff';
@@ -4011,7 +4143,7 @@ function drawMinimap(){
     if(d<bd){ bd=d; best=pk; }
   }
   if(best){
-    const sx=(best.x-cam.x)*ZOOM, sy=(best.y-cam.y)*ZOOM;
+    const sx=(best.x-cam.x)*ZOOM, sy=(py(best.y)-cam.y)*ZOOM;
     if(sx<20||sx>SW-20||sy<70||sy>SH-90){
       const a=Math.atan2(best.y-P.y, best.x-P.x);
       const cx=SW/2+Math.cos(a)*(Math.min(SW,SH)*0.36);
