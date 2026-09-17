@@ -2117,7 +2117,10 @@ function openChest(){
   S.meta.chests++;
   const z = ZONE_BY_ID[S.zone];
   const got = [];
-  const n = rint(2,3);
+  /* 1-2 equipment items, never more. Gold, materials and the rest of the haul
+     below are untouched — a chest should feel worth the walk without being a
+     backpack's worth of gear on its own. */
+  const n = rint(1,2);
   for(let i=0;i<n;i++){
     const ilvl = clamp(Math.round(zoneLvl()+rnd(0,3)),1,99);
     /* A chest is a good roll, not a guaranteed one. Only the FIRST item gets

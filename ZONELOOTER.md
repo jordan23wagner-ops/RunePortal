@@ -90,7 +90,9 @@ exploration rather than a corridor.
 - **Upgrade** any item to +10 (+6% per rank).
 - **10 craftable relics**, each with a unique mechanical power (burn, chill, poison,
   chain-extension, stacking damage reduction, detonations, extra pierce…).
-- **Treasure chests** hold 2–3 items; only the *first* rolls with an Uncommon floor.
+- **Treasure chests** hold **1–2 equipment items, never more**; only the *first*
+  rolls with an Uncommon floor. Gold and materials are unchanged — the chest is
+  still worth the walk, it just isn't a backpack of gear on its own.
 - **Elites** every 22 kills, **bosses** every 75, with telegraphed charge/slam/barrage/summon patterns.
 - **WebAudio** synthesised SFX — no audio files. Rarity-scaled loot stings.
 - **Inventory grid** — square rarity-framed item cells with glow, ilvl and +N badges,
@@ -169,8 +171,13 @@ Tested headless in Chromium at 390×844 @2x:
   | T5 chest | 40.9% | **13.1%** | 12.0% | **2.6%** |
   | T5 boss  | 43.2% | **18.2%** | 12.7% | **3.9%** |
 
-  Item *quantity* is close to where it was (trash 7.5%→7%, elite 50%→45%) — the
-  bag still fills, it fills with commons.
+  Item *quantity* from kills is close to where it was (trash 7.5%→7%, elite
+  50%→45%) — the bag still fills, it fills with commons.
+- Chest yield, 4000 chests opened per zone through `openChest()` itself: **1 or 2
+  equipment items, avg 1.5, max 2**; gold and materials untouched (Verdant 91g /
+  3.5 mats, Voidspire 5277g / 5.5 mats). A Verdant chest yields a rare-or-better
+  **9%** of the time, a Voidspire chest **19.7%** — roughly one in eleven, and one
+  in five.
 - Balance curve: trash TTK 1.5s → 4.6s across tiers 1→5; bosses 13s → 42s;
   time-to-die with three enemies in contact 40s → 7-12s. Melee tankiest (63%
   mitigation), magic glassiest (38%) but higher burst, ranged highest DPS ceiling.
