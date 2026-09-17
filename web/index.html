@@ -44,8 +44,11 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+/* The artifact host pads :root by the safe-area insets. That shoves a
+   full-height app down by the inset and buries the tab bar. Insets are
+   handled where they belong - inside the HUD and the tab bar - so zero it. */
 html,body{
-  margin:0;padding:0;min-height:100%;overflow:hidden;
+  margin:0!important;padding:0!important;min-height:100%;overflow:hidden;
   background:var(--bg);color:var(--txt);
   font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
   font-size:15px;
@@ -58,15 +61,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px;}
 
-/* Real flow height, not position:fixed.
-   Fixed positioning made the document's intrinsic height 0, so any embed that
-   sizes a frame to its content measured nothing and rendered a blank page.
-   min-height guarantees a floor even when the container reports no height. */
+/* #app is pinned to the viewport edges. Fixed positioning ignores any
+   padding on the root and needs no measured height, so the tab bar lands on
+   the real bottom of the screen whatever the host reports. The spacer below
+   it keeps the DOCUMENT tall for embeds that size a frame to content. */
+#vpSpacer{height:100vh;height:100dvh;min-height:320px;pointer-events:none;}
 #app{
-  position:relative;
-  width:100%;max-width:560px;margin:0 auto;
-  height:100vh; height:100dvh;
-  min-height:320px;
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  max-width:560px;margin:0 auto;
   display:flex;flex-direction:column;
   background:var(--bg);
   overflow:hidden;
@@ -672,6 +674,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 </style>
 </head>
 <body>
+<div id="vpSpacer"></div>
 <div id="app">
 
   <!-- ===================== ARENA ===================== -->
@@ -4650,31 +4653,10 @@ function viewportH(){
   const ok = cands.filter(v=>v>260);
   return ok.length ? Math.round(Math.min.apply(null, ok)) : 0;
 }
-function fitViewport(depth){
-  const app = $('app');
-  const h = viewportH();
-  if(h >= 260){
-    /* explicit height must also beat the CSS min-height floor, or a short
-       viewport (landscape) grows past the screen and buries the tab bar */
-    app.style.height = h+'px'; app.style.minHeight = h+'px';
-  } else {
-    app.style.height = ''; app.style.minHeight = '';
-  }
+function fitViewport(){
+  /* #app is position:fixed to the viewport; nothing to compute here beyond
+     re-measuring the canvas after the host's chrome settles */
   resizeCanvas();
-
-  /* self-correction pass: trust measured geometry over reported height */
-  if((depth||0) < 3) requestAnimationFrame(()=>{
-    const tb = $('tabbar').getBoundingClientRect();
-    const vis = viewportH();
-    const over = Math.round(tb.bottom - vis);
-    if(vis>260 && over > 1){
-      const cur = $('app').getBoundingClientRect().height;
-      const next = Math.max(260, Math.round(cur - over));
-      app.style.height = next+'px'; app.style.minHeight = next+'px';
-      resizeCanvas();
-      fitViewport((depth||0)+1);
-    }
-  });
 }
 window.addEventListener('resize', ()=>fitViewport());
 window.addEventListener('orientationchange', ()=>setTimeout(fitViewport,150));
