@@ -977,15 +977,15 @@ const WEAPONS = {
                ps:700,splash:44,two:1, note:'Two-handed. Explodes on impact'},
   /* ---- MAGIC (INT) ---- */
   firestaff:  {n:'Fire Staff',   cls:'magic',stat:'int',ic:'🔥',dmg:1.38,spd:0.88,rng:340,pat:'shot',mp:3,
-               ps:420,splash:56,two:1, note:'Two-handed. Fireball burst'},
+               ps:420,splash:56,two:1, vcol:'#ff8a3c', note:'Two-handed. Fireball burst'},
   icewand:    {n:'Ice Wand',     cls:'magic',stat:'int',ic:'❄️',dmg:0.82,spd:1.45,rng:310,pat:'shot',mp:2,
-               ps:480,slow:0.38, note:'Chills targets 38%'},
+               ps:480,slow:0.38, vcol:'#7fe4ff', note:'Chills targets 38%'},
   stormrod:   {n:'Storm Rod',    cls:'magic',stat:'int',ic:'⚡',dmg:1.02,spd:1.10,rng:300,pat:'shot',mp:3,
-               ps:620,chain:3, note:'Arcs to 3 enemies'},
+               ps:620,chain:3, vcol:'#ffe04a', note:'Arcs to 3 enemies'},
   voidtome:   {n:'Void Tome',    cls:'magic',stat:'int',ic:'📕',dmg:1.16,spd:0.98,rng:360,pat:'shot',mp:3,
-               ps:330,homing:1,two:1, note:'Two-handed. Homing bolts'},
+               ps:330,homing:1,two:1, vcol:'#c084fc', note:'Two-handed. Homing bolts'},
   arcaneorb:  {n:'Arcane Orb',   cls:'magic',stat:'int',ic:'🔮',dmg:1.70,spd:0.66,rng:330,pat:'shot',mp:5,
-               ps:250,pierce:4,two:1, note:'Two-handed. Slow piercing orb'},
+               ps:250,pierce:4,two:1, vcol:'#b57cff', note:'Two-handed. Slow piercing orb'},
 };
 
 /* offhands */
@@ -1852,7 +1852,7 @@ function makePlayer(){
   P = {x:W/2,y:H*0.62,r:16,hp:Math.min(S.hp||D.maxHp,D.maxHp),mp:Math.min(S.mp||D.maxMp,D.maxMp),
     fx:0,fy:-1,atkCd:0,dashCd:0,skillCd:0,potCd:0,inv:0,dashT:0,dvx:0,dvy:0,
     hitStreak:{},chainHit:0,bulwark:0,bulwarkT:0,dead:false,flash:0,
-    calm:0, sprint:0,
+    calm:0, sprint:0, aimx:0, aimy:-1, aimT:0,
     an:newAnim(), t:0, px:0, py:0};
 }
 function makeFoe(def, rank, hx, hy){
@@ -2395,7 +2395,8 @@ function spawnShot(ang, A, mult, extra){
     x:P.x+Math.cos(ang)*16, y:P.y+Math.sin(ang)*16,
     vx:Math.cos(ang)*(A.ps||460), vy:Math.sin(ang)*(A.ps||460),
     r:A.splash?7:5, dmg:h.dmg, crit:h.crit, own:'p', life:1.6,
-    col: A.cls==='magic' ? '#8ab4ff' : '#dfe7ff',
+    col: A.vcol || (A.cls==='magic' ? '#8ab4ff' : '#dfe7ff'),
+    vk: A.cls==='range' ? 'arrow' : 'orb',
     pierce, hitSet:new Set(),
     splash:A.splash||0, slow:A.slow||0,
     chain: U.superchain?6:(A.chain||0), chainAmp: U.superchain?0.12:0,
@@ -2411,6 +2412,9 @@ function doAttack(){
   const dir = aim || {x:P.fx,y:P.fy};
   const ang = Math.atan2(dir.y,dir.x);
   P.fx=Math.cos(ang); P.fy=Math.sin(ang);
+  /* movement rewrites P.fx/P.fy every frame, so remember where the swing was
+     aimed and let the renderer use that until it lapses */
+  P.aimx=P.fx; P.aimy=P.fy; P.aimT=0.45;
   P.atkCd = D.atkTime; P.an.atk = 0;
   if(A.mp>0) P.mp = Math.max(0,P.mp-A.mp);
 
@@ -2582,6 +2586,7 @@ function update(dt){
     P.skillCd= Math.max(0,P.skillCd-dt);
     P.potCd  = Math.max(0,P.potCd-dt);
     P.inv    = Math.max(0,P.inv-dt);
+    if(P.aimT>0) P.aimT -= dt;
     P.flash  = Math.max(0,P.flash-dt);
     if(P.bulwarkT>0){ P.bulwarkT-=dt; if(P.bulwarkT<=0) P.bulwark=0; }
 
@@ -3132,106 +3137,217 @@ function buildSkinned(spec, pal){
   return {mesh, bones, mat};
 }
 
+/* ---------- hero composition ----------
+   One skeleton, three armour styles and five weapon fits. Keyed so the mesh is
+   rebuilt only when the look actually changes. */
+const HERO_BONES = [
+  ['root',null,[0,0,0]], ['hips','root',[0,0.95,0]], ['chest','hips',[0,0.42,0]],
+  ['neck','chest',[0,0.44,0]], ['head','neck',[0,0.13,0]],
+  ['cape','chest',[0,0.30,-0.13]],
+  ['armL','chest',[0.32,0.28,0]],  ['foreL','armL',[0,-0.34,0]],  ['handL','foreL',[0,-0.32,0]],
+  ['armR','chest',[-0.32,0.28,0]], ['foreR','armR',[0,-0.34,0]],  ['handR','foreR',[0,-0.32,0]],
+  ['legL','hips',[0.16,-0.06,0]],  ['shinL','legL',[0,-0.42,0]],  ['footL','shinL',[0,-0.40,0]],
+  ['legR','hips',[-0.16,-0.06,0]], ['shinR','legR',[0,-0.42,0]],  ['footR','shinR',[0,-0.40,0]],
+];
+const SKIN = '#e3bc8f', LEATHER = '#4a3b28', DARKLEATHER = '#33291c', GOLD = '#d9a93c';
+
+function heroBody(){
+  return [
+    {b:'neck',  shape:'cyl', w:0.17, h:0.14, y:0.06, c:'#caa279'},
+    {b:'head',  shape:'sphere', w:0.36, det:1, y:0.15, c:SKIN},
+    {b:'armL',  shape:'cyl', w:0.18, w2:0.15, h:0.34, y:-0.17, c:'mid'},
+    {b:'foreL', shape:'cyl', w:0.16, w2:0.13, h:0.32, y:-0.16, c:'dark'},
+    {b:'handL', shape:'box', w:0.14, h:0.15, d:0.16, y:-0.06, c:LEATHER},
+    {b:'armR',  shape:'cyl', w:0.18, w2:0.15, h:0.34, y:-0.17, c:'mid'},
+    {b:'foreR', shape:'cyl', w:0.16, w2:0.13, h:0.32, y:-0.16, c:'dark'},
+    {b:'handR', shape:'box', w:0.14, h:0.15, d:0.16, y:-0.06, c:LEATHER},
+    {b:'legL',  shape:'cyl', w:0.21, w2:0.17, h:0.42, y:-0.21, c:'dark'},
+    {b:'shinL', shape:'cyl', w:0.17, w2:0.15, h:0.40, y:-0.20, c:'dark'},
+    {b:'legR',  shape:'cyl', w:0.21, w2:0.17, h:0.42, y:-0.21, c:'dark'},
+    {b:'shinR', shape:'cyl', w:0.17, w2:0.15, h:0.40, y:-0.20, c:'dark'},
+  ];
+}
+const HERO_ARMOUR = {
+  /* plate: helm, crest, heavy pauldrons, breastplate, cape */
+  melee: [
+    {b:'hips',  shape:'cyl', w:0.46, w2:0.42, h:0.30, y:0.06, c:'dark'},
+    {b:'hips',  shape:'box', w:0.50, h:0.10, d:0.36, y:0.20, c:LEATHER},
+    {b:'hips',  shape:'box', w:0.10, h:0.10, d:0.10, y:0.20, z:0.19, c:GOLD},
+    {b:'chest', shape:'cyl', w:0.60, w2:0.50, h:0.50, y:0.20, c:'mid'},
+    {b:'chest', shape:'box', w:0.40, h:0.34, d:0.14, y:0.24, z:0.18, c:'lite'},
+    {b:'armL',  shape:'sphere', w:0.34, y:0.02, c:'lite'},
+    {b:'armR',  shape:'sphere', w:0.34, y:0.02, c:'lite'},
+    {b:'head',  shape:'sphere', w:0.42, det:1, sy:0.74, y:0.20, c:'lite'},
+    {b:'head',  shape:'box', w:0.30, h:0.06, d:0.10, y:0.14, z:0.17, c:'#151a24'},
+    {b:'head',  shape:'box', w:0.09, h:0.20, d:0.10, y:0.13, z:0.16, c:'lite'},
+    {b:'head',  shape:'cone',w:0.11, h:0.26, y:0.42, c:GOLD},
+    {b:'foreL', shape:'cyl', w:0.19, h:0.09, y:-0.02, c:'lite'},
+    {b:'foreR', shape:'cyl', w:0.19, h:0.09, y:-0.02, c:'lite'},
+    {b:'legL',  shape:'sphere', w:0.20, y:-0.40, c:'mid'},
+    {b:'legR',  shape:'sphere', w:0.20, y:-0.40, c:'mid'},
+    {b:'footL', shape:'box', w:0.19, h:0.12, d:0.30, y:-0.04, z:0.06, c:DARKLEATHER},
+    {b:'footR', shape:'box', w:0.19, h:0.12, d:0.30, y:-0.04, z:0.06, c:DARKLEATHER},
+    {b:'cape',  shape:'box', w:0.50, h:0.68, d:0.05, y:-0.32, c:'#7a2233'},
+    {b:'cape',  shape:'box', w:0.54, h:0.10, d:0.09, y:0.02, c:GOLD},
+  ],
+  /* leathers: hood, light shoulders, quiver, bracers */
+  range: [
+    {b:'hips',  shape:'cyl', w:0.44, w2:0.40, h:0.30, y:0.06, c:'dark'},
+    {b:'hips',  shape:'box', w:0.48, h:0.09, d:0.34, y:0.20, c:DARKLEATHER},
+    {b:'chest', shape:'cyl', w:0.54, w2:0.46, h:0.50, y:0.20, c:'mid'},
+    {b:'chest', shape:'box', w:0.26, h:0.40, d:0.12, y:0.22, z:0.16, c:'dark'},   /* jerkin lace */
+    {b:'armL',  shape:'sphere', w:0.26, sy:0.8, y:0.02, c:'dark'},
+    {b:'armR',  shape:'sphere', w:0.26, sy:0.8, y:0.02, c:'dark'},
+    {b:'head',  shape:'cone', w:0.46, h:0.40, y:0.30, c:'mid'},                   /* hood */
+    {b:'head',  shape:'box',  w:0.26, h:0.12, d:0.12, y:0.13, z:0.15, c:'#1b2130'},/* hood shadow */
+    {b:'foreL', shape:'cyl', w:0.18, h:0.14, y:-0.06, c:LEATHER},
+    {b:'foreR', shape:'cyl', w:0.18, h:0.14, y:-0.06, c:LEATHER},
+    {b:'footL', shape:'box', w:0.17, h:0.11, d:0.28, y:-0.04, z:0.05, c:DARKLEATHER},
+    {b:'footR', shape:'box', w:0.17, h:0.11, d:0.28, y:-0.04, z:0.05, c:DARKLEATHER},
+    /* quiver slung across the back, with arrows poking out */
+    {b:'cape',  shape:'cyl', w:0.16, h:0.42, y:-0.18, z:-0.02, c:LEATHER},
+    {b:'cape',  shape:'cyl', w:0.03, h:0.20, x:-0.03, y:0.06, c:'#8a6a3a'},
+    {b:'cape',  shape:'cyl', w:0.03, h:0.20, x:0.03,  y:0.08, c:'#8a6a3a'},
+  ],
+  /* robes: pointed hat, long sleeves, sash, skirt instead of visible legs */
+  magic: [
+    {b:'hips',  shape:'cyl', w:0.48, w2:0.72, h:0.62, y:-0.10, c:'mid'},          /* robe skirt */
+    {b:'hips',  shape:'box', w:0.50, h:0.09, d:0.38, y:0.22, c:'#6b2f6e'},        /* sash */
+    {b:'chest', shape:'cyl', w:0.54, w2:0.46, h:0.50, y:0.20, c:'mid'},
+    {b:'chest', shape:'box', w:0.16, h:0.44, d:0.12, y:0.22, z:0.16, c:'lite'},   /* trim */
+    {b:'armL',  shape:'cyl', w:0.30, w2:0.22, h:0.30, y:-0.14, c:'mid'},          /* sleeve */
+    {b:'armR',  shape:'cyl', w:0.30, w2:0.22, h:0.30, y:-0.14, c:'mid'},
+    {b:'head',  shape:'cone', w:0.56, h:0.72, y:0.52, c:'mid'},                   /* wizard hat */
+    {b:'head',  shape:'cyl',  w:0.60, h:0.05, y:0.25, c:'lite'},                  /* brim */
+    {b:'head',  shape:'sphere', w:0.10, y:0.86, c:GOLD},
+    {b:'footL', shape:'box', w:0.16, h:0.10, d:0.24, y:-0.04, z:0.04, c:DARKLEATHER},
+    {b:'footR', shape:'box', w:0.16, h:0.10, d:0.24, y:-0.04, z:0.04, c:DARKLEATHER},
+    {b:'cape',  shape:'box', w:0.44, h:0.74, d:0.04, y:-0.36, c:'#3a2a6a'},
+  ],
+};
+/* the held weapon follows the equipped archetype, so swapping gear changes the model */
+const HERO_WEAPON = {
+  blade: [
+    {b:'handR', shape:'cyl', w:0.06, h:0.20, y:-0.16, c:'#3a2a1c'},
+    {b:'handR', shape:'box', w:0.30, h:0.05, d:0.09, y:-0.27, c:GOLD},
+    {b:'handR', shape:'box', w:0.11, h:0.62, d:0.035, y:-0.60, c:'#dfe6f2'},
+    {b:'handR', shape:'cone',w:0.11, h:0.16, y:-0.99, c:'#dfe6f2'},
+    {b:'handR', shape:'sphere', w:0.09, y:-0.06, c:GOLD},
+  ],
+  axe: [
+    {b:'handR', shape:'cyl', w:0.06, h:0.70, y:-0.34, c:'#3a2a1c'},
+    {b:'handR', shape:'box', w:0.30, h:0.34, d:0.05, x:0.16, y:-0.64, c:'#cfd8e6'},
+    {b:'handR', shape:'sphere', w:0.09, y:-0.02, c:GOLD},
+  ],
+  bow: [
+    {b:'handL', shape:'cyl', w:0.05, h:0.46, x:0,    y:-0.22, z:0.06, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.05, h:0.46, x:0,    y:0.22,  z:0.06, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.05, h:0.30, x:0,    y:-0.52, z:-0.02, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.05, h:0.30, x:0,    y:0.52,  z:-0.02, c:'#6b4a26'},
+    {b:'handL', shape:'box', w:0.014,h:1.30, d:0.014, z:-0.14, c:'#e4dcc4'},   /* string */
+    {b:'handL', shape:'sphere', w:0.08, z:0.06, c:GOLD},
+  ],
+  gun: [
+    {b:'handR', shape:'box', w:0.12, h:0.18, d:0.16, y:-0.12, c:'#3a2a1c'},
+    {b:'handR', shape:'cyl', w:0.10, h:0.52, y:-0.16, z:0.34, c:'#9aa6ba'},
+  ],
+  staff: [
+    {b:'handL', shape:'cyl', w:0.06, w2:0.05, h:1.55, y:-0.30, c:'#5a3f22'},
+    {b:'handL', shape:'sphere', w:0.09, y:0.46, c:'#5a3f22'},
+    {b:'handL', shape:'sphere', w:0.24, det:1, y:0.60, c:'glow'},   /* focus stone */
+    {b:'handL', shape:'cone', w:0.16, h:0.16, y:0.44, c:GOLD},
+  ],
+  orb: [
+    {b:'handL', shape:'sphere', w:0.28, det:1, y:-0.24, c:'glow'},
+    {b:'handL', shape:'cyl', w:0.30, h:0.03, y:-0.24, c:GOLD},
+  ],
+  tome: [
+    {b:'handL', shape:'box', w:0.30, h:0.36, d:0.10, y:-0.20, c:'#7a2233'},
+    {b:'handL', shape:'box', w:0.26, h:0.32, d:0.12, y:-0.20, z:0.02, c:'#e8e2d0'},
+    {b:'handL', shape:'sphere', w:0.12, y:-0.20, z:0.10, c:'glow'},
+  ],
+};
+function heroWeaponKind(arch){
+  const m = {sword:'blade',dagger:'blade',greatsword:'blade',spear:'blade',mace:'blade',
+    axe:'axe', shortbow:'bow',longbow:'bow',crossbow:'bow',knives:'blade',handcannon:'gun',
+    firestaff:'staff',icewand:'staff',stormrod:'staff',voidtome:'tome',arcaneorb:'orb'};
+  return m[arch] || 'blade';
+}
+function heroPose(b, an, st){
+  const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.2)*0.5+0.5;
+  const twoHand = st.wk==='bow' || st.wk==='staff';
+  b.legL.rotation.x =  s*0.85*w;  b.legR.rotation.x = -s*0.85*w;
+  b.shinL.rotation.x = Math.max(0,-s)*0.95*w; b.shinR.rotation.x = Math.max(0,s)*0.95*w;
+  b.footL.rotation.x = -Math.max(0,-s)*0.5*w; b.footR.rotation.x = -Math.max(0,s)*0.5*w;
+  b.armL.rotation.x = -s*0.72*w - (twoHand?0.95:0.06);
+  b.armR.rotation.x =  s*0.60*w - (twoHand?0.70:0.30);
+  b.armL.rotation.z = twoHand ? 0.22 : 0;
+  b.armR.rotation.z = twoHand ? -0.18 : 0;
+  b.foreL.rotation.x = twoHand ? -0.35 : 0.36;
+  b.foreR.rotation.x = twoHand ? -0.55 : 0.30;
+  b.handL.rotation.x = 0; b.handR.rotation.x = 0;
+  b.chest.rotation.y = s*0.13*w;
+  b.chest.rotation.x = 0.04 + br*0.03;
+  b.neck.rotation.x = -0.03;
+  b.head.rotation.x = -br*0.04;
+  b.hips.position.y = 0.95 - Math.abs(s)*0.06*w + br*0.012;
+  b.cape.rotation.x = 0.10 + w*0.42 + Math.sin(st.t*3.1)*0.05;
+  b.cape.rotation.z = Math.sin(st.t*2.3)*0.06 + s*0.05*w;
+  if(an.atk>=0){
+    const a=an.atk;
+    if(st.wk==='bow'){
+      /* draw and loose: bow arm locked forward, string hand pulls back and snaps */
+      const d2 = a<0.6 ? a/0.6 : 1-(a-0.6)/0.4;
+      b.armL.rotation.x = -1.50; b.armL.rotation.z = 0.10; b.foreL.rotation.x = -0.10;
+      b.armR.rotation.x = -1.20 + d2*0.30; b.foreR.rotation.x = -0.95 - d2*0.55;
+      b.chest.rotation.y = 0.30;
+    } else if(st.wk==='staff' || st.wk==='orb' || st.wk==='tome'){
+      /* gather, then thrust the focus forward */
+      const d2 = a<0.45 ? a/0.45 : 1-(a-0.45)/0.55;
+      b.armL.rotation.x = -1.05 - d2*0.85; b.armL.rotation.z = 0.15 - d2*0.15;
+      b.foreL.rotation.x = -0.30 - d2*0.35;
+      b.armR.rotation.x = -0.45 - d2*0.35;
+      b.chest.rotation.x += -0.12*d2; b.head.rotation.x -= 0.10*d2;
+    } else {
+      let sw2; if(a<0.30) sw2=-1.0*(a/0.30);
+      else if(a<0.52) sw2=lerp(-1.0,1.9,(a-0.30)/0.22);
+      else sw2=lerp(1.9,0,(a-0.52)/0.48);
+      b.armR.rotation.x = -1.35 + sw2*1.25;
+      b.armR.rotation.z = -0.25 - sw2*0.30;
+      b.foreR.rotation.x = 0.30 - Math.max(0,sw2)*0.60;
+      b.handR.rotation.x = -0.45 + sw2*0.25;
+      b.chest.rotation.y = -sw2*0.46;
+      b.armL.rotation.x = -0.25 - sw2*0.18;
+      b.cape.rotation.x += Math.max(0,sw2)*0.30;
+    }
+  }
+  if(an.hurt>0){
+    b.chest.rotation.x += 0.42*an.hurt;
+    b.neck.rotation.x  += 0.30*an.hurt;
+    b.armL.rotation.x  += 0.5*an.hurt; b.armR.rotation.x += 0.4*an.hurt;
+    b.cape.rotation.x  += 0.35*an.hurt;
+  }
+}
+const _heroSpecCache = new Map();
+function heroSpec(style, wk){
+  const key = style+'|'+wk;
+  let sp = _heroSpecCache.get(key);
+  if(sp) return sp;
+  sp = {h:2.2, hs:2.60, wk, bones:HERO_BONES,
+        parts: heroBody().concat(HERO_ARMOUR[style]||HERO_ARMOUR.melee, HERO_WEAPON[wk]||[]),
+        pose: heroPose};
+  _heroSpecCache.set(key, sp);
+  return sp;
+}
+
 /* Rigs are authored roughly 2 units tall and scaled by the entity radius. */
 const RIG3D = {
-  /* The hero is the one model you look at for hours, so it gets its own rig:
-     tapered limbs instead of boxes, a helmet with visor and crest, pauldrons,
-     hands, boots, a cape and a sword carried in the right hand. Enemies keep
-     the cheaper `human` rig - a cape and sword on a stone golem would be odd,
-     and 30-odd parts each adds up across a screen full of them. */
-  hero: {
-    h: 2.2, hs: 2.60,
-    bones: [
-      ['root',null,[0,0,0]], ['hips','root',[0,0.95,0]], ['chest','hips',[0,0.42,0]],
-      ['neck','chest',[0,0.44,0]], ['head','neck',[0,0.13,0]],
-      ['cape','chest',[0,0.30,-0.13]],
-      ['armL','chest',[0.32,0.28,0]],  ['foreL','armL',[0,-0.34,0]],  ['handL','foreL',[0,-0.32,0]],
-      ['armR','chest',[-0.32,0.28,0]], ['foreR','armR',[0,-0.34,0]],  ['handR','foreR',[0,-0.32,0]],
-      ['legL','hips',[0.16,-0.06,0]],  ['shinL','legL',[0,-0.42,0]],  ['footL','shinL',[0,-0.40,0]],
-      ['legR','hips',[-0.16,-0.06,0]], ['shinR','legR',[0,-0.42,0]],  ['footR','shinR',[0,-0.40,0]],
-    ],
-    parts: [
-      /* torso */
-      {b:'hips',  shape:'cyl', w:0.46, w2:0.42, h:0.30, y:0.06, c:'dark'},
-      {b:'hips',  shape:'box', w:0.50, h:0.10, d:0.36, y:0.20, c:'#4a3b28'},   /* belt */
-      {b:'hips',  shape:'box', w:0.10, h:0.10, d:0.10, y:0.20, z:0.19, c:'#d9a93c'}, /* buckle */
-      {b:'chest', shape:'cyl', w:0.60, w2:0.50, h:0.50, y:0.20, c:'mid'},
-      {b:'chest', shape:'box', w:0.40, h:0.34, d:0.14, y:0.24, z:0.18, c:'lite'},   /* breastplate */
-      /* shoulders */
-      {b:'armL',  shape:'sphere', w:0.34, y:0.02, c:'lite'},
-      {b:'armR',  shape:'sphere', w:0.34, y:0.02, c:'lite'},
-      /* head */
-      {b:'neck',  shape:'cyl', w:0.17, h:0.14, y:0.06, c:'#caa279'},
-      {b:'head',  shape:'sphere', w:0.36, det:1, y:0.15, c:'#e3bc8f'},
-      {b:'head',  shape:'sphere', w:0.42, det:1, sy:0.74, y:0.20, c:'lite'},        /* helm dome */
-      {b:'head',  shape:'box', w:0.30, h:0.06, d:0.10, y:0.14, z:0.17, c:'#151a24'},/* visor slit */
-      {b:'head',  shape:'box', w:0.09, h:0.20, d:0.10, y:0.13, z:0.16, c:'lite'},   /* nose guard */
-      {b:'head',  shape:'cone',w:0.11, h:0.26, y:0.42, c:'#d9a93c'},                /* crest */
-      /* arms */
-      {b:'armL',  shape:'cyl', w:0.18, w2:0.15, h:0.34, y:-0.17, c:'mid'},
-      {b:'foreL', shape:'cyl', w:0.16, w2:0.13, h:0.32, y:-0.16, c:'dark'},
-      {b:'foreL', shape:'cyl', w:0.19, h:0.09, y:-0.02, c:'lite'},                  /* cuff */
-      {b:'handL', shape:'box', w:0.14, h:0.15, d:0.16, y:-0.06, c:'#4a3b28'},
-      {b:'armR',  shape:'cyl', w:0.18, w2:0.15, h:0.34, y:-0.17, c:'mid'},
-      {b:'foreR', shape:'cyl', w:0.16, w2:0.13, h:0.32, y:-0.16, c:'dark'},
-      {b:'foreR', shape:'cyl', w:0.19, h:0.09, y:-0.02, c:'lite'},
-      {b:'handR', shape:'box', w:0.14, h:0.15, d:0.16, y:-0.06, c:'#4a3b28'},
-      /* legs */
-      {b:'legL',  shape:'cyl', w:0.21, w2:0.17, h:0.42, y:-0.21, c:'dark'},
-      {b:'legL',  shape:'sphere', w:0.20, y:-0.40, c:'mid'},                        /* knee */
-      {b:'shinL', shape:'cyl', w:0.17, w2:0.15, h:0.40, y:-0.20, c:'dark'},
-      {b:'footL', shape:'box', w:0.19, h:0.12, d:0.30, y:-0.04, z:0.06, c:'#33291c'},
-      {b:'legR',  shape:'cyl', w:0.21, w2:0.17, h:0.42, y:-0.21, c:'dark'},
-      {b:'legR',  shape:'sphere', w:0.20, y:-0.40, c:'mid'},
-      {b:'shinR', shape:'cyl', w:0.17, w2:0.15, h:0.40, y:-0.20, c:'dark'},
-      {b:'footR', shape:'box', w:0.19, h:0.12, d:0.30, y:-0.04, z:0.06, c:'#33291c'},
-      /* cape */
-      {b:'cape',  shape:'box', w:0.50, h:0.68, d:0.05, y:-0.32, c:'#7a2233'},
-      {b:'cape',  shape:'box', w:0.54, h:0.10, d:0.09, y:0.02, c:'#d9a93c'},        /* clasp */
-      /* sword, carried in the right hand and swung by the arm chain */
-      {b:'handR', shape:'cyl', w:0.06, h:0.20, y:-0.16, c:'#3a2a1c'},               /* grip */
-      {b:'handR', shape:'box', w:0.30, h:0.05, d:0.09, y:-0.27, c:'#d9a93c'},       /* guard */
-      {b:'handR', shape:'box', w:0.11, h:0.62, d:0.035, y:-0.60, c:'#dfe6f2'},      /* blade */
-      {b:'handR', shape:'cone',w:0.11, h:0.16, y:-0.99, c:'#dfe6f2'},               /* tip */
-      {b:'handR', shape:'sphere', w:0.09, y:-0.06, c:'#d9a93c'},                    /* pommel */
-    ],
-    pose(b, an, st){
-      const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.2)*0.5+0.5;
-      b.legL.rotation.x =  s*0.85*w;  b.legR.rotation.x = -s*0.85*w;
-      b.shinL.rotation.x = Math.max(0,-s)*0.95*w; b.shinR.rotation.x = Math.max(0,s)*0.95*w;
-      b.footL.rotation.x = -Math.max(0,-s)*0.5*w; b.footR.rotation.x = -Math.max(0,s)*0.5*w;
-      b.armL.rotation.x = -s*0.72*w - 0.06;  b.armR.rotation.x = s*0.60*w - 0.30;
-      b.foreL.rotation.x = 0.36; b.foreR.rotation.x = 0.30;
-      b.handL.rotation.x = 0; b.handR.rotation.x = 0;
-      b.chest.rotation.y = s*0.13*w;
-      b.chest.rotation.x = 0.04 + br*0.03;
-      b.neck.rotation.x = -0.03;
-      b.head.rotation.x = -br*0.04;
-      b.hips.position.y = 0.95 - Math.abs(s)*0.06*w + br*0.012;
-      /* the cape trails: it lags the walk cycle and lifts with speed */
-      b.cape.rotation.x = 0.10 + w*0.42 + Math.sin(st.t*3.1)*0.05;
-      b.cape.rotation.z = Math.sin(st.t*2.3)*0.06 + s*0.05*w;
-      if(an.atk>=0){
-        const a=an.atk;
-        let sw2; if(a<0.30) sw2=-1.0*(a/0.30);
-        else if(a<0.52) sw2=lerp(-1.0,1.9,(a-0.30)/0.22);
-        else sw2=lerp(1.9,0,(a-0.52)/0.48);
-        b.armR.rotation.x = -1.35 + sw2*1.25;
-        b.armR.rotation.z = -0.25 - sw2*0.30;
-        b.foreR.rotation.x = 0.30 - Math.max(0,sw2)*0.60;
-        b.handR.rotation.x = -0.45 + sw2*0.25;
-        b.chest.rotation.y = -sw2*0.46;
-        b.armL.rotation.x = -0.25 - sw2*0.18;
-        b.cape.rotation.x += Math.max(0,sw2)*0.30;
-      }
-      if(an.hurt>0){
-        b.chest.rotation.x += 0.42*an.hurt;
-        b.neck.rotation.x  += 0.30*an.hurt;
-        b.armL.rotation.x  += 0.5*an.hurt; b.armR.rotation.x += 0.4*an.hurt;
-        b.cape.rotation.x  += 0.35*an.hurt;
-      }
-    }
-  },
+  /* The hero is composed, not fixed. Armour style follows the weapon CLASS and
+     the held weapon follows the equipped archetype, so picking a mage no longer
+     puts a sword and plate armour on screen - which is exactly what a single
+     baked-in hero rig did. */
+  hero: {h:2.2, hs:2.60, bones:[], parts:[], pose:null},
+
   human: {
     h: 2.2, hs: 2.60,     /* world height per unit of def.size */
     bones: [
@@ -3377,9 +3493,9 @@ const RIG3D_FOR = {
 function rigKeyFor(def){ return RIG3D_FOR[def.shape] || 'blob'; }
 
 /* ---------- actors: one SkinnedMesh per live entity, pooled by rig+palette ---------- */
-function acquireActor(key, pal){
+function acquireActor(key, pal, specOverride){
   const t = init3D();
-  const spec = RIG3D[key] || RIG3D.blob;
+  const spec = specOverride || RIG3D[key] || RIG3D.blob;
   const a = buildSkinned(spec, pal);
   a.key = key; a.spec = spec;
   t.scene.add(a.mesh);
@@ -3394,19 +3510,29 @@ function syncActor(ent, isPlayer){
   const t = init3D();
   let a = t.actors.get(ent);
   const def = isPlayer ? null : ent.def;
-  const key = isPlayer ? 'hero' : rigKeyFor(def);
-  const pal = isPlayer ? PLAYER_PAL(D.wpnCls) : paletteFor(def.col, def.col2);
+  let key, pal, spec = null;
+  if(isPlayer){
+    const w = S.equip.weapon;
+    const wk = heroWeaponKind(w ? w.arch : 'sword');
+    const style = D.wpnCls || 'melee';
+    key = 'hero|'+style+'|'+wk;
+    pal = PLAYER_PAL(style);
+    spec = heroSpec(style, wk);
+  } else {
+    key = rigKeyFor(def);
+    pal = paletteFor(def.col, def.col2);
+  }
   if(!a || a.key!==key || a.palKey!==pal.key){
     if(a) releaseActor(a);
-    a = acquireActor(key, pal); a.palKey = pal.key;
+    a = acquireActor(key, pal, spec); a.palKey = pal.key;
     t.actors.set(ent, a);
   }
   return a;
 }
 function PLAYER_PAL(cls){
-  if(cls==='melee') return paletteFor('#b9c6de','#5a6478');
-  if(cls==='range') return paletteFor('#a8cdb4','#4e6a58');
-  return paletteFor('#aeb8e4','#545c86');
+  if(cls==='melee') return paletteFor('#b9c6de','#5a6478');   /* steel plate */
+  if(cls==='range') return paletteFor('#6f8c5e','#3b4a32');   /* forest leather */
+  return paletteFor('#5b4a9e','#2e2560');                     /* arcane robes */
 }
 
 /* ================================================================
@@ -3486,12 +3612,157 @@ function buildZoneScene(){
     m.userData.chest = c;
     t.scene.add(m); t.chests.push(m);
   }
+  initFx();
   sceneReady = true;
 }
 
 /* ================================================================
    PER-FRAME
    ================================================================ */
+/* ================================================================
+   COMBAT EFFECTS
+   Instanced so a screen full of projectiles and sparks stays at a
+   handful of draw calls.
+   ================================================================ */
+const FX_MAX = 96, PART_MAX = 300;
+function initFx(){
+  const t = init3D();
+  if(t.fxReady) return;
+  const m4 = new THREE.Matrix4();
+
+  /* arrows: a shaft oriented along velocity, with a pale head */
+  const arrowGeo = new THREE.CylinderGeometry(0.9, 0.9, 16, 5);
+  arrowGeo.rotateX(Math.PI/2);                    /* lie along +Z, the travel axis */
+  const arrowMat = new THREE.MeshStandardMaterial({roughness:0.7, flatShading:true});
+  t.arrows = new THREE.InstancedMesh(arrowGeo, arrowMat, FX_MAX);
+  t.arrows.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FX_MAX*3),3);
+  t.arrows.frustumCulled = false; t.arrows.castShadow = false;
+  t.scene.add(t.arrows);
+
+  /* spell orbs: unlit so they read as emissive without costing a light each */
+  const orbGeo = new THREE.IcosahedronGeometry(1, 2);   /* round enough to read as a ball of energy */
+  const orbMat = new THREE.MeshBasicMaterial({});
+  t.orbs = new THREE.InstancedMesh(orbGeo, orbMat, FX_MAX);
+  t.orbs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FX_MAX*3),3);
+  t.orbs.frustumCulled = false;
+  t.scene.add(t.orbs);
+
+  /* a soft halo around each orb, faked with a bigger transparent shell */
+  const haloMat = new THREE.MeshBasicMaterial({transparent:true, opacity:0.15,
+    depthWrite:false, blending:THREE.AdditiveBlending});
+  t.halos = new THREE.InstancedMesh(orbGeo, haloMat, FX_MAX);
+  t.halos.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FX_MAX*3),3);
+  t.halos.frustumCulled = false;
+  t.scene.add(t.halos);
+
+  /* melee swing: flat ring segments on the ground, scaled and faded per swing */
+  t.arcs = [];
+  for(let i=0;i<6;i++){
+    const g = new THREE.RingGeometry(0.55, 1.0, 20, 1, 0, 1.6);
+    g.rotateX(-Math.PI/2);
+    const mm = new THREE.MeshBasicMaterial({transparent:true, opacity:0.5,
+      side:THREE.DoubleSide, depthWrite:false});
+    const mesh = new THREE.Mesh(g, mm);
+    mesh.visible = false; mesh.frustumCulled = false;
+    t.scene.add(mesh); t.arcs.push(mesh);
+  }
+
+  /* hit sparks and dust, one draw call */
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PART_MAX*3),3));
+  pg.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(PART_MAX*3),3));
+  /* An untextured PointsMaterial renders hard SQUARES, which read as debug
+     markers rather than sparks. Bake a soft round falloff once. */
+  const pc = document.createElement('canvas'); pc.width = pc.height = 64;
+  const pg2 = pc.getContext('2d');
+  const grd = pg2.createRadialGradient(32,32,0,32,32,32);
+  grd.addColorStop(0,'rgba(255,255,255,1)');
+  grd.addColorStop(0.45,'rgba(255,255,255,0.55)');
+  grd.addColorStop(1,'rgba(255,255,255,0)');
+  pg2.fillStyle = grd; pg2.fillRect(0,0,64,64);
+  const pTex = new THREE.CanvasTexture(pc);
+  const pm = new THREE.PointsMaterial({size:11, map:pTex, vertexColors:true,
+    transparent:true, opacity:0.95, depthWrite:false, sizeAttenuation:true,
+    blending:THREE.AdditiveBlending});
+  t.points = new THREE.Points(pg, pm);
+  t.points.frustumCulled = false;
+  t.scene.add(t.points);
+
+  t._c = new THREE.Color(); t._q = new THREE.Quaternion();
+  t._v = new THREE.Vector3(); t._sc = new THREE.Vector3(); t._m = m4;
+  t.fxReady = true;
+}
+
+const _UPV = new THREE.Vector3(0,1,0);
+function syncFx(){
+  const t = init3D();
+  initFx();
+  const C=t._c, Q=t._q, V=t._v, SC=t._sc, M=t._m;
+
+  let na=0, no=0;
+  for(const sh of shots){
+    const isArrow = sh.vk==='arrow';
+    const h = 15;                                  /* projectiles fly at chest height */
+    if(isArrow && na<FX_MAX){
+      const ang = Math.atan2(sh.vx, sh.vy);
+      Q.setFromAxisAngle(_UPV, ang);
+      V.set(sh.x, h, sh.y); SC.set(1,1,1);
+      M.compose(V,Q,SC); t.arrows.setMatrixAt(na, M);
+      C.set(sh.own==='p' ? '#e8dcc0' : (sh.col||'#e0455a'));
+      t.arrows.setColorAt(na, C); na++;
+    } else if(!isArrow && no<FX_MAX){
+      const r = (sh.r||5)*0.95;
+      Q.identity(); V.set(sh.x, h, sh.y); SC.set(r,r,r);
+      M.compose(V,Q,SC); t.orbs.setMatrixAt(no, M);
+      C.set(sh.col||'#8ab4ff'); t.orbs.setColorAt(no, C);
+      SC.set(r*1.85, r*1.85, r*1.85); M.compose(V,Q,SC);
+      t.halos.setMatrixAt(no, M); t.halos.setColorAt(no, C);
+      no++;
+    }
+  }
+  /* park the unused instances rather than resizing the buffers every frame */
+  SC.set(0,0,0); Q.identity(); V.set(0,-9999,0); M.compose(V,Q,SC);
+  for(let i=na;i<FX_MAX;i++) t.arrows.setMatrixAt(i,M);
+  for(let i=no;i<FX_MAX;i++){ t.orbs.setMatrixAt(i,M); t.halos.setMatrixAt(i,M); }
+  t.arrows.instanceMatrix.needsUpdate = true;
+  t.orbs.instanceMatrix.needsUpdate = true;
+  t.halos.instanceMatrix.needsUpdate = true;
+  if(t.arrows.instanceColor) t.arrows.instanceColor.needsUpdate = true;
+  if(t.orbs.instanceColor)   t.orbs.instanceColor.needsUpdate = true;
+  if(t.halos.instanceColor)  t.halos.instanceColor.needsUpdate = true;
+
+  /* melee swings */
+  let ai = 0;
+  for(const e of fx){
+    if(e.type!=='arc' || ai>=t.arcs.length) continue;
+    const mesh = t.arcs[ai++], k = e.t/e.life;
+    mesh.visible = true;
+    const rr = e.rng*lerp(0.55,1.05,k);
+    mesh.position.set(e.x, 5, e.y);
+    mesh.rotation.y = -e.ang + Math.PI/2 - (e.arc||1.6)/2;
+    mesh.scale.set(rr, 1, rr);
+    mesh.material.color.set(e.col||'#dfe7ff');
+    mesh.material.opacity = (1-k)*0.55;
+  }
+  for(let i=ai;i<t.arcs.length;i++) t.arcs[i].visible = false;
+
+  /* sparks */
+  const pos = t.points.geometry.attributes.position.array;
+  const col = t.points.geometry.attributes.color.array;
+  let n = Math.min(parts.length, PART_MAX);
+  for(let i=0;i<n;i++){
+    const pt = parts[i];
+    pos[i*3] = pt.x; pos[i*3+1] = 12 + (1-pt.life/pt.max)*6; pos[i*3+2] = pt.y;
+    C.set(pt.col||'#ffffff');
+    const f = clamp(pt.life/pt.max, 0, 1);
+    col[i*3] = C.r*f; col[i*3+1] = C.g*f; col[i*3+2] = C.b*f;
+  }
+  for(let i=n;i<PART_MAX;i++){ pos[i*3+1] = -9999; }
+  t.points.geometry.attributes.position.needsUpdate = true;
+  t.points.geometry.attributes.color.needsUpdate = true;
+  t.points.geometry.setDrawRange(0, PART_MAX);
+}
+
 const _v3 = new THREE.Vector3(), _v3b = new THREE.Vector3();
 /* Pulled well back so you can read the field around you, and tilted closer to
    overhead — just enough angle to keep the 3D forms legible. CAM_BACK/CAM_H is
@@ -3537,10 +3808,14 @@ function render(){
     }
     a.mesh.position.set(ent.x, yy, ent.y);
     /* face the way it is moving / the player */
-    const fx = isPlayer ? P.fx : (P.x-ent.x), fz = isPlayer ? P.fy : (P.y-ent.y);
+    /* while an attack is still landing, face where it was aimed rather than
+       where the joystick is pushing */
+    const useAim = isPlayer && P.aimT>0;
+    const fx = isPlayer ? (useAim?P.aimx:P.fx) : (P.x-ent.x),
+          fz = isPlayer ? (useAim?P.aimy:P.fy) : (P.y-ent.y);
     a.mesh.rotation.y = Math.atan2(fx, fz);
     const an = ent.an;
-    const st = {t: isPlayer ? (P.t||0) : ent.t};
+    const st = {t: isPlayer ? (P.t||0) : ent.t, wk: a.spec.wk};
     a.spec.pose(a.bones, an, st);
     /* hit flash */
     const flash = isPlayer ? P.flash : ent.flash;
@@ -3564,6 +3839,7 @@ function render(){
     if(m.visible) m.position.y = 9 + Math.sin(c.t*3)*2;
   }
 
+  syncFx();
   t.renderer.render(t.scene, t.cam);
   drawMinimap();
 }
