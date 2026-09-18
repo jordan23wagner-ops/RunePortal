@@ -43,9 +43,38 @@ curve, all balance tuning, and the entire DOM UI (bag, forge, rifts, camp).
 Only the render layer is replaced: the sprite engine, part baking, materials and
 the draw functions.
 
+## Status
+
+**Milestone 1 landed** — `zonelooter3d.html` (844 KB with Three.js embedded).
+Boots, plays, and survives a full smoke test: all 5 zones with every enemy type
+spawned and fought, weapon skills, dash, potion, death/respawn, save/load
+round-trip and all six panels. **No JS errors. 12 draw calls, ~11k triangles.**
+
+Four procedural rigs cover every enemy for now:
+
+| 3D rig | covers |
+|---|---|
+| `human` | knight, golem |
+| `quad`  | beast |
+| `blob`  | blob, spike, worm |
+| `float` | ghost, eye, flyer |
+
+Worm, arachnid and golem are riding the closest rig until they get purpose-built
+forms — that is milestone 3.
+
+### Known rough edges
+
+- Ground is dark and low contrast; the tile texture needs a lighting-aware pass.
+- No projectiles, melee arcs, hit sparks or death collapse yet (milestone 4) —
+  combat resolves correctly but reads flat.
+- Damage numbers project through the camera but are not depth-sorted.
+- Tree canopies were sitting at `r*2.7` with radius `r*1.5`, which swallowed the
+  trunk entirely and made every tree read as a green boulder. Now `r*4.1` with a
+  smaller canopy plus a second offset cluster.
+
 ## Milestones
 
-1. Scene foundation — renderer on the arena canvas, ground plane reusing the
+1. ~~Scene foundation~~ — **done** — renderer on the arena canvas, ground plane reusing the
    existing procedural tile as a `CanvasTexture`, sun + hemisphere, shadows, fog,
    3/4 follow camera. A separate 2D overlay canvas for the minimap, which can no
    longer share the arena canvas once it is WebGL.
