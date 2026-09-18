@@ -2980,17 +2980,17 @@ function init3D(){
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(34, 1, 4, 1400);
+  const cam = new THREE.PerspectiveCamera(34, 1, 4, 2600);
 
   /* key light casts the shadows; its shadow camera follows the player so a
      small, sharp map covers only what is on screen */
   const sun = new THREE.DirectionalLight('#ffeccd', 2.15);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024,1024);
-  const d = 200;
+  const d = 340;                 /* must span the visible ground, not the old framing */
   sun.shadow.camera.left=-d; sun.shadow.camera.right=d;
   sun.shadow.camera.top=d;   sun.shadow.camera.bottom=-d;
-  sun.shadow.camera.near=10; sun.shadow.camera.far=760;
+  sun.shadow.camera.near=10; sun.shadow.camera.far=1500;
   sun.shadow.bias = -0.0016; sun.shadow.normalBias = 1.2;
   scene.add(sun); scene.add(sun.target);
 
@@ -3026,7 +3026,7 @@ function refreshGround(){
   t.ground.geometry = new THREE.PlaneGeometry(WORLD.w, WORLD.h, 1, 1);
   t.ground.position.set(WORLD.w/2, 0, WORLD.h/2);
   t.scene.background = new THREE.Color(shade(z.sky2, -0.25));
-  t.scene.fog = new THREE.Fog(shade(z.sky2,-0.25), 320, 900);
+  t.scene.fog = new THREE.Fog(shade(z.sky2,-0.25), 620, 1600);
   t.sun.color.set(mix('#ffeccd', z.accent, 0.18));
 }
 
@@ -3112,7 +3112,7 @@ function buildSkinned(spec, pal){
 /* Rigs are authored roughly 2 units tall and scaled by the entity radius. */
 const RIG3D = {
   human: {
-    h: 2.2,
+    h: 2.2, hs: 2.60,     /* world height per unit of def.size */
     bones: [
       ['root',null,[0,0,0]], ['hips','root',[0,0.95,0]], ['chest','hips',[0,0.45,0]],
       ['head','chest',[0,0.52,0]],
@@ -3163,7 +3163,7 @@ const RIG3D = {
     }
   },
   quad: {
-    h: 1.5,
+    h: 1.5, hs: 1.70,     /* lower and longer than a humanoid */
     bones: [
       ['root',null,[0,0,0]], ['body','root',[0,0.72,0]],
       ['neck','body',[0,0.10,0.42]], ['head','neck',[0,0.12,0.18]],
@@ -3204,7 +3204,7 @@ const RIG3D = {
     }
   },
   blob: {
-    h: 1.3,
+    h: 1.3, hs: 1.65,
     bones: [ ['root',null,[0,0,0]], ['body','root',[0,0.48,0]], ['top','body',[0,0.30,0]] ],
     parts: [
       {b:'body', shape:'sphere', w:1.05, sy:0.86, c:'mid'},
@@ -3224,7 +3224,7 @@ const RIG3D = {
     }
   },
   float: {
-    h: 1.6,
+    h: 1.6, hs: 2.15,
     bones: [ ['root',null,[0,0,0]], ['body','root',[0,1.00,0]], ['eye','body',[0,0,0.20]] ],
     parts: [
       {b:'body', shape:'sphere', w:0.90, sy:1.05, c:'mid'},
@@ -3372,7 +3372,12 @@ function buildZoneScene(){
    PER-FRAME
    ================================================================ */
 const _v3 = new THREE.Vector3(), _v3b = new THREE.Vector3();
-const CAM_H = 330, CAM_BACK = 250;   /* ~250 world units visible, matching the 2D framing */
+/* Pulled well back so you can read the field around you, and tilted closer to
+   overhead — just enough angle to keep the 3D forms legible. CAM_BACK/CAM_H is
+   the tilt: 0.55 is ~29 degrees off vertical. */
+const CAM_H = 600, CAM_BACK = 330;
+/* the ground footprint this framing covers, reused by the minimap window */
+const VIEW_W = 430, VIEW_H = 520;
 
 function render(){
   const t = init3D();
@@ -3384,10 +3389,10 @@ function render(){
   const shz = shake>0.2 ? rnd(-shake,shake)*0.6 : 0;
   _v3.set(P.x+shx, 0, P.y+shz);
   t.cam.position.set(_v3.x, CAM_H, _v3.z + CAM_BACK);
-  t.cam.lookAt(_v3.x, 18, _v3.z - 10);
+  t.cam.lookAt(_v3.x, 14, _v3.z - 4);
 
   /* shadow camera rides with the player so a 1024 map stays sharp */
-  t.sun.position.set(P.x-170, 300, P.y-120);
+  t.sun.position.set(P.x-300, 560, P.y-210);
   t.sun.target.position.set(P.x, 0, P.y);
   t.sun.target.updateMatrixWorld();
 
@@ -3397,13 +3402,17 @@ function render(){
     const a = syncActor(ent, isPlayer);
     seen.add(ent);
     const r = isPlayer ? P.r*VIS : ent.r*VIS;
-    const sc = r*1.25;
+    /* Each rig is authored at a different intrinsic height, so a flat r*K
+       multiplier made quadrupeds - which lie along the ground and are not
+       foreshortened by the camera tilt - balloon next to the hero. Normalise
+       by the rig's own height so def.size means the same thing everywhere. */
+    const sc = r * (a.spec.hs||2.2) / (a.spec.h||2.2);
     a.mesh.scale.setScalar(sc);
     let yy = 0;
     if(!isPlayer && ent.born < (ent.warp||0.42)){
       const k = ent.born/(ent.warp||0.42);
       a.mesh.scale.setScalar(sc*(0.35+k*0.65));
-      yy = -sc*0.5*(1-k);
+      yy = -sc*0.35*(1-k);
     }
     a.mesh.position.set(ent.x, yy, ent.y);
     /* face the way it is moving / the player */
@@ -3419,7 +3428,7 @@ function render(){
   };
   for(const f of foes){
     const dx=f.x-P.x, dy=f.y-P.y;
-    if(dx*dx+dy*dy > 900*900) continue;        /* far side of the zone */
+    if(dx*dx+dy*dy > 1300*1300) continue;      /* far side of the zone */
     place(f, false);
   }
   if(!P.dead) place(P, true);
@@ -3470,7 +3479,7 @@ function drawMinimap(){
   }
   hctx.globalAlpha=0.9;
   hctx.strokeStyle='rgba(255,255,255,.35)'; hctx.lineWidth=1;
-  const vw = 240, vh = 300;
+  const vw = VIEW_W, vh = VIEW_H;
   hctx.strokeRect(ox+(P.x-vw/2)*s, oy+(P.y-vh/2)*s, vw*s, vh*s);
   hctx.fillStyle='#ffffff';
   hctx.beginPath(); hctx.arc(ox+P.x*s, oy+P.y*s, 2.6, 0, 6.283); hctx.fill();
