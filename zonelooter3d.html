@@ -2980,17 +2980,17 @@ function init3D(){
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(34, 1, 4, 3400);
+  const cam = new THREE.PerspectiveCamera(34, 1, 4, 4250);
 
   /* key light casts the shadows; its shadow camera follows the player so a
      small, sharp map covers only what is on screen */
   const sun = new THREE.DirectionalLight('#ffeccd', 2.15);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024,1024);
-  const d = 450;                 /* must span the visible ground, not the old framing */
+  const d = 565;                 /* must span the visible ground, not the old framing */
   sun.shadow.camera.left=-d; sun.shadow.camera.right=d;
   sun.shadow.camera.top=d;   sun.shadow.camera.bottom=-d;
-  sun.shadow.camera.near=10; sun.shadow.camera.far=1950;
+  sun.shadow.camera.near=10; sun.shadow.camera.far=2450;
   sun.shadow.bias = -0.0016; sun.shadow.normalBias = 1.2;
   scene.add(sun); scene.add(sun.target);
 
@@ -3022,11 +3022,34 @@ function refreshGround(){
   t.groundMat.map = tex;
   t.groundMat.color.set('#ffffff');
   t.groundMat.needsUpdate = true;
+  /* The camera follows the player without clamping, so at the world edge it
+     looks straight past a plane sized exactly to WORLD and you see the void as
+     a hard black line. Overhang the ground well beyond the playable bounds and
+     scale the texture repeat to match so tile density is unchanged. */
+  const OVER = 2600;
+  const gw = WORLD.w + OVER*2, gh = WORLD.h + OVER*2;
+  tex.repeat.set(gw/TILE, gh/TILE);
   t.ground.geometry.dispose();
-  t.ground.geometry = new THREE.PlaneGeometry(WORLD.w, WORLD.h, 1, 1);
+  t.ground.geometry = new THREE.PlaneGeometry(gw, gh, 1, 1);
   t.ground.position.set(WORLD.w/2, 0, WORLD.h/2);
+
+  /* a low dark wall on the playable boundary, so the edge of the zone reads as
+     terrain rather than as somewhere you simply failed to reach */
+  for(const m of t.walls||[]){ t.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  t.walls = [];
+  const wallMat = new THREE.MeshStandardMaterial({color:shade(z.ground,-0.62), roughness:1, flatShading:true});
+  const WH = 74, TH = 40;
+  const mkWall = (w,d,x,zz)=>{
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w,WH,d), wallMat);
+    m.position.set(x, WH/2-8, zz); m.castShadow = true; m.receiveShadow = true;
+    t.scene.add(m); t.walls.push(m);
+  };
+  mkWall(WORLD.w+TH*2, TH, WORLD.w/2, -TH/2);
+  mkWall(WORLD.w+TH*2, TH, WORLD.w/2, WORLD.h+TH/2);
+  mkWall(TH, WORLD.h+TH*2, -TH/2, WORLD.h/2);
+  mkWall(TH, WORLD.h+TH*2, WORLD.w+TH/2, WORLD.h/2);
   t.scene.background = new THREE.Color(shade(z.sky2, -0.25));
-  t.scene.fog = new THREE.Fog(shade(z.sky2,-0.25), 810, 2100);
+  t.scene.fog = new THREE.Fog(shade(z.sky2,-0.25), 1015, 2625);
   t.sun.color.set(mix('#ffeccd', z.accent, 0.18));
 }
 
@@ -3375,9 +3398,9 @@ const _v3 = new THREE.Vector3(), _v3b = new THREE.Vector3();
 /* Pulled well back so you can read the field around you, and tilted closer to
    overhead — just enough angle to keep the 3D forms legible. CAM_BACK/CAM_H is
    the tilt: 0.55 is ~29 degrees off vertical. */
-const CAM_H = 780, CAM_BACK = 429;
+const CAM_H = 975, CAM_BACK = 536;
 /* the ground footprint this framing covers, reused by the minimap window */
-const VIEW_W = 560, VIEW_H = 676;
+const VIEW_W = 700, VIEW_H = 845;
 
 function render(){
   const t = init3D();
@@ -3392,7 +3415,7 @@ function render(){
   t.cam.lookAt(_v3.x, 14, _v3.z - 4);
 
   /* shadow camera rides with the player so a 1024 map stays sharp */
-  t.sun.position.set(P.x-390, 730, P.y-275);
+  t.sun.position.set(P.x-488, 915, P.y-344);
   t.sun.target.position.set(P.x, 0, P.y);
   t.sun.target.updateMatrixWorld();
 
@@ -3428,7 +3451,7 @@ function render(){
   };
   for(const f of foes){
     const dx=f.x-P.x, dy=f.y-P.y;
-    if(dx*dx+dy*dy > 1700*1700) continue;      /* far side of the zone */
+    if(dx*dx+dy*dy > 2125*2125) continue;      /* far side of the zone */
     place(f, false);
   }
   if(!P.dead) place(P, true);
