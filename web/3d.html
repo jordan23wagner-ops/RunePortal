@@ -3078,7 +3078,7 @@ function buildSkinned(spec, pal){
   for(const p of spec.parts){
     const bone = bones[p.b];
     let g;
-    if(p.shape==='sphere')      g = new THREE.IcosahedronGeometry(p.w/2, 1);
+    if(p.shape==='sphere')      g = new THREE.IcosahedronGeometry(p.w/2, p.det==null?1:p.det);
     else if(p.shape==='cone')   g = new THREE.ConeGeometry(p.w/2, p.h, 6);
     else if(p.shape==='cyl')    g = new THREE.CylinderGeometry(p.w/2, (p.w2||p.w)/2, p.h, 7);
     else                        g = new THREE.BoxGeometry(p.w, p.h, p.d||p.w);
@@ -3090,7 +3090,7 @@ function buildSkinned(spec, pal){
     for(let i=0;i<n;i++){ si[i*4]=idx; sw[i*4]=1; }
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si,4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw,4));
-    geoms.push(g); cols.push(pal[p.c] || pal.mid);
+    geoms.push(g); cols.push(pal[p.c] || (p.c && p.c[0]==='#' ? p.c : pal.mid));
   }
   let total=0; for(const g of geoms) total+=g.attributes.position.count;
   const merged = new THREE.BufferGeometry();
@@ -3134,6 +3134,104 @@ function buildSkinned(spec, pal){
 
 /* Rigs are authored roughly 2 units tall and scaled by the entity radius. */
 const RIG3D = {
+  /* The hero is the one model you look at for hours, so it gets its own rig:
+     tapered limbs instead of boxes, a helmet with visor and crest, pauldrons,
+     hands, boots, a cape and a sword carried in the right hand. Enemies keep
+     the cheaper `human` rig - a cape and sword on a stone golem would be odd,
+     and 30-odd parts each adds up across a screen full of them. */
+  hero: {
+    h: 2.2, hs: 2.60,
+    bones: [
+      ['root',null,[0,0,0]], ['hips','root',[0,0.95,0]], ['chest','hips',[0,0.42,0]],
+      ['neck','chest',[0,0.44,0]], ['head','neck',[0,0.13,0]],
+      ['cape','chest',[0,0.30,-0.13]],
+      ['armL','chest',[0.32,0.28,0]],  ['foreL','armL',[0,-0.34,0]],  ['handL','foreL',[0,-0.32,0]],
+      ['armR','chest',[-0.32,0.28,0]], ['foreR','armR',[0,-0.34,0]],  ['handR','foreR',[0,-0.32,0]],
+      ['legL','hips',[0.16,-0.06,0]],  ['shinL','legL',[0,-0.42,0]],  ['footL','shinL',[0,-0.40,0]],
+      ['legR','hips',[-0.16,-0.06,0]], ['shinR','legR',[0,-0.42,0]],  ['footR','shinR',[0,-0.40,0]],
+    ],
+    parts: [
+      /* torso */
+      {b:'hips',  shape:'cyl', w:0.46, w2:0.42, h:0.30, y:0.06, c:'dark'},
+      {b:'hips',  shape:'box', w:0.50, h:0.10, d:0.36, y:0.20, c:'#4a3b28'},   /* belt */
+      {b:'hips',  shape:'box', w:0.10, h:0.10, d:0.10, y:0.20, z:0.19, c:'#d9a93c'}, /* buckle */
+      {b:'chest', shape:'cyl', w:0.60, w2:0.50, h:0.50, y:0.20, c:'mid'},
+      {b:'chest', shape:'box', w:0.40, h:0.34, d:0.14, y:0.24, z:0.18, c:'lite'},   /* breastplate */
+      /* shoulders */
+      {b:'armL',  shape:'sphere', w:0.34, y:0.02, c:'lite'},
+      {b:'armR',  shape:'sphere', w:0.34, y:0.02, c:'lite'},
+      /* head */
+      {b:'neck',  shape:'cyl', w:0.17, h:0.14, y:0.06, c:'#caa279'},
+      {b:'head',  shape:'sphere', w:0.36, det:1, y:0.15, c:'#e3bc8f'},
+      {b:'head',  shape:'sphere', w:0.42, det:1, sy:0.74, y:0.20, c:'lite'},        /* helm dome */
+      {b:'head',  shape:'box', w:0.30, h:0.06, d:0.10, y:0.14, z:0.17, c:'#151a24'},/* visor slit */
+      {b:'head',  shape:'box', w:0.09, h:0.20, d:0.10, y:0.13, z:0.16, c:'lite'},   /* nose guard */
+      {b:'head',  shape:'cone',w:0.11, h:0.26, y:0.42, c:'#d9a93c'},                /* crest */
+      /* arms */
+      {b:'armL',  shape:'cyl', w:0.18, w2:0.15, h:0.34, y:-0.17, c:'mid'},
+      {b:'foreL', shape:'cyl', w:0.16, w2:0.13, h:0.32, y:-0.16, c:'dark'},
+      {b:'foreL', shape:'cyl', w:0.19, h:0.09, y:-0.02, c:'lite'},                  /* cuff */
+      {b:'handL', shape:'box', w:0.14, h:0.15, d:0.16, y:-0.06, c:'#4a3b28'},
+      {b:'armR',  shape:'cyl', w:0.18, w2:0.15, h:0.34, y:-0.17, c:'mid'},
+      {b:'foreR', shape:'cyl', w:0.16, w2:0.13, h:0.32, y:-0.16, c:'dark'},
+      {b:'foreR', shape:'cyl', w:0.19, h:0.09, y:-0.02, c:'lite'},
+      {b:'handR', shape:'box', w:0.14, h:0.15, d:0.16, y:-0.06, c:'#4a3b28'},
+      /* legs */
+      {b:'legL',  shape:'cyl', w:0.21, w2:0.17, h:0.42, y:-0.21, c:'dark'},
+      {b:'legL',  shape:'sphere', w:0.20, y:-0.40, c:'mid'},                        /* knee */
+      {b:'shinL', shape:'cyl', w:0.17, w2:0.15, h:0.40, y:-0.20, c:'dark'},
+      {b:'footL', shape:'box', w:0.19, h:0.12, d:0.30, y:-0.04, z:0.06, c:'#33291c'},
+      {b:'legR',  shape:'cyl', w:0.21, w2:0.17, h:0.42, y:-0.21, c:'dark'},
+      {b:'legR',  shape:'sphere', w:0.20, y:-0.40, c:'mid'},
+      {b:'shinR', shape:'cyl', w:0.17, w2:0.15, h:0.40, y:-0.20, c:'dark'},
+      {b:'footR', shape:'box', w:0.19, h:0.12, d:0.30, y:-0.04, z:0.06, c:'#33291c'},
+      /* cape */
+      {b:'cape',  shape:'box', w:0.50, h:0.68, d:0.05, y:-0.32, c:'#7a2233'},
+      {b:'cape',  shape:'box', w:0.54, h:0.10, d:0.09, y:0.02, c:'#d9a93c'},        /* clasp */
+      /* sword, carried in the right hand and swung by the arm chain */
+      {b:'handR', shape:'cyl', w:0.06, h:0.20, y:-0.16, c:'#3a2a1c'},               /* grip */
+      {b:'handR', shape:'box', w:0.30, h:0.05, d:0.09, y:-0.27, c:'#d9a93c'},       /* guard */
+      {b:'handR', shape:'box', w:0.11, h:0.62, d:0.035, y:-0.60, c:'#dfe6f2'},      /* blade */
+      {b:'handR', shape:'cone',w:0.11, h:0.16, y:-0.99, c:'#dfe6f2'},               /* tip */
+      {b:'handR', shape:'sphere', w:0.09, y:-0.06, c:'#d9a93c'},                    /* pommel */
+    ],
+    pose(b, an, st){
+      const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.2)*0.5+0.5;
+      b.legL.rotation.x =  s*0.85*w;  b.legR.rotation.x = -s*0.85*w;
+      b.shinL.rotation.x = Math.max(0,-s)*0.95*w; b.shinR.rotation.x = Math.max(0,s)*0.95*w;
+      b.footL.rotation.x = -Math.max(0,-s)*0.5*w; b.footR.rotation.x = -Math.max(0,s)*0.5*w;
+      b.armL.rotation.x = -s*0.72*w - 0.06;  b.armR.rotation.x = s*0.60*w - 0.30;
+      b.foreL.rotation.x = 0.36; b.foreR.rotation.x = 0.30;
+      b.handL.rotation.x = 0; b.handR.rotation.x = 0;
+      b.chest.rotation.y = s*0.13*w;
+      b.chest.rotation.x = 0.04 + br*0.03;
+      b.neck.rotation.x = -0.03;
+      b.head.rotation.x = -br*0.04;
+      b.hips.position.y = 0.95 - Math.abs(s)*0.06*w + br*0.012;
+      /* the cape trails: it lags the walk cycle and lifts with speed */
+      b.cape.rotation.x = 0.10 + w*0.42 + Math.sin(st.t*3.1)*0.05;
+      b.cape.rotation.z = Math.sin(st.t*2.3)*0.06 + s*0.05*w;
+      if(an.atk>=0){
+        const a=an.atk;
+        let sw2; if(a<0.30) sw2=-1.0*(a/0.30);
+        else if(a<0.52) sw2=lerp(-1.0,1.9,(a-0.30)/0.22);
+        else sw2=lerp(1.9,0,(a-0.52)/0.48);
+        b.armR.rotation.x = -1.35 + sw2*1.25;
+        b.armR.rotation.z = -0.25 - sw2*0.30;
+        b.foreR.rotation.x = 0.30 - Math.max(0,sw2)*0.60;
+        b.handR.rotation.x = -0.45 + sw2*0.25;
+        b.chest.rotation.y = -sw2*0.46;
+        b.armL.rotation.x = -0.25 - sw2*0.18;
+        b.cape.rotation.x += Math.max(0,sw2)*0.30;
+      }
+      if(an.hurt>0){
+        b.chest.rotation.x += 0.42*an.hurt;
+        b.neck.rotation.x  += 0.30*an.hurt;
+        b.armL.rotation.x  += 0.5*an.hurt; b.armR.rotation.x += 0.4*an.hurt;
+        b.cape.rotation.x  += 0.35*an.hurt;
+      }
+    }
+  },
   human: {
     h: 2.2, hs: 2.60,     /* world height per unit of def.size */
     bones: [
@@ -3296,7 +3394,7 @@ function syncActor(ent, isPlayer){
   const t = init3D();
   let a = t.actors.get(ent);
   const def = isPlayer ? null : ent.def;
-  const key = isPlayer ? 'human' : rigKeyFor(def);
+  const key = isPlayer ? 'hero' : rigKeyFor(def);
   const pal = isPlayer ? PLAYER_PAL(D.wpnCls) : paletteFor(def.col, def.col2);
   if(!a || a.key!==key || a.palKey!==pal.key){
     if(a) releaseActor(a);
