@@ -1,0 +1,223 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#0b0d14;overflow:hidden}canvas{display:block}</style>
+</head><body>
+<script type="module">
+import * as THREE from './node_modules/three/build/three.module.js';
+
+const W = 430, H = 860;
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(1.5);
+renderer.setSize(W,H);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0d1410');
+scene.fog = new THREE.Fog('#0d1410', 30, 95);
+
+/* ---- camera: the same 3/4 ARPG angle, but real perspective ---- */
+const cam = new THREE.PerspectiveCamera(38, W/H, 0.5, 260);
+const CAM_OFF = new THREE.Vector3(0, 54, 42);
+
+/* ---- lights ---- */
+const sun = new THREE.DirectionalLight('#ffe9c4', 2.1);
+sun.position.set(-18, 34, 14);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+const d = 34;
+sun.shadow.camera.left=-d; sun.shadow.camera.right=d;
+sun.shadow.camera.top=d;   sun.shadow.camera.bottom=-d;
+sun.shadow.camera.far = 90; sun.shadow.bias = -0.0015;
+scene.add(sun, sun.target);
+scene.add(new THREE.HemisphereLight('#9fd8ff','#1d3b27', 0.85));
+
+/* ---- ground ---- */
+const gmat = new THREE.MeshStandardMaterial({color:'#2c4a33', roughness:0.97, metalness:0.0});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400,400,1,1), gmat);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
+scene.add(ground);
+
+/* ---- procedural low-poly skinned humanoid ----
+   Built entirely in code: no model files. Bones are real THREE.Bone objects,
+   so the existing pose() functions can drive them directly. */
+function makeHumanoid(pal){
+  const bones = {}, list = [];
+  const B = (name, parent, pos) => {
+    const b = new THREE.Bone(); b.name = name; b.position.set(...pos);
+    if(parent) bones[parent].add(b);
+    bones[name] = b; list.push(b); return b;
+  };
+  B('root',null,[0,0,0]);
+  B('hips','root',[0,3.2,0]);
+  B('spine','hips',[0,1.5,0]);
+  B('chest','spine',[0,1.4,0]);
+  B('head','chest',[0,1.35,0]);
+  B('armL','chest',[ 1.05,0.55,0]);  B('foreL','armL',[0,-1.5,0]);
+  B('armR','chest',[-1.05,0.55,0]);  B('foreR','armR',[0,-1.5,0]);
+  B('legL','hips',[ 0.62,-0.2,0]);   B('shinL','legL',[0,-1.7,0]);
+  B('legR','hips',[-0.62,-0.2,0]);   B('shinR','legR',[0,-1.7,0]);
+
+  /* CRITICAL: the bind pose world matrices must exist before the Skeleton is
+     built (it derives boneInverses from them) AND the geometry must be authored
+     in that same bind space. Building boxes at the origin is what scattered the
+     limbs across the field. */
+  const holder = new THREE.Object3D();
+  holder.add(bones.root);
+  holder.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton(list);
+
+  const geoms = [], cols = [];
+  const seg = (bone, w, h, dpt, dy, col) => {
+    const g = new THREE.BoxGeometry(w,h,dpt);
+    g.translate(0, dy, 0);
+    g.applyMatrix4(bone.matrixWorld);          /* into bind space */
+    const idx = list.indexOf(bone);
+    const n = g.attributes.position.count;
+    const si = new Uint16Array(n*4), sw = new Float32Array(n*4);
+    for(let i=0;i<n;i++){ si[i*4]=idx; sw[i*4]=1; }
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si,4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw,4));
+    geoms.push(g); cols.push(col);
+  };
+  seg(bones.hips, 2.0,1.5,1.2, 0.5, pal.body);
+  seg(bones.chest,2.6,2.0,1.4, 0.6, pal.body);
+  seg(bones.head, 1.5,1.5,1.5, 0.75, pal.skin);
+  seg(bones.armL, 0.75,1.6,0.75,-0.8, pal.body);
+  seg(bones.foreL,0.62,1.5,0.62,-0.75,pal.skin);
+  seg(bones.armR, 0.75,1.6,0.75,-0.8, pal.body);
+  seg(bones.foreR,0.62,1.5,0.62,-0.75,pal.skin);
+  seg(bones.legL, 0.85,1.8,0.85,-0.9, pal.legs);
+  seg(bones.shinL,0.7,1.7,0.7,-0.85, pal.legs);
+  seg(bones.legR, 0.85,1.8,0.85,-0.9, pal.legs);
+  seg(bones.shinR,0.7,1.7,0.7,-0.85, pal.legs);
+
+  let total=0; geoms.forEach(g=>total+=g.attributes.position.count);
+  const merged = new THREE.BufferGeometry();
+  const pos=new Float32Array(total*3), nor=new Float32Array(total*3),
+        col=new Float32Array(total*3), si=new Uint16Array(total*4),
+        sw=new Float32Array(total*4); const idx=[]; let o=0;
+  geoms.forEach((g,gi)=>{
+    const c = new THREE.Color(cols[gi]);
+    const p=g.attributes.position.array, nn=g.attributes.normal.array, gi2=g.index.array;
+    for(let i=0;i<g.attributes.position.count;i++){
+      pos[(o+i)*3]=p[i*3]; pos[(o+i)*3+1]=p[i*3+1]; pos[(o+i)*3+2]=p[i*3+2];
+      nor[(o+i)*3]=nn[i*3]; nor[(o+i)*3+1]=nn[i*3+1]; nor[(o+i)*3+2]=nn[i*3+2];
+      col[(o+i)*3]=c.r; col[(o+i)*3+1]=c.g; col[(o+i)*3+2]=c.b;
+      si[(o+i)*4]=g.attributes.skinIndex.array[i*4];
+      sw[(o+i)*4]=g.attributes.skinWeight.array[i*4];
+    }
+    for(let i=0;i<gi2.length;i++) idx.push(gi2[i]+o);
+    o += g.attributes.position.count;
+  });
+  merged.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  merged.setAttribute('normal',   new THREE.BufferAttribute(nor,3));
+  merged.setAttribute('color',    new THREE.BufferAttribute(col,3));
+  merged.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));
+  merged.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
+  merged.setIndex(idx);
+
+  const mat = new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.72,
+    metalness:0.10, flatShading:true});
+  const mesh = new THREE.SkinnedMesh(merged, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.add(bones.root);
+  mesh.bind(skeleton);
+  mesh.frustumCulled = false;
+  return {mesh, bones};
+}
+
+const PALS = [
+  {body:'#b9c6de', skin:'#e8c9a0', legs:'#5a6478'},
+  {body:'#8a7b5c', skin:'#5a4e38', legs:'#6b5f45'},
+  {body:'#7d8a6a', skin:'#4a5240', legs:'#3f4636'},
+  {body:'#5fae5c', skin:'#2f6a2e', legs:'#27401f'},
+  {body:'#a78bfa', skin:'#4a2f8a', legs:'#3a2472'},
+];
+const actors = [];
+const COUNT = 60;
+for(let i=0;i<COUNT;i++){
+  const a = makeHumanoid(PALS[i%PALS.length]);
+  const ang = (i/COUNT)*Math.PI*2*3, rad = 7 + (i%10)*3.1;
+  a.mesh.position.set(Math.cos(ang)*rad, 0, Math.sin(ang)*rad);
+  a.mesh.rotation.y = -ang;
+  a.phase = i*0.7; a.rad = rad; a.ang = ang;
+  scene.add(a.mesh); actors.push(a);
+}
+/* hero at centre, bigger */
+const hero = makeHumanoid({body:'#cfd9ee', skin:'#f0d5ac', legs:'#3f4a63'});
+hero.mesh.scale.setScalar(1.15); scene.add(hero.mesh);
+actors.push(Object.assign(hero,{phase:0,rad:0,ang:0,isHero:true}));
+
+/* scattered rocks + trees, instanced */
+const rockGeo = new THREE.DodecahedronGeometry(1.6, 0);
+const rockMat = new THREE.MeshStandardMaterial({color:'#4a5a48', roughness:1, flatShading:true});
+const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 60);
+rocks.castShadow = true; rocks.receiveShadow = true;
+const trunkGeo = new THREE.CylinderGeometry(0.45,0.6,6,6);
+const trunkMat = new THREE.MeshStandardMaterial({color:'#3b2b1c', roughness:1, flatShading:true});
+const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, 40);
+const leafGeo = new THREE.IcosahedronGeometry(3.2, 0);
+const leafMat = new THREE.MeshStandardMaterial({color:'#3f8c4a', roughness:0.95, flatShading:true});
+const leaves = new THREE.InstancedMesh(leafGeo, leafMat, 40);
+trunks.castShadow=true; leaves.castShadow=true; leaves.receiveShadow=true;
+const m4 = new THREE.Matrix4();
+for(let i=0;i<60;i++){
+  const a=Math.random()*6.283, r=12+Math.random()*46;
+  m4.makeTranslation(Math.cos(a)*r, 0.6, Math.sin(a)*r);
+  m4.scale(new THREE.Vector3(1,0.7+Math.random()*0.6,1));
+  rocks.setMatrixAt(i,m4);
+}
+for(let i=0;i<40;i++){
+  const a=Math.random()*6.283, r=16+Math.random()*44;
+  const x=Math.cos(a)*r, z=Math.sin(a)*r;
+  m4.makeTranslation(x,3,z); trunks.setMatrixAt(i,m4);
+  m4.makeTranslation(x,7.6,z); leaves.setMatrixAt(i,m4);
+}
+scene.add(rocks, trunks, leaves);
+
+/* ---- animation: the SAME procedural pose approach, driving real bones ---- */
+function pose(a, t){
+  const b = a.bones, s = Math.sin(t*6 + a.phase), br = Math.sin(t*2.3+a.phase)*0.5+0.5;
+  b.legL.rotation.x =  s*0.85;  b.legR.rotation.x = -s*0.85;
+  b.shinL.rotation.x = Math.max(0,-s)*0.9; b.shinR.rotation.x = Math.max(0,s)*0.9;
+  b.armL.rotation.x = -s*0.7;  b.armR.rotation.x =  s*0.7;
+  b.foreL.rotation.x = 0.35;   b.foreR.rotation.x = 0.35;
+  b.chest.rotation.y = s*0.12;
+  b.head.rotation.y  = Math.sin(t*1.3+a.phase)*0.25;
+  b.hips.position.y = 3.2 - Math.abs(s)*0.30 + br*0.06;
+}
+
+let frames=[], last=performance.now(), T=0;
+function loop(){
+  requestAnimationFrame(loop);
+  const now=performance.now(); const dt=Math.min(0.05,(now-last)/1000); last=now; T+=dt;
+  frames.push(now);
+  for(const a of actors){
+    pose(a, T);
+    if(!a.isHero){
+      a.ang += dt*0.22;
+      a.mesh.position.set(Math.cos(a.ang)*a.rad, 0, Math.sin(a.ang)*a.rad);
+      a.mesh.rotation.y = -a.ang + Math.PI/2;
+    }
+  }
+  const target = new THREE.Vector3(0,3,0);
+  cam.position.copy(target).add(CAM_OFF);
+  cam.lookAt(target);
+  sun.target.position.set(0,0,0);
+  renderer.render(scene, cam);
+}
+loop();
+window.__stats = () => {
+  const f = frames.filter(t=>t>performance.now()-3000);
+  const d=[]; for(let i=1;i<f.length;i++) d.push(f[i]-f[i-1]);
+  d.sort((a,b)=>a-b);
+  return {samples:d.length, medianMs:+(d[Math.floor(d.length/2)]||0).toFixed(2),
+    p95Ms:+(d[Math.floor(d.length*0.95)]||0).toFixed(2),
+    fps:+(1000/(d.reduce((a,b)=>a+b,0)/d.length)).toFixed(1),
+    drawCalls: renderer.info.render.calls, tris: renderer.info.render.triangles,
+    actors: actors.length};
+};
+window.__ready = true;
+</script></body></html>
