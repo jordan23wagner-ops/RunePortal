@@ -3251,13 +3251,18 @@ const HERO_WEAPON = {
     {b:'handR', shape:'sphere', w:0.09, y:-0.02, c:GOLD},
   ],
   /* limbs rotated onto Z so the bow stands upright in the extended arm */
+  /* With the bow arm extended, hand +Z is world UP and hand +Y points BACK at
+     the archer. So the string sits at POSITIVE y and the riser and limbs at
+     negative y, facing the target - the reverse had the string pointing at the
+     enemy and the shaft at the archer's chest. */
   bow: [
-    {b:'handL', shape:'cyl', w:0.05, h:0.50, rot:[1.5708,0,0], z: 0.25, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.05, h:0.50, rot:[1.5708,0,0], z:-0.25, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.045,h:0.34, rot:[1.35,0,0],   z: 0.62, y:-0.07, c:'#5a3d1e'},
-    {b:'handL', shape:'cyl', w:0.045,h:0.34, rot:[-1.35,0,0],  z:-0.62, y:-0.07, c:'#5a3d1e'},
-    {b:'handL', shape:'box', w:0.014,h:0.014,d:1.44, y:-0.13, c:'#e4dcc4'},   /* string */
-    {b:'handL', shape:'cyl', w:0.10, h:0.16, rot:[1.5708,0,0], c:'#4a3018'},  /* riser */
+    {b:'handL', shape:'cyl', w:0.05, h:0.52, rot:[1.5708,0,0], z: 0.26, y:-0.05, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.05, h:0.52, rot:[1.5708,0,0], z:-0.26, y:-0.05, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.045,h:0.32, rot:[1.5708+0.38,0,0], z: 0.62, y:-0.14, c:'#5a3d1e'},
+    {b:'handL', shape:'cyl', w:0.045,h:0.32, rot:[1.5708-0.38,0,0], z:-0.62, y:-0.14, c:'#5a3d1e'},
+    {b:'handL', shape:'box', w:0.014,h:0.014,d:1.42, y:0.17, c:'#e4dcc4'},    /* string, archer side */
+    {b:'handL', shape:'cyl', w:0.11, h:0.20, rot:[1.5708,0,0], y:-0.05, c:'#4a3018'}, /* riser */
+    {b:'handL', shape:'sphere', w:0.07, y:0.17, c:'#c9bda0'},                 /* nocking point */
   ],
   gun: [
     {b:'handR', shape:'box', w:0.12, h:0.18, d:0.16, y:-0.12, c:'#3a2a1c'},
@@ -3321,11 +3326,16 @@ function heroPose(b, an, st){
   const armSwing = -s*0.70*w;                    /* only a free hand swings */
   if(wk==='bow'){
     b.armL.rotation.set(-1.32, 0, 0.30);  b.foreL.rotation.x = -0.16;
-    b.armR.rotation.set(-0.55, 0, -0.34); b.foreR.rotation.x = -0.75;
+    b.armR.rotation.set(-0.62, -0.40, -0.10); b.foreR.rotation.x = -0.85;
     b.handL.rotation.set(0,0,0); b.handR.rotation.set(0,0,0);
   } else if(wk==='staff'){
-    b.armL.rotation.set(-0.30 + armSwing*0.25, 0, 0.26);
-    b.foreL.rotation.x = -0.55;
+    /* the shaft runs up the hand's +Y, and the chain rotates so that a NEGATIVE
+       net pitch swings +Y backwards - same sign the blade uses to throw its tip
+       forward. So the staff head needs the chain to sum POSITIVE to lean ahead
+       of the mage, over the leading foot. */
+    b.armL.rotation.set(-0.22 + armSwing*0.25, 0, 0.30);
+    b.foreL.rotation.x = 0.28;
+    b.handL.rotation.x = 0.44;
     b.armR.rotation.x = -armSwing - 0.08; b.armR.rotation.z = 0;
     b.foreR.rotation.x = 0.34;
   } else if(wk==='orb' || wk==='tome'){
@@ -3338,9 +3348,12 @@ function heroPose(b, an, st){
     b.foreL.rotation.x = 0.36;
     /* weapon hand rides lower and steadier, wrist cocked so the blade angles
        forward instead of hanging straight down */
-    b.armR.rotation.set(-0.22 - armSwing*0.35, 0, -0.14);
-    b.foreR.rotation.x = 0.30;
-    b.handR.rotation.x = -0.62;
+    /* the chain accumulates: arm + forearm + wrist decide the blade angle.
+       Netting to about -0.8 rad puts the blade out at roughly 45 degrees
+       instead of hanging at the floor. */
+    b.armR.rotation.set(-0.30 - armSwing*0.35, 0, -0.16);
+    b.foreR.rotation.x = 0.16;
+    b.handR.rotation.x = -0.92;
   }
 
   /* ---- 3. attack ---- */
@@ -3350,19 +3363,34 @@ function heroPose(b, an, st){
       /* hold, draw to the cheek, then snap on release */
       const draw = a<0.62 ? (a/0.62) : 0;
       const snap = a>=0.62 ? 1-(a-0.62)/0.38 : 0;
-      b.armL.rotation.set(-1.52, 0, 0.16);
+      /* bow arm punches straight out and stays UPRIGHT - a roll here tips the
+         whole bow over and it stops reading as a bow */
+      b.armL.rotation.set(-1.46 - draw*0.06, 0.10, -0.06);
       b.foreL.rotation.x = -0.04;
-      b.armR.rotation.set(-1.26 - draw*0.12, 0, -0.50 - draw*0.22);
-      b.foreR.rotation.x = -0.70 - draw*0.95 + snap*0.85;
-      b.chest.rotation.y = 0.34 + draw*0.16 - snap*0.30;
-      b.head.rotation.y = -0.20;
+      /* the draw hand swings ACROSS the chest (rotation.y) and folds hard at
+         the elbow, so it ends up on the centreline hauling the string back
+         instead of hanging out at the shoulder */
+      b.armR.rotation.set(-1.15 - draw*0.19, -0.30 - draw*0.36, 0.10 + draw*0.12);
+      b.foreR.rotation.x = -1.05 - draw*1.22 + snap*1.30;
+      b.handR.rotation.x = -0.20;
+      b.chest.rotation.y = 0.30 + draw*0.14 - snap*0.28;
+      b.head.rotation.y = -0.18;
     } else if(wk==='staff' || wk==='orb' || wk==='tome'){
-      /* raise overhead, then drive the focus forward as it releases */
+      /* cock the focus back, then drive it forward on release. The staff's head
+         sits ABOVE the hand and an orb/tome sits BELOW it, so the same motion
+         needs opposite signs - one branch for both of them threw the staff's
+         head out behind the mage. */
       const rise = a<0.45 ? a/0.45 : 1;
       const cast = a>=0.45 ? (a-0.45)/0.55 : 0;
-      b.armL.rotation.set(-0.30 - rise*2.10 + cast*0.95, 0, 0.26 - rise*0.20);
-      b.foreL.rotation.x = -0.55 + rise*0.35 - cast*0.30;
-      b.handL.rotation.x = cast*0.35;
+      if(wk==='staff'){
+        b.armL.rotation.set(-0.22 - rise*0.55 + cast*1.75, 0, 0.30 + rise*0.25 - cast*0.15);
+        b.foreL.rotation.x = 0.28 - rise*0.25 + cast*0.10;
+        b.handL.rotation.x = 0.44 - rise*0.20 + cast*0.25;
+      } else {
+        b.armL.rotation.set(-0.95 + rise*0.40 - cast*0.75, 0, 0.22 + rise*0.18 - cast*0.12);
+        b.foreL.rotation.x = -0.80 + rise*0.30 - cast*0.20;
+        b.handL.rotation.x = 0;
+      }
       b.armR.rotation.set(-0.20 - rise*0.55 + cast*0.25, 0, 0.10);
       b.chest.rotation.x += -0.10*rise + 0.14*cast;
       b.head.rotation.x  += -0.14*rise + 0.10*cast;
