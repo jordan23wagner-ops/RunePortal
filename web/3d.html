@@ -1089,7 +1089,7 @@ const E = (id,n,shape,col,col2,size,hp,dmg,spd,ai,extra)=>Object.assign(
 
 const ZONES = [
 {
-  id:'verdant', n:'Verdant Hollow', tier:1, lo:1, hi:9,
+  id:'verdant', n:'Verdant Hollow', tier:1, lo:1, hi:9, terrain:1,
   desc:'Sun-starved woodland where the first rift tore open. The beasts here have not yet learned fear.',
   sky:'#16301f', sky2:'#0a1610', ground:'#1d3b27', accent:'#4ade80',
   mats:['hide','heart'], cat:'fang',
@@ -1782,6 +1782,231 @@ const WORLD = {w:1600, h:1900};
 let cam = {x:0, y:0};
 let packs = [], props = [], chests = [], nearChest = null;
 
+/* ================================================================
+   TERRAIN
+   A zone used to be an empty rectangle with props sprinkled on it, so
+   every direction looked the same and the space read as one big room.
+   Terrain gives it structure you have to route around.
+
+   Everything solid is stored as overlapping DISCS rather than boxes:
+   collision is a single distance test, sliding falls out of the push-out
+   for free, and a cluster of discs reads as an organic massif instead of
+   a crate. Water uses the same primitive but only slows you, so a river
+   is a choice (wade slowly, or spend the walk to a bridge) rather than
+   a wall.
+   ================================================================ */
+let terrain = {solid:[], water:[], bridges:[], grid:null, cell:256};
+
+/* Uniform grid over the discs. ~200 discs against ~80 moving entities is
+   16k distance tests a frame brute-force; the grid makes it a handful. */
+function buildTerrainGrid(){
+  const cell = terrain.cell, g = new Map();
+  /* Registered with a margin wider than any entity radius. Without it a body
+     standing just over a cell boundary never sees the disc it is overlapping,
+     because that disc is only filed under the cell its own bounds touch. */
+  const MARGIN = 48;
+  const add = (d, isW) => {
+    d.wet = isW;
+    const R = d.r + MARGIN;
+    const x0=Math.floor((d.x-R)/cell), x1=Math.floor((d.x+R)/cell);
+    const y0=Math.floor((d.y-R)/cell), y1=Math.floor((d.y+R)/cell);
+    for(let gx=x0; gx<=x1; gx++) for(let gy=y0; gy<=y1; gy++){
+      const k = gx+','+gy;
+      let a = g.get(k); if(!a){ a=[]; g.set(k,a); }
+      a.push(d);
+    }
+  };
+  for(const d of terrain.solid) add(d, false);
+  for(const d of terrain.water) add(d, true);
+  terrain.grid = g;
+}
+function discsNear(x, y){
+  if(!terrain.grid) return null;
+  return terrain.grid.get(Math.floor(x/terrain.cell)+','+Math.floor(y/terrain.cell));
+}
+/* Is this point inside solid rock? pad lets a placement ask for clearance. */
+function terrainBlocked(x, y, pad){
+  pad = pad||0;
+  for(const c of terrain.solid){
+    const dx=x-c.x, dy=y-c.y, m=c.r+pad;
+    if(dx*dx+dy*dy < m*m) return true;
+  }
+  return false;
+}
+/* Per-frame point test. terrainBlocked scans every disc, which is fine for
+   placement but not for 40 projectiles a frame - this goes through the grid. */
+function solidAt(x, y){
+  const near = discsNear(x, y);
+  if(!near) return false;
+  for(const c of near){
+    if(c.wet) continue;
+    const dx=x-c.x, dy=y-c.y;
+    if(dx*dx+dy*dy < c.r*c.r) return true;
+  }
+  return false;
+}
+/* Shove an entity out of any rock it has ended up inside. Resolving each
+   overlapping disc in turn is what makes a body slide along a ridge instead
+   of sticking to it. */
+function terrainPush(e, rad){
+  /* Iterated: inside a ridge the discs overlap heavily, and resolving one can
+     push a body straight into its neighbour. Three passes clears every cluster
+     the generator produces; re-querying each pass is what makes it converge,
+     since a correction can move the body into a different cell. */
+  for(let pass=0; pass<4; pass++){
+    const near = discsNear(e.x, e.y);
+    if(!near) return;
+    let moved = false;
+    for(const c of near){
+      if(c.wet) continue;
+      const dx=e.x-c.x, dy=e.y-c.y, min=c.r+rad, d2=dx*dx+dy*dy;
+      if(d2>=min*min) continue;
+      if(d2<1e-4){ e.x += min; moved = true; continue; }
+      const d=Math.sqrt(d2), k=(min-d)/d;
+      e.x += dx*k; e.y += dy*k; moved = true;
+    }
+    if(!moved) return;
+  }
+  /* Last resort for a body that started deep inside a cluster - only reachable
+     by a teleport, since the push runs every frame and nothing moves far
+     enough per frame to tunnel in. Walk outward along the summed escape
+     normal until clear, so there is no state the solver can get stuck in. */
+  if(!solidAt(e.x, e.y)) return;
+  let nx=0, ny=0, deepest=null, deep=-1;
+  for(const c of (discsNear(e.x, e.y) || [])){
+    if(c.wet) continue;
+    const dx=e.x-c.x, dy=e.y-c.y, d=Math.hypot(dx,dy);
+    if(d >= c.r+rad) continue;
+    if(c.r+rad-d > deep){ deep = c.r+rad-d; deepest = c; }
+    if(d > 1e-4){ nx += dx/d; ny += dy/d; }
+  }
+  let nl = Math.hypot(nx,ny);
+  if(nl < 1e-3){
+    /* dead centre of a symmetric cluster: the normals cancel, so head out
+       along the widest disc's own axis instead of nowhere */
+    const a2 = deepest ? Math.atan2(e.y-deepest.y, e.x-deepest.x) || 0 : 0;
+    nx = Math.cos(a2); ny = Math.sin(a2); nl = 1;
+    if(!nx && !ny){ nx = 1; ny = 0; }
+  }
+  nx/=nl; ny/=nl;
+  const step = Math.max(32, rad);
+  for(let i=0;i<40 && solidAt(e.x,e.y);i++){ e.x += nx*step; e.y += ny*step; }
+}
+function onBridge(x, y, pad){
+  pad = pad||0;
+  for(const b of terrain.bridges)
+    if(x>b.x-b.w*0.5-pad && x<b.x+b.w*0.5+pad &&
+       y>b.y-b.h*0.5-pad && y<b.y+b.h*0.5+pad) return true;
+  return false;
+}
+/* Wading slows you; a bridge is dry ground laid over the same water, so it
+   is tested first and wins. */
+function inWater(x, y){
+  if(!terrain.water.length) return false;
+  if(onBridge(x, y, 0)) return false;
+  const near = discsNear(x, y);
+  if(!near) return false;
+  for(const c of near){
+    if(!c.wet) continue;
+    const dx=x-c.x, dy=y-c.y;
+    if(dx*dx+dy*dy < c.r*c.r) return true;
+  }
+  return false;
+}
+const WADE = 0.58;                       /* speed multiplier while in water */
+
+function buildTerrain(){
+  const z = ZONE_BY_ID[S.zone];
+  terrain = {solid:[], water:[], bridges:[], grid:null, cell:256};
+  if(!z.terrain){ buildTerrainGrid(); return; }
+  const W_ = WORLD.w, H_ = WORLD.h;
+  const rock = (x,y,r,h,kind)=>terrain.solid.push({x,y,r,h,kind:kind||'cliff',
+    a:rnd(0,6.283), s:rnd(0.82,1.20)});
+
+  /* ---- mountain ridge across the waist of the zone ----
+     Two passes cut through it. The ridge is what turns "one big room" into
+     a near half and a far half, and finding a pass is the first bit of
+     navigation the zone asks for. */
+  const ridgeY = H_*0.42;
+  const passes = [W_*0.25, W_*0.72], PASS = 250;
+  for(let x=-70; x<W_+70; x+=86){
+    if(passes.some(px=>Math.abs(x-px) < PASS)) continue;
+    const wob = Math.sin(x*0.0041)*74;
+    rock(x+rnd(-16,16), ridgeY+wob, rnd(86,130), rnd(165,270));
+    /* second and third ranks give the ridge depth instead of a single wall */
+    if(Math.random()<0.75) rock(x+rnd(-44,44), ridgeY+wob+rnd(-165,-80), rnd(62,104), rnd(120,205));
+    if(Math.random()<0.62) rock(x+rnd(-44,44), ridgeY+wob+rnd(80,168),   rnd(56,96),  rnd(105,180));
+  }
+  /* buttresses framing each pass, so a gap reads as a gateway */
+  for(const px of passes){
+    const wob = Math.sin(px*0.0041)*74;
+    rock(px-PASS+34, ridgeY+wob+rnd(-30,30), rnd(74,96), rnd(200,265));
+    rock(px+PASS-34, ridgeY+wob+rnd(-30,30), rnd(74,96), rnd(200,265));
+  }
+
+  /* ---- river and swamp, crossed by two bridges ----
+     Laid between the entrance and the ridge so the first thing you meet on
+     the way north is a choice of route. */
+  const riverY = H_*0.71;
+  const riverWob = x => Math.sin(x*0.0030)*62;
+  for(let x=-50; x<W_+50; x+=58){
+    const wob = riverWob(x);
+    terrain.water.push({x:x+rnd(-12,12), y:riverY+wob+rnd(-22,22), r:rnd(72,106)});
+    if(Math.random()<0.6)
+      terrain.water.push({x:x+rnd(-28,28), y:riverY+wob+rnd(-74,74), r:rnd(42,74)});
+  }
+  for(const bx of [W_*0.31, W_*0.69])
+    terrain.bridges.push({x:bx, y:riverY+riverWob(bx), w:132, h:360});
+
+  /* ---- plateaus: flat-topped landmarks to steer by and fight around ---- */
+  const mesas = [[0.17,0.60],[0.82,0.55],[0.44,0.19],[0.62,0.86]];
+  for(const [fx,fy] of mesas){
+    const mx=W_*fx, my=H_*fy, R=rnd(132,186), Hh=rnd(215,300);
+    rock(mx, my, R, Hh, 'mesa');
+    /* talus at the foot: rubble, not more cylinders, or the plateau reads as
+       a stack of drums rather than a weathered rock formation */
+    const n = 3+(Math.random()*3|0);
+    for(let i=0;i<n;i++){
+      const a=rnd(0,6.283), d=R*rnd(0.74,1.06);
+      rock(mx+Math.cos(a)*d, my+Math.sin(a)*d, rnd(50,84), Hh*rnd(0.26,0.50), 'boulder');
+    }
+  }
+
+  /* ---- loose boulder clusters for cover in the open ---- */
+  for(let i=0;i<7;i++){
+    const cx=rnd(220,W_-220), cy=rnd(220,H_-220);
+    if(Math.hypot(cx-W_*0.5, cy-(H_-190)) < 520) continue;   /* keep the entrance clear */
+    const n=2+(Math.random()*3|0);
+    for(let k=0;k<n;k++)
+      rock(cx+rnd(-90,90), cy+rnd(-90,90), rnd(38,62), rnd(52,92), 'boulder');
+  }
+
+  /* ---- carve the passes LAST ----
+     A mesa or boulder cluster rolled on top of a pass silently seals the only
+     route north, and nothing downstream would notice. Cutting the lanes after
+     everything else is generated makes them open by construction rather than
+     by luck. */
+  const LANE = 132, laneY0 = H_*0.24, laneY1 = H_*0.62;
+  terrain.solid = terrain.solid.filter(c=>{
+    for(const px of passes){
+      const dx = Math.abs(c.x-px);
+      if(dx < LANE + c.r && c.y > laneY0 - c.r && c.y < laneY1 + c.r) return false;
+    }
+    return true;
+  });
+
+  /* A disc swallowed whole by a bigger one adds collision passes and draw work
+     for geometry nobody can see - and it is the one shape the push-out cannot
+     resolve, because escaping the small disc leaves you inside the large one. */
+  terrain.solid = terrain.solid.filter((c,i)=>!terrain.solid.some((o,j)=>
+    j!==i && o.r >= c.r && Math.hypot(c.x-o.x, c.y-o.y) + c.r <= o.r*0.98));
+
+  /* the spawn apron must never be walled in */
+  const sx=W_*0.5, sy=H_-190;
+  terrain.solid = terrain.solid.filter(c=>Math.hypot(c.x-sx, c.y-sy) > c.r+210);
+  buildTerrainGrid();
+}
+
 /* ---------- tiling ground ---------- */
 let bdTile=null, bdPattern=null, bdMotes=[];
 const TILE = 512;
@@ -1949,6 +2174,9 @@ function buildZoneWorld(){
   bossRef=null; nearChest=null;
   $('bossBar').classList.remove('on'); $('prompt').style.display='none';
 
+  /* terrain first: every placement below has to dodge it */
+  buildTerrain();
+
   /* enter from the south edge */
   P.x = WORLD.w*0.5; P.y = WORLD.h - 190;
   cam.x = clamp(P.x-W/2, 0, Math.max(0,WORLD.w-W));
@@ -1959,9 +2187,27 @@ function buildZoneWorld(){
     /* 0 rock · 1 crystal · 2 grass tuft · 3 tree — weighted so grass carpets the
        ground and trees are landmarks */
     const k = roll<0.20?0 : roll<0.27?1 : roll<0.88?2 : 3;
-    props.push({x:rnd(24,WORLD.w-24), y:rnd(24,WORLD.h-24),
+    const x=rnd(24,WORLD.w-24), y=rnd(24,WORLD.h-24);
+    /* scenery sprouting out of a cliff face is the tell that the terrain was
+       bolted on afterwards, so props yield to it */
+    if(terrainBlocked(x,y,6)) continue;
+    if(onBridge(x,y,14)) continue;          /* tufts grew up through the deck */
+    /* marsh grass in the shallows is fine; a tree or a crystal is not */
+    if(k!==2 && inWater(x,y)) continue;
+    props.push({x, y,
       r: k===3 ? rnd(15,24) : k===2 ? rnd(7,14) : rnd(9,22),
       k, a:rnd(0,6.283), s:rnd(0.85,1.15)});
+  }
+  /* reeds on the waterline, so the river has a bank instead of an edge */
+  for(const wd of terrain.water){
+    if(Math.random()<0.45) continue;
+    const n = 2+(Math.random()*3|0);
+    for(let i=0;i<n;i++){
+      const a2=rnd(0,6.283), d=wd.r*rnd(0.86,1.12);
+      const rx=wd.x+Math.cos(a2)*d, ry=wd.y+Math.sin(a2)*d;
+      if(onBridge(rx,ry,14) || terrainBlocked(rx,ry,4)) continue;
+      props.push({x:rx, y:ry, r:rnd(10,17), k:2, a:rnd(0,6.283), s:rnd(1.1,1.7)});
+    }
   }
 
   const spots = [];
@@ -1974,12 +2220,19 @@ function buildZoneWorld(){
     for(let t=0;t<400;t++){
       const x=rnd(150,WORLD.w-150), y=rnd(150,WORLD.h-150);
       if(Math.hypot(x-P.x,y-P.y) < fromPlayer) continue;
+      if(terrainBlocked(x,y,150)) continue;      /* room for the whole camp */
       let near=1e9;
       for(const s of spots){ const d=Math.hypot(x-s.x,y-s.y); if(d<near) near=d; }
       if(near>=minD){ spots.push({x,y}); return {x,y}; }
       if(near>bestD){ bestD=near; best={x,y}; }
     }
-    const f = best || {x:rnd(150,WORLD.w-150), y:rnd(150,WORLD.h-150)};
+    /* the fallback still has to be standable, or a camp spawns inside a cliff */
+    let f = best;
+    if(!f) for(let t=0;t<200 && !f;t++){
+      const x=rnd(150,WORLD.w-150), y=rnd(150,WORLD.h-150);
+      if(!terrainBlocked(x,y,150)) f={x,y};
+    }
+    f = f || {x:WORLD.w*0.5, y:WORLD.h-320};
     spots.push(f); return f;
   };
   /* minD is the guaranteed gap between camps — roughly two screens, so
@@ -1991,6 +2244,7 @@ function buildZoneWorld(){
   let best=null, bd=-1;
   for(let t=0;t<240;t++){
     const p={x:rnd(170,WORLD.w-170), y:rnd(170,WORLD.h-170)};
+    if(terrainBlocked(p.x,p.y,190)) continue;
     let near=1e9; for(const s of spots) near=Math.min(near, Math.hypot(p.x-s.x,p.y-s.y));
     if(near<620) continue;
     const d=Math.hypot(p.x-P.x,p.y-P.y);
@@ -2014,6 +2268,7 @@ function buildZoneWorld(){
     for(let t=0;t<300;t++){
       const x=rnd(150,WORLD.w-150), y=rnd(150,WORLD.h-150);
       if(Math.hypot(x-P.x,y-P.y) < 620) continue;
+      if(terrainBlocked(x,y,120)) continue;
       let near=1e9;
       for(const pk of packs) if(pk.kind!=='roam')
         near = Math.min(near, Math.hypot(x-pk.x, y-pk.y));
@@ -2603,7 +2858,7 @@ function update(dt){
       P.dashT-=dt; P.x+=P.dvx*dt; P.y+=P.dvy*dt;
       if(parts.length<200) parts.push({x:P.x,y:P.y,vx:0,vy:0,life:0.22,max:0.22,col:'#9ec4ff',r:5});
     } else if(ix||iy){
-      const sp = D.moveSpeed * (1 + P.sprint*SPRINT_BONUS);
+      const sp = D.moveSpeed * (1 + P.sprint*SPRINT_BONUS) * (inWater(P.x,P.y)?WADE:1);
       P.x += ix*sp*dt; P.y += iy*sp*dt;
       const m=Math.hypot(ix,iy)||1; P.fx=ix/m; P.fy=iy/m;
       /* speed trail, only once actually sprinting */
@@ -2623,7 +2878,14 @@ function update(dt){
     const want = clamp((P.calm - SPRINT_DELAY)/SPRINT_RAMP, 0, 1);
     /* wind up gently, drop instantly */
     P.sprint = want < P.sprint ? want : lerp(P.sprint, want, Math.min(1, dt*3.4));
+    /* resolve terrain BEFORE the world clamp, so a shove out of a cliff can
+       never leave you parked outside the playable box */
+    terrainPush(P, P.r);
     P.x = clamp(P.x, 18, WORLD.w-18); P.y = clamp(P.y, 18, WORLD.h-18);
+    /* wake ripples while wading, so the water reads as water and not paint */
+    if(parts.length<200 && (ix||iy) && inWater(P.x,P.y) && Math.random()<dt*16)
+      parts.push({x:P.x+rnd(-7,7), y:P.y+rnd(-4,4), vx:rnd(-14,14), vy:rnd(-10,10),
+        life:0.42, max:0.42, col:'#8fd6e8', r:rnd(1.6,3.0)});
 
     P.atkCd  = Math.max(0,P.atkCd-dt);
     P.dashCd = Math.max(0,P.dashCd-dt);
@@ -2675,6 +2937,7 @@ function update(dt){
       const damp = Math.exp(-dt*11);
       f.kx *= damp; f.ky *= damp;
       if(Math.abs(f.kx)+Math.abs(f.ky) < 4){ f.kx=0; f.ky=0; }
+      terrainPush(f, f.r);
       f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
     }
 
@@ -2682,7 +2945,8 @@ function update(dt){
     const nx=dx/d, ny=dy/d;
     /* a flinch DRAGS, it does not stop: stun already zeroes speed and blocks
        shooting, and reusing it here would let a fast weapon perma-lock a pack */
-    const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1)*(f.hitT>0?0.45:1);
+    const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1)*(f.hitT>0?0.45:1)
+             * (inWater(f.x,f.y)?WADE:1);
     const ai = f.def.ai;
     if(f.state!=='idle' && d < SPRINT_R) engagedNear = true;
 
@@ -2756,6 +3020,7 @@ function update(dt){
       hurtPlayer(f.dmg*(f.rank===2?1.35:1), f.lvl, f);
       if(D.thorns>0) damageFoe(f, D.thorns, false, {silent:true,noProc:true});
     }
+    terrainPush(f, f.r);
     f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
   }
 
@@ -2811,6 +3076,11 @@ function update(dt){
     }
     s.x+=s.vx*dt; s.y+=s.vy*dt;
     if(s.life<=0 || s.x<-30||s.x>WORLD.w+30||s.y<-30||s.y>WORLD.h+30){ shots.splice(i,1); continue; }
+    /* rock stops shots, which is what makes a ridge cover instead of scenery */
+    if(terrain.solid.length && solidAt(s.x, s.y)){
+      burst(s.x, s.y, s.col||'#cccccc', 4, 90, 0.22, 2);
+      shots.splice(i,1); continue;
+    }
 
     if(s.own==='p'){
       for(const f of foes.slice()){
@@ -3880,6 +4150,91 @@ function buildZoneScene(){
     m.compose(v,q,sc);
   });
 
+  /* ---- terrain ----
+     Cliffs and boulders are chunky dodecahedra sunk into the ground so the
+     base never shows a seam; mesas are tapered cylinders with a flat top so a
+     plateau reads as a plateau and not as another rock. All instanced: the
+     whole ridge costs three draw calls. */
+  const cliffs = terrain.solid.filter(c=>c.kind!=='mesa');
+  const mesas  = terrain.solid.filter(c=>c.kind==='mesa');
+  /* Rock has to sit clearly OFF the ground palette. Shading the ground colour
+     alone left the whole ridge the same green as the grass, so it read as a
+     lumpy lawn; mixing toward neutral stone is what makes it read as rock. */
+  const STONE = mix(shade(z.ground, 0.55), '#9ba49b', 0.56);
+  const cliffMat = new THREE.MeshStandardMaterial({
+    color:STONE, roughness:1, flatShading:true});
+  addInst(new THREE.DodecahedronGeometry(1,0), cliffMat, cliffs, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    /* sunk by a third of its height: a disc the collider treats as radius r
+       has to look at least that wide where the player actually walks */
+    v.set(c.x, c.h*0.5 - c.h*0.30, c.y);
+    sc.set(c.r*1.06, c.h*0.62*c.s, c.r*1.06);
+    m.compose(v,q,sc);
+  });
+
+  /* A plateau in three stepped tiers rather than one extrusion. A single
+     cylinder is a featureless wall from the ground - the setbacks are what
+     give it scale and read as weathered rock. */
+  const TIERS = [
+    {y0:0.00, y1:0.46, r:1.00, tint:-0.10},
+    {y0:0.43, y1:0.79, r:0.88, tint: 0.04},
+    {y0:0.76, y1:1.00, r:0.77, tint: 0.16},
+  ];
+  for(const tr of TIERS){
+    const mat = new THREE.MeshStandardMaterial({
+      color:shade(STONE, tr.tint), roughness:1, flatShading:true});
+    addInst(new THREE.CylinderGeometry(0.93,1.0,1,7), mat, mesas, (c,m,q,v,sc)=>{
+      q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a + tr.r*0.9);
+      const h0=c.h*tr.y0-10, h1=c.h*tr.y1;
+      v.set(c.x, (h0+h1)*0.5, c.y); sc.set(c.r*tr.r, h1-h0, c.r*tr.r);
+      m.compose(v,q,sc);
+    });
+  }
+  /* pale dry cap so the flat top reads as a top and not as more cliff */
+  const capMat = new THREE.MeshStandardMaterial({
+    color:mix(STONE, '#d2cbb4', 0.55), roughness:1, flatShading:true});
+  addInst(new THREE.CylinderGeometry(0.72,0.78,1,7), capMat, mesas, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a + 0.69);
+    v.set(c.x, c.h-7, c.y); sc.set(c.r, 15, c.r);
+    m.compose(v,q,sc);
+  });
+
+  /* water sits just above the ground plane to dodge z-fighting, and does not
+     write depth so overlapping discs read as one sheet rather than a pile */
+  const waterMat = new THREE.MeshStandardMaterial({
+    color:mix(z.ground,'#2f6f8a',0.72), roughness:0.22, metalness:0.15,
+    transparent:true, opacity:0.86, depthWrite:false, flatShading:true});
+  const waterGeo = new THREE.CircleGeometry(1, 14);
+  waterGeo.rotateX(-Math.PI/2);
+  addInst(waterGeo, waterMat, terrain.water, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), 0);
+    v.set(c.x, 1.6, c.y); sc.set(c.r, 1, c.r);
+    m.compose(v,q,sc);
+  });
+
+  /* Bridges: two of them, but a deck plus two rails and six posts each is 18
+     separate meshes, which was the single biggest draw-call cost of the whole
+     terrain layer. Grouped by part and instanced, the lot costs three. */
+  if(terrain.bridges.length){
+    const decks=[], rails=[], posts=[];
+    for(const b of terrain.bridges){
+      decks.push({x:b.x, y:12, z:b.y, sx:b.w, sy:9, sz:b.h});
+      for(const sx of [-1,1]){
+        rails.push({x:b.x+sx*(b.w*0.5-4), y:28, z:b.y, sx:5, sy:26, sz:b.h});
+        for(const sy of [-0.38,0,0.38])
+          posts.push({x:b.x+sx*(b.w*0.5-4), y:14, z:b.y+sy*b.h, sx:9, sy:40, sz:9});
+      }
+    }
+    const unit = new THREE.BoxGeometry(1,1,1);
+    const deckMat = new THREE.MeshStandardMaterial({color:'#6b4a26', roughness:1, flatShading:true});
+    const postMat = new THREE.MeshStandardMaterial({color:'#4a3018', roughness:1, flatShading:true});
+    const put=(d,m,q,v,sc)=>{ q.identity(); v.set(d.x,d.y,d.z); sc.set(d.sx,d.sy,d.sz);
+      m.compose(v,q,sc); };
+    addInst(unit, deckMat, decks, put);
+    addInst(unit, deckMat, rails, put);
+    addInst(unit, postMat, posts, put);
+  }
+
   /* chests are few — plain meshes */
   const chestGeo = new THREE.BoxGeometry(26,18,20);
   const chestMat = new THREE.MeshStandardMaterial({color:'#a8762c', roughness:0.6,
@@ -4154,6 +4509,29 @@ function render(){
    ================================================================ */
 const MM = 94;
 let hudH = 104;
+/* The terrain layer is hundreds of discs and never moves, so it is baked once
+   per zone and blitted. Stroking it live would put 200+ arcs on the 2D canvas
+   every single frame for a picture that is identical each time. */
+let mmTerrain=null, mmTerrainKey='';
+function mmTerrainLayer(s, mw, mh){
+  const key = S.zone+'|'+Math.round(mw)+'x'+Math.round(mh)+'|'+terrain.solid.length;
+  if(mmTerrain && mmTerrainKey===key) return mmTerrain;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1,Math.ceil(mw*DPR)); c.height = Math.max(1,Math.ceil(mh*DPR));
+  const g = c.getContext('2d');
+  g.setTransform(DPR,0,0,DPR,0,0);
+  g.fillStyle='rgba(74,140,170,.55)';
+  for(const w of terrain.water){
+    g.beginPath(); g.arc(w.x*s, w.y*s, Math.max(0.7,w.r*s), 0, 6.283); g.fill(); }
+  g.fillStyle='rgba(150,120,70,.85)';
+  for(const b of terrain.bridges)
+    g.fillRect((b.x-b.w*0.5)*s, (b.y-b.h*0.5)*s, Math.max(1,b.w*s), Math.max(1.5,b.h*s));
+  for(const r of terrain.solid){
+    g.fillStyle = r.kind==='mesa' ? 'rgba(140,136,120,.80)' : 'rgba(96,96,92,.72)';
+    g.beginPath(); g.arc(r.x*s, r.y*s, Math.max(0.7,r.r*s), 0, 6.283); g.fill();
+  }
+  mmTerrain=c; mmTerrainKey=key; return c;
+}
 function drawMinimap(){
   if(!hctx) return;
   const z = ZONE_BY_ID[S.zone];
@@ -4168,6 +4546,8 @@ function drawMinimap(){
   hctx.fillRect(ox-2,oy-2,mw+4,mh+4);
   hctx.strokeStyle='rgba(255,255,255,.18)'; hctx.lineWidth=1;
   hctx.strokeRect(ox-2.5,oy-2.5,mw+5,mh+5);
+  if(terrain.solid.length || terrain.water.length)
+    hctx.drawImage(mmTerrainLayer(s, mw, mh), ox, oy, mw, mh);
   for(const c of chests){ if(c.open) continue;
     hctx.fillStyle='#e8b44a';
     hctx.fillRect(ox+c.x*s-1.5, oy+c.y*s-1.5, 3.5, 3.5); }
