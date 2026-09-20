@@ -3088,6 +3088,14 @@ function buildSkinned(spec, pal){
     else if(p.shape==='cyl')    g = new THREE.CylinderGeometry(p.w/2, (p.w2||p.w)/2, p.h, 7);
     else                        g = new THREE.BoxGeometry(p.w, p.h, p.d||p.w);
     if(p.sy) g.scale(1, p.sy, 1);
+    /* rotate BEFORE translating, so offsets stay in plain bone space and a part
+       can be aimed along any axis - without this every weapon is stuck running
+       down the arm and they all point at the floor */
+    if(p.rot){
+      if(p.rot[0]) g.rotateX(p.rot[0]);
+      if(p.rot[1]) g.rotateY(p.rot[1]);
+      if(p.rot[2]) g.rotateZ(p.rot[2]);
+    }
     g.translate(p.x||0, p.y||0, p.z||0);
     g.applyMatrix4(bone.matrixWorld);
     const idx = list.indexOf(bone), n = g.attributes.position.count;
@@ -3225,7 +3233,10 @@ const HERO_ARMOUR = {
     {b:'cape',  shape:'box', w:0.44, h:0.74, d:0.04, y:-0.36, c:'#3a2a6a'},
   ],
 };
-/* the held weapon follows the equipped archetype, so swapping gear changes the model */
+/* The held weapon follows the equipped archetype. Orientation matters as much
+   as shape: the bow's limbs run along the hand's Z so they stand vertical once
+   the bow arm points forward, and the staff extends UP out of the fist rather
+   than down past it. */
 const HERO_WEAPON = {
   blade: [
     {b:'handR', shape:'cyl', w:0.06, h:0.20, y:-0.16, c:'#3a2a1c'},
@@ -3239,32 +3250,35 @@ const HERO_WEAPON = {
     {b:'handR', shape:'box', w:0.30, h:0.34, d:0.05, x:0.16, y:-0.64, c:'#cfd8e6'},
     {b:'handR', shape:'sphere', w:0.09, y:-0.02, c:GOLD},
   ],
+  /* limbs rotated onto Z so the bow stands upright in the extended arm */
   bow: [
-    {b:'handL', shape:'cyl', w:0.05, h:0.46, x:0,    y:-0.22, z:0.06, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.05, h:0.46, x:0,    y:0.22,  z:0.06, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.05, h:0.30, x:0,    y:-0.52, z:-0.02, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.05, h:0.30, x:0,    y:0.52,  z:-0.02, c:'#6b4a26'},
-    {b:'handL', shape:'box', w:0.014,h:1.30, d:0.014, z:-0.14, c:'#e4dcc4'},   /* string */
-    {b:'handL', shape:'sphere', w:0.08, z:0.06, c:GOLD},
+    {b:'handL', shape:'cyl', w:0.05, h:0.50, rot:[1.5708,0,0], z: 0.25, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.05, h:0.50, rot:[1.5708,0,0], z:-0.25, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.045,h:0.34, rot:[1.35,0,0],   z: 0.62, y:-0.07, c:'#5a3d1e'},
+    {b:'handL', shape:'cyl', w:0.045,h:0.34, rot:[-1.35,0,0],  z:-0.62, y:-0.07, c:'#5a3d1e'},
+    {b:'handL', shape:'box', w:0.014,h:0.014,d:1.44, y:-0.13, c:'#e4dcc4'},   /* string */
+    {b:'handL', shape:'cyl', w:0.10, h:0.16, rot:[1.5708,0,0], c:'#4a3018'},  /* riser */
   ],
   gun: [
     {b:'handR', shape:'box', w:0.12, h:0.18, d:0.16, y:-0.12, c:'#3a2a1c'},
-    {b:'handR', shape:'cyl', w:0.10, h:0.52, y:-0.16, z:0.34, c:'#9aa6ba'},
+    {b:'handR', shape:'cyl', w:0.10, h:0.52, rot:[1.5708,0,0], y:-0.16, z:0.34, c:'#9aa6ba'},
   ],
+  /* the shaft runs UP out of the fist, not down past it */
   staff: [
-    {b:'handL', shape:'cyl', w:0.06, w2:0.05, h:1.55, y:-0.30, c:'#5a3f22'},
-    {b:'handL', shape:'sphere', w:0.09, y:0.46, c:'#5a3f22'},
-    {b:'handL', shape:'sphere', w:0.24, det:1, y:0.60, c:'glow'},   /* focus stone */
-    {b:'handL', shape:'cone', w:0.16, h:0.16, y:0.44, c:GOLD},
+    {b:'handL', shape:'cyl', w:0.06, w2:0.05, h:1.70, y:0.52, c:'#5a3f22'},
+    {b:'handL', shape:'sphere', w:0.09, y:1.26, c:'#5a3f22'},
+    {b:'handL', shape:'cone', w:0.17, h:0.18, rot:[3.1416,0,0], y:1.30, c:GOLD},
+    {b:'handL', shape:'sphere', w:0.26, det:1, y:1.48, c:'glow'},
+    {b:'handL', shape:'cyl', w:0.10, h:0.07, y:-0.30, c:GOLD},
   ],
   orb: [
-    {b:'handL', shape:'sphere', w:0.28, det:1, y:-0.24, c:'glow'},
-    {b:'handL', shape:'cyl', w:0.30, h:0.03, y:-0.24, c:GOLD},
+    {b:'handL', shape:'sphere', w:0.30, det:1, y:-0.30, z:0.12, c:'glow'},
+    {b:'handL', shape:'cyl', w:0.32, h:0.03, y:-0.30, z:0.12, c:GOLD},
   ],
   tome: [
-    {b:'handL', shape:'box', w:0.30, h:0.36, d:0.10, y:-0.20, c:'#7a2233'},
-    {b:'handL', shape:'box', w:0.26, h:0.32, d:0.12, y:-0.20, z:0.02, c:'#e8e2d0'},
-    {b:'handL', shape:'sphere', w:0.12, y:-0.20, z:0.10, c:'glow'},
+    {b:'handL', shape:'box', w:0.32, h:0.38, d:0.10, rot:[0.5,0,0], y:-0.22, z:0.10, c:'#7a2233'},
+    {b:'handL', shape:'box', w:0.28, h:0.34, d:0.12, rot:[0.5,0,0], y:-0.20, z:0.13, c:'#e8e2d0'},
+    {b:'handL', shape:'sphere', w:0.13, y:-0.10, z:0.24, c:'glow'},
   ],
 };
 function heroWeaponKind(arch){
@@ -3273,54 +3287,100 @@ function heroWeaponKind(arch){
     firestaff:'staff',icewand:'staff',stormrod:'staff',voidtome:'tome',arcaneorb:'orb'};
   return m[arch] || 'blade';
 }
+
+/* ---------- the pose, in three layers ----------
+   1. locomotion   - legs, torso, head; stride and lean scale with speed
+   2. weapon carry - OVERRIDES the arms, so a drawn bow does not swing like an
+                     empty hand. Layering the carry under the walk swing is why
+                     held weapons waved around and pointed at the floor.
+   3. attack       - per weapon: a blade swings, a bow draws and looses, a staff
+                     raises and thrusts.
+*/
 function heroPose(b, an, st){
   const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.2)*0.5+0.5;
-  const twoHand = st.wk==='bow' || st.wk==='staff';
-  b.legL.rotation.x =  s*0.85*w;  b.legR.rotation.x = -s*0.85*w;
-  b.shinL.rotation.x = Math.max(0,-s)*0.95*w; b.shinR.rotation.x = Math.max(0,s)*0.95*w;
-  b.footL.rotation.x = -Math.max(0,-s)*0.5*w; b.footR.rotation.x = -Math.max(0,s)*0.5*w;
-  b.armL.rotation.x = -s*0.72*w - (twoHand?0.95:0.06);
-  b.armR.rotation.x =  s*0.60*w - (twoHand?0.70:0.30);
-  b.armL.rotation.z = twoHand ? 0.22 : 0;
-  b.armR.rotation.z = twoHand ? -0.18 : 0;
-  b.foreL.rotation.x = twoHand ? -0.35 : 0.36;
-  b.foreR.rotation.x = twoHand ? -0.55 : 0.30;
-  b.handL.rotation.x = 0; b.handR.rotation.x = 0;
-  b.chest.rotation.y = s*0.13*w;
-  b.chest.rotation.x = 0.04 + br*0.03;
-  b.neck.rotation.x = -0.03;
-  b.head.rotation.x = -br*0.04;
-  b.hips.position.y = 0.95 - Math.abs(s)*0.06*w + br*0.012;
-  b.cape.rotation.x = 0.10 + w*0.42 + Math.sin(st.t*3.1)*0.05;
+  const run = st.sprint||0;                      /* 0 walking .. 1 flat sprint */
+  const wk = st.wk || 'blade';
+  const stride = 0.80 + run*0.45, lean = w*(0.06 + run*0.16);
+
+  /* ---- 1. locomotion ---- */
+  b.legL.rotation.x =  s*stride*w;  b.legR.rotation.x = -s*stride*w;
+  b.shinL.rotation.x = Math.max(0,-s)*(0.85+run*0.35)*w;
+  b.shinR.rotation.x = Math.max(0, s)*(0.85+run*0.35)*w;
+  b.footL.rotation.x = -Math.max(0,-s)*0.45*w;
+  b.footR.rotation.x = -Math.max(0, s)*0.45*w;
+  b.hips.position.y = 0.95 - Math.abs(s)*(0.05+run*0.04)*w + br*0.012;
+  b.hips.rotation.y = -s*0.10*w;                 /* pelvis counter-rotates */
+  b.chest.rotation.x = 0.04 + lean + br*0.03;
+  b.chest.rotation.y = s*0.14*w;
+  b.neck.rotation.x = -0.03 - lean*0.5;
+  b.head.rotation.x = -br*0.04 - lean*0.3;
+  b.cape.rotation.x = 0.10 + w*(0.40+run*0.55) + Math.sin(st.t*3.1)*0.05;
   b.cape.rotation.z = Math.sin(st.t*2.3)*0.06 + s*0.05*w;
+
+  /* ---- 2. weapon carry (arms) ---- */
+  const armSwing = -s*0.70*w;                    /* only a free hand swings */
+  if(wk==='bow'){
+    b.armL.rotation.set(-1.32, 0, 0.30);  b.foreL.rotation.x = -0.16;
+    b.armR.rotation.set(-0.55, 0, -0.34); b.foreR.rotation.x = -0.75;
+    b.handL.rotation.set(0,0,0); b.handR.rotation.set(0,0,0);
+  } else if(wk==='staff'){
+    b.armL.rotation.set(-0.30 + armSwing*0.25, 0, 0.26);
+    b.foreL.rotation.x = -0.55;
+    b.armR.rotation.x = -armSwing - 0.08; b.armR.rotation.z = 0;
+    b.foreR.rotation.x = 0.34;
+  } else if(wk==='orb' || wk==='tome'){
+    b.armL.rotation.set(-0.95 + armSwing*0.2, 0, 0.22);
+    b.foreL.rotation.x = -0.80;
+    b.armR.rotation.x = -armSwing - 0.08; b.armR.rotation.z = 0;
+    b.foreR.rotation.x = 0.34;
+  } else {                                        /* blade / axe / gun */
+    b.armL.rotation.x = armSwing - 0.06; b.armL.rotation.z = 0;
+    b.foreL.rotation.x = 0.36;
+    /* weapon hand rides lower and steadier, wrist cocked so the blade angles
+       forward instead of hanging straight down */
+    b.armR.rotation.set(-0.22 - armSwing*0.35, 0, -0.14);
+    b.foreR.rotation.x = 0.30;
+    b.handR.rotation.x = -0.62;
+  }
+
+  /* ---- 3. attack ---- */
   if(an.atk>=0){
-    const a=an.atk;
-    if(st.wk==='bow'){
-      /* draw and loose: bow arm locked forward, string hand pulls back and snaps */
-      const d2 = a<0.6 ? a/0.6 : 1-(a-0.6)/0.4;
-      b.armL.rotation.x = -1.50; b.armL.rotation.z = 0.10; b.foreL.rotation.x = -0.10;
-      b.armR.rotation.x = -1.20 + d2*0.30; b.foreR.rotation.x = -0.95 - d2*0.55;
-      b.chest.rotation.y = 0.30;
-    } else if(st.wk==='staff' || st.wk==='orb' || st.wk==='tome'){
-      /* gather, then thrust the focus forward */
-      const d2 = a<0.45 ? a/0.45 : 1-(a-0.45)/0.55;
-      b.armL.rotation.x = -1.05 - d2*0.85; b.armL.rotation.z = 0.15 - d2*0.15;
-      b.foreL.rotation.x = -0.30 - d2*0.35;
-      b.armR.rotation.x = -0.45 - d2*0.35;
-      b.chest.rotation.x += -0.12*d2; b.head.rotation.x -= 0.10*d2;
+    const a = an.atk;
+    if(wk==='bow'){
+      /* hold, draw to the cheek, then snap on release */
+      const draw = a<0.62 ? (a/0.62) : 0;
+      const snap = a>=0.62 ? 1-(a-0.62)/0.38 : 0;
+      b.armL.rotation.set(-1.52, 0, 0.16);
+      b.foreL.rotation.x = -0.04;
+      b.armR.rotation.set(-1.26 - draw*0.12, 0, -0.50 - draw*0.22);
+      b.foreR.rotation.x = -0.70 - draw*0.95 + snap*0.85;
+      b.chest.rotation.y = 0.34 + draw*0.16 - snap*0.30;
+      b.head.rotation.y = -0.20;
+    } else if(wk==='staff' || wk==='orb' || wk==='tome'){
+      /* raise overhead, then drive the focus forward as it releases */
+      const rise = a<0.45 ? a/0.45 : 1;
+      const cast = a>=0.45 ? (a-0.45)/0.55 : 0;
+      b.armL.rotation.set(-0.30 - rise*2.10 + cast*0.95, 0, 0.26 - rise*0.20);
+      b.foreL.rotation.x = -0.55 + rise*0.35 - cast*0.30;
+      b.handL.rotation.x = cast*0.35;
+      b.armR.rotation.set(-0.20 - rise*0.55 + cast*0.25, 0, 0.10);
+      b.chest.rotation.x += -0.10*rise + 0.14*cast;
+      b.head.rotation.x  += -0.14*rise + 0.10*cast;
     } else {
-      let sw2; if(a<0.30) sw2=-1.0*(a/0.30);
-      else if(a<0.52) sw2=lerp(-1.0,1.9,(a-0.30)/0.22);
-      else sw2=lerp(1.9,0,(a-0.52)/0.48);
-      b.armR.rotation.x = -1.35 + sw2*1.25;
-      b.armR.rotation.z = -0.25 - sw2*0.30;
-      b.foreR.rotation.x = 0.30 - Math.max(0,sw2)*0.60;
-      b.handR.rotation.x = -0.45 + sw2*0.25;
-      b.chest.rotation.y = -sw2*0.46;
-      b.armL.rotation.x = -0.25 - sw2*0.18;
-      b.cape.rotation.x += Math.max(0,sw2)*0.30;
+      /* wind up behind the shoulder, sweep across, recover */
+      let sw; 
+      if(a<0.30)      sw = -1.0*(a/0.30);
+      else if(a<0.52) sw = lerp(-1.0, 1.9, (a-0.30)/0.22);
+      else            sw = lerp(1.9, 0, (a-0.52)/0.48);
+      b.armR.rotation.set(-1.30 + sw*1.30, -sw*0.35, -0.30 - sw*0.34);
+      b.foreR.rotation.x = 0.28 - Math.max(0,sw)*0.58;
+      b.handR.rotation.x = -0.75 + sw*0.55;       /* wrist leads the blade */
+      b.chest.rotation.y = -sw*0.50;
+      b.armL.rotation.x = -0.25 - sw*0.20;
+      b.cape.rotation.x += Math.max(0,sw)*0.30;
     }
   }
+
   if(an.hurt>0){
     b.chest.rotation.x += 0.42*an.hurt;
     b.neck.rotation.x  += 0.30*an.hurt;
@@ -3815,7 +3875,8 @@ function render(){
           fz = isPlayer ? (useAim?P.aimy:P.fy) : (P.y-ent.y);
     a.mesh.rotation.y = Math.atan2(fx, fz);
     const an = ent.an;
-    const st = {t: isPlayer ? (P.t||0) : ent.t, wk: a.spec.wk};
+    const st = {t: isPlayer ? (P.t||0) : ent.t, wk: a.spec.wk,
+                sprint: isPlayer ? (P.sprint||0) : 0};
     a.spec.pose(a.bones, an, st);
     /* hit flash */
     const flash = isPlayer ? P.flash : ent.flash;
