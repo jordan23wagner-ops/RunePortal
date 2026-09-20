@@ -3255,14 +3255,29 @@ const HERO_WEAPON = {
      the archer. So the string sits at POSITIVE y and the riser and limbs at
      negative y, facing the target - the reverse had the string pointing at the
      enemy and the shaft at the archer's chest. */
+  /* Bow, in hand-local space: limbs run along +/-Z, the archer is at +Y and the
+     target at -Y (probed, not guessed). The shaft therefore has to SWEEP BACK
+     toward +Y as it runs out to the tips, and the string has to terminate on
+     those tips - the old rig curved the limbs away from the string and left the
+     string floating parallel to them, which reads as a bow held backwards. */
   bow: [
-    {b:'handL', shape:'cyl', w:0.05, h:0.52, rot:[1.5708,0,0], z: 0.26, y:-0.05, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.05, h:0.52, rot:[1.5708,0,0], z:-0.26, y:-0.05, c:'#6b4a26'},
-    {b:'handL', shape:'cyl', w:0.045,h:0.32, rot:[1.5708+0.38,0,0], z: 0.62, y:-0.14, c:'#5a3d1e'},
-    {b:'handL', shape:'cyl', w:0.045,h:0.32, rot:[1.5708-0.38,0,0], z:-0.62, y:-0.14, c:'#5a3d1e'},
-    {b:'handL', shape:'box', w:0.014,h:0.014,d:1.42, y:0.17, c:'#e4dcc4'},    /* string, archer side */
-    {b:'handL', shape:'cyl', w:0.11, h:0.20, rot:[1.5708,0,0], y:-0.05, c:'#4a3018'}, /* riser */
-    {b:'handL', shape:'sphere', w:0.07, y:0.17, c:'#c9bda0'},                 /* nocking point */
+    /* inner limb: leaves the grip almost straight along the bow axis */
+    {b:'handL', shape:'cyl', w:0.055, w2:0.042, h:0.39, rot:[ 1.364,0,0], z: 0.29, y:-0.16, c:'#6b4a26'},
+    {b:'handL', shape:'cyl', w:0.055, w2:0.042, h:0.39, rot:[-1.364,0,0], z:-0.29, y:-0.16, c:'#6b4a26'},
+    /* recurve tip: sweeps hard toward the archer so it MEETS the string */
+    {b:'handL', shape:'cyl', w:0.042, w2:0.030, h:0.37, rot:[ 0.709,0,0], z: 0.60, y: 0.02, c:'#5a3d1e'},
+    {b:'handL', shape:'cyl', w:0.042, w2:0.030, h:0.37, rot:[-0.709,0,0], z:-0.60, y: 0.02, c:'#5a3d1e'},
+    /* string: tip to tip at y=+0.16, exactly where the recurves end */
+    {b:'handL', shape:'box', w:0.013,h:0.013,d:1.44, y: 0.16, c:'#e8e0c8'},
+    {b:'handL', shape:'sphere', w:0.05, z: 0.71, y: 0.16, c:'#c9bda0'},       /* upper nock */
+    {b:'handL', shape:'sphere', w:0.05, z:-0.71, y: 0.16, c:'#c9bda0'},       /* lower nock */
+    {b:'handL', shape:'sphere', w:0.055, y: 0.16, c:'#d8cba8'},               /* nocking point */
+    /* riser, on the target side - the deepest point of the bow */
+    {b:'handL', shape:'cyl', w:0.085,h:0.30, rot:[1.5708,0,0], y:-0.20, c:'#4a3018'},
+    {b:'handL', shape:'box', w:0.10, h:0.14, d:0.19,             y:-0.20, c:'#33220f'}, /* grip wrap */
+    /* nocked arrow, running from the string out toward the target */
+    {b:'handL', shape:'cyl', w:0.017,h:0.70, x:0.07, y:-0.20, c:'#8a6a3a'},
+    {b:'handL', shape:'cone',w:0.045,h:0.09, rot:[3.1416,0,0], x:0.07, y:-0.58, c:'#b9c2cc'},
   ],
   gun: [
     {b:'handR', shape:'box', w:0.12, h:0.18, d:0.16, y:-0.12, c:'#3a2a1c'},
