@@ -1867,6 +1867,9 @@ function makeFoe(def, rank, hx, hy){
     dmg: TUNE.eDmg(L)*(def.dmg/dmgN), spd: 42 + def.spd*30, lvl:L,
     icd:0, st:0, t:rnd(0,3), vx:0,vy:0, flash:0, born:0,
     burn:0,burnD:0,pois:0,poisD:0,slow:0,slowA:0,stun:0,
+    /* hit reaction: kx/ky is a decaying shove, hitT a brief flinch that drags
+       on movement without stopping it the way stun does */
+    kx:0, ky:0, hitT:0,
     ang:rnd(0,6.28), pat:0, patT:0, tele:0,
     an:newAnim(), px:0, py:0,
     /* camp behaviour */
@@ -2079,9 +2082,40 @@ function rollHit(mult){
   const crit = Math.random()*100 < D.critC;
   return {dmg: crit ? base*(D.critD/100) : base, crit};
 }
+/* How hard a hit shoves and staggers. Scaled by the fraction of the target's
+   own health it took off, so a chip tick nudges and a haymaker throws - a flat
+   impulse made poison ticks punt enemies across the screen. Ranked enemies
+   plant their feet; a boss should not be kited around by knockback. */
+function hitReaction(f, dmg, crit, hx, hy){
+  const heft = clamp(dmg/Math.max(1,f.max)*3.2, 0.22, 1);
+  const resist = f.rank===2 ? 0.22 : f.rank===1 ? 0.55 : 1;
+  /* impulse decays at exp(-11t), so total travel is push/11 world units:
+     ~15 for a solid hit and ~23 on a crit, against a body radius of 13-22.
+     Enough to read as impact without turning every weapon into a launcher. */
+  const push = (crit ? 255 : 165) * heft * resist;
+  f.kx = hx*push; f.ky = hy*push;
+  f.hitT = Math.max(f.hitT, (crit ? 0.26 : 0.16) * resist);
+  f.an.hurt = Math.min(1, 0.55 + heft*0.45);
+  /* a foe faces the player, so its own facing is the axis to resolve against */
+  const fx = P.x-f.x, fy = P.y-f.y, fd = Math.hypot(fx,fy)||1;
+  setFlinchDir(f.an, hx, hy, fx/fd, fy/fd);
+}
+/* Resolve a world-space shove into the rig's local axes. The rig is rotated so
+   its +Z points along (fx,fy), which puts local +X along (fy,-fx). */
+function setFlinchDir(an, hx, hy, fx, fy){
+  an.hf = hx*fx + hy*fy;
+  an.hr = hx*fy - hy*fx;
+}
 function damageFoe(f, dmg, crit, opts){
   opts = opts||{};
   f.hp -= dmg; f.flash = 0.12; f.an.hurt = 1;
+  if(!opts.noKnock){
+    /* the shove runs along the hit direction when the caller knows it (a
+       projectile's heading), otherwise straight out from the player */
+    let hx = opts.hx, hy = opts.hy;
+    if(hx==null){ const dx=f.x-P.x, dy=f.y-P.y, d=Math.hypot(dx,dy)||1; hx=dx/d; hy=dy/d; }
+    hitReaction(f, dmg, crit, hx, hy);
+  }
   if(f.state!=='aggro') aggroPack(f);
   if(!opts.silent){
     fct(f.x, f.y-f.r-6, Math.round(dmg).toString(), crit?'crit':'');
@@ -2115,10 +2149,17 @@ function healPlayer(n, silent){
   const got = P.hp-before;
   if(!silent && got>0) fct(P.x,P.y-24,'+'+Math.round(got),'heal');
 }
-function hurtPlayer(raw, eLvl){
+function hurtPlayer(raw, eLvl, src){
   if(P.inv>0 || P.dead) return;
   const dmg = mitigate(raw, eLvl||zoneLvl());
   P.hp -= dmg; P.flash = 0.18; P.an.hurt = 1;
+  /* the hero takes no positional knockback - losing control of your own
+     character is a worse feeling than the flinch is a good one - but the
+     flinch itself recoils from wherever the blow actually came from */
+  if(src){
+    const dx=P.x-src.x, dy=P.y-src.y, d=Math.hypot(dx,dy)||1;
+    setFlinchDir(P.an, dx/d, dy/d, P.fx||0, P.fy||-1);
+  } else { P.an.hf = -1; P.an.hr = 0; }
   /* a shooter can tag you from outside SPRINT_R, so damage kills the sprint too */
   P.calm = 0; P.sprint = 0;
   if(D.uniq && D.uniq.bulwark){ P.bulwark = Math.min(3,P.bulwark+1); P.bulwarkT = 3; }
@@ -2185,7 +2226,7 @@ function detonate(f){
   ring(f.x,f.y,'#ff9a4c',10,86,0.32);
   burst(f.x,f.y,'#ff9a4c',22,280,0.5,3.5);
   const d = Math.hypot(P.x-f.x,P.y-f.y);
-  if(d<86) hurtPlayer(f.dmg*1.6*(1-d/86)+f.dmg*0.4, f.lvl);
+  if(d<86) hurtPlayer(f.dmg*1.6*(1-d/86)+f.dmg*0.4, f.lvl, f);
   shake=Math.max(shake,9);
 }
 
@@ -2611,6 +2652,7 @@ function update(dt){
     f.flash = Math.max(0,f.flash-dt);
     f.icd   = Math.max(0,f.icd-dt);
     f.stun  = Math.max(0,f.stun-dt);
+    f.hitT  = Math.max(0,f.hitT-dt);
     if(f.slow>0){ f.slow-=dt; if(f.slow<=0) f.slowA=0; }
     if(f.burn>0){ f.burn-=dt; f.hp-=f.burnD*dt;
       if(Math.random()<dt*7) burst(f.x,f.y,'#ff9a4c',1,40,0.3,2); }
@@ -2625,9 +2667,22 @@ function update(dt){
       continue;
     }
 
+    /* knockback: integrated and clamped HERE, before the idle branch bails out,
+       so shoving an enemy that has not noticed you yet cannot post it through
+       the world edge */
+    if(f.kx || f.ky){
+      f.x += f.kx*dt; f.y += f.ky*dt;
+      const damp = Math.exp(-dt*11);
+      f.kx *= damp; f.ky *= damp;
+      if(Math.abs(f.kx)+Math.abs(f.ky) < 4){ f.kx=0; f.ky=0; }
+      f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
+    }
+
     const dx=P.x-f.x, dy=P.y-f.y, d=Math.hypot(dx,dy)||1;
     const nx=dx/d, ny=dy/d;
-    const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1);
+    /* a flinch DRAGS, it does not stop: stun already zeroes speed and blocks
+       shooting, and reusing it here would let a fast weapon perma-lock a pack */
+    const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1)*(f.hitT>0?0.45:1);
     const ai = f.def.ai;
     if(f.state!=='idle' && d < SPRINT_R) engagedNear = true;
 
@@ -2698,7 +2753,7 @@ function update(dt){
     /* contact damage */
     if(ai!=='shooter' && d < f.r+P.r+2 && f.icd<=0 && !P.dead){
       f.icd = 0.85; f.an.atk = 0;
-      hurtPlayer(f.dmg*(f.rank===2?1.35:1), f.lvl);
+      hurtPlayer(f.dmg*(f.rank===2?1.35:1), f.lvl, f);
       if(D.thorns>0) damageFoe(f, D.thorns, false, {silent:true,noProc:true});
     }
     f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
@@ -2788,7 +2843,7 @@ function update(dt){
       }
     } else {
       if(!P.dead && Math.hypot(P.x-s.x,P.y-s.y) < P.r+s.r){
-        hurtPlayer(s.dmg, s.lvl);
+        hurtPlayer(s.dmg, s.lvl, {x:s.x-s.vx*0.05, y:s.y-s.vy*0.05});
         burst(s.x,s.y,s.col,8,140,0.3,2.2);
         shots.splice(i,1); continue;
       }
@@ -2888,7 +2943,7 @@ function bossAI(f,dt,nx,ny,d){
       f.tele=0; f.patT=0.25;
       ring(f.tx,f.ty,'#ff5a3c',18,130,0.34);
       burst(f.tx,f.ty,'#ff5a3c',26,280,0.55,3.4);
-      if(Math.hypot(P.x-f.tx,P.y-f.ty)<130) hurtPlayer(f.dmg*1.8,f.lvl);
+      if(Math.hypot(P.x-f.tx,P.y-f.ty)<130) hurtPlayer(f.dmg*1.8,f.lvl,{x:f.tx,y:f.ty});
       shake=Math.max(shake,13); sfx('crit'); buzz(50);
     } else if(!f.tele && f.patT<=0){ f.phase=-1; f.patT=1.3; }
   }
@@ -2950,7 +3005,11 @@ function paletteFor(col, col2){
 const ATK_DUR = 0.42;
 const VIS = 1.15;            /* visual scale only; f.r stays the collision radius */
 const GFX = {parts:1, detail:1, shadow:1, glow:1, backdrop:1, weapon:1};
-function newAnim(){ return {ph:rnd(0,6.283), walk:0, atk:-1, hurt:0, flip:1, px:0, py:0}; }
+/* hf/hr describe WHERE the last blow came from, resolved into the rig's own
+   axes at the moment of impact: hf is +1 when the body is shoved forwards,
+   hr is the sideways component. They let one flinch pose recoil correctly
+   from any direction instead of always folding the same way. */
+function newAnim(){ return {ph:rnd(0,6.283), walk:0, atk:-1, hurt:0, flip:1, px:0, py:0, hf:-1, hr:0}; }
 function stepAnim(an, e, dt, moved){
   an.ph += moved*0.055;
   const target = clamp(moved/dt/46, 0, 1);
@@ -3339,6 +3398,9 @@ function heroPose(b, an, st){
   b.hips.rotation.y = -s*0.10*w;                 /* pelvis counter-rotates */
   b.chest.rotation.x = 0.04 + lean + br*0.03;
   b.chest.rotation.y = s*0.14*w;
+  /* channels only the flinch writes have to be cleared every frame or the
+     += below compounds for as long as hurt is non-zero */
+  b.chest.rotation.z = 0;
   b.neck.rotation.x = -0.03 - lean*0.5;
   b.head.rotation.x = -br*0.04 - lean*0.3;
   b.cape.rotation.x = 0.10 + w*(0.40+run*0.55) + Math.sin(st.t*3.1)*0.05;
@@ -3432,10 +3494,18 @@ function heroPose(b, an, st){
   }
 
   if(an.hurt>0){
-    b.chest.rotation.x += 0.42*an.hurt;
-    b.neck.rotation.x  += 0.30*an.hurt;
-    b.armL.rotation.x  += 0.5*an.hurt; b.armR.rotation.x += 0.4*an.hurt;
-    b.cape.rotation.x  += 0.35*an.hurt;
+    /* Recoil ALONG the blow rather than always folding forward. hf is +1 when
+       the body is shoved forwards, so the torso pitch follows its sign and a
+       side hit rolls the chest over instead of doubling it up. */
+    const h = an.hurt, hf = an.hf==null?-1:an.hf, hr = an.hr||0;
+    b.chest.rotation.x += 0.50*hf*h;
+    b.chest.rotation.z += -0.36*hr*h;
+    b.neck.rotation.x  += 0.34*hf*h;
+    b.head.rotation.x  += 0.26*hf*h;
+    b.armL.rotation.x  += -0.45*h; b.armL.rotation.z += 0.34*h;
+    b.armR.rotation.x  += -0.45*h; b.armR.rotation.z -= 0.34*h;
+    b.cape.rotation.x  += 0.35*h;
+    b.hips.position.y  -= 0.05*h;
   }
 }
 const _heroSpecCache = new Map();
@@ -3490,6 +3560,7 @@ const RIG3D = {
       b.foreL.rotation.x = 0.34; b.foreR.rotation.x = 0.34;
       b.chest.rotation.y = s*0.13*w;
       b.chest.rotation.x = 0.04 + br*0.03;
+      b.chest.rotation.z = 0; b.armL.rotation.z = 0; b.armR.rotation.z = 0;
       b.head.rotation.x = -br*0.04;
       b.hips.position.y = 0.95 - Math.abs(s)*0.06*w + br*0.012;
       if(an.atk>=0){
@@ -3503,9 +3574,14 @@ const RIG3D = {
         b.armL.rotation.x = -0.25 - sw2*0.18;
       }
       if(an.hurt>0){
-        b.chest.rotation.x += 0.42*an.hurt;
-        b.head.rotation.x  += 0.36*an.hurt;
-        b.armL.rotation.x  += 0.5*an.hurt; b.armR.rotation.x += 0.5*an.hurt;
+        const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+        b.chest.rotation.x += 0.42*hf*h;
+        b.chest.rotation.z += -0.34*hr*h;
+        b.head.rotation.x  += 0.26*hf*h;
+        b.armL.rotation.x  += -0.42*h; b.armL.rotation.z += 0.34*h;
+        b.armR.rotation.x  += -0.42*h; b.armR.rotation.z -= 0.34*h;
+        b.hips.position.y  -= 0.07*h;
+        b.legL.rotation.x  += 0.16*h; b.legR.rotation.x += 0.16*h;
       }
     }
   },
@@ -3537,6 +3613,7 @@ const RIG3D = {
       b.lFR.rotation.x = -s*0.80*w;  b.lBL.rotation.x = -s*0.80*w;
       b.body.position.y = 0.72 - Math.abs(s)*0.05*w;
       b.body.rotation.x = 0.03*w;
+      b.body.rotation.z = 0;
       b.tail.rotation.x = Math.sin(st.t*3.1)*0.25;
       b.tail.rotation.y = Math.sin(st.t*2.2)*0.2;
       b.neck.rotation.x = -0.10 + br*0.05;
@@ -3547,7 +3624,15 @@ const RIG3D = {
         b.body.rotation.x += -0.20*d2;
         b.lFL.rotation.x += -0.8*d2; b.lFR.rotation.x += -0.85*d2;
       }
-      if(an.hurt>0){ b.body.rotation.x += 0.28*an.hurt; b.neck.rotation.x += 0.3*an.hurt; }
+      if(an.hurt>0){
+        const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+        b.body.rotation.x += 0.30*hf*h;
+        b.body.rotation.z += -0.34*hr*h;
+        b.neck.rotation.x += 0.40*hf*h - 0.10*h;
+        b.head.rotation.x += 0.30*hf*h;
+        b.tail.rotation.x += 0.35*h;
+        b.body.position.y -= 0.07*h;
+      }
     }
   },
   blob: {
@@ -3562,12 +3647,22 @@ const RIG3D = {
       const sx = 1 + p*0.10 + w*0.05, sy = 1 - p*0.11 - w*0.04;
       b.body.scale.set(sx, sy, sx);
       b.body.position.y = 0.48 + Math.max(0,p)*0.10*(0.4+w);
+      b.body.rotation.x = 0; b.body.rotation.z = 0;
       b.top.rotation.y = st.t*0.6;
       if(an.atk>=0){
         const a=an.atk, d2 = a<0.3 ? a/0.3 : 1-(a-0.3)/0.7;
         b.body.scale.set(1-0.22*d2, 1+0.34*d2, 1-0.22*d2);
       }
-      if(an.hurt>0) b.body.scale.x += 0.16*an.hurt;
+      if(an.hurt>0){
+        /* nothing to recoil with, so it takes the blow as a squash that
+           bulges away along the hit axis */
+        const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+        b.body.scale.x += (0.16 + 0.14*Math.abs(hr))*h;
+        b.body.scale.z += (0.16 + 0.14*Math.abs(hf))*h;
+        b.body.scale.y -= 0.20*h;
+        b.body.rotation.x += 0.22*hf*h;
+        b.body.rotation.z += -0.22*hr*h;
+      }
     }
   },
   float: {
@@ -3581,12 +3676,20 @@ const RIG3D = {
     pose(b, an, st){
       b.body.position.y = 1.00 + Math.sin(st.t*1.9)*0.10;
       b.body.rotation.y = Math.sin(st.t*0.8)*0.35;
+      b.root.rotation.x = 0; b.root.rotation.z = 0;
       b.eye.rotation.y = Math.sin(st.t*1.4)*0.4;
+      b.eye.rotation.x = 0;
       if(an.atk>=0){
         const a=an.atk, d2 = a<0.3 ? a/0.3 : 1-(a-0.3)/0.7;
         b.body.scale.set(1+0.2*d2, 1-0.15*d2, 1+0.2*d2);
       } else b.body.scale.set(1,1,1);
-      if(an.hurt>0) b.body.position.y -= 0.12*an.hurt;
+      if(an.hurt>0){
+        const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+        b.body.position.y -= 0.14*h;
+        b.root.rotation.x += 0.38*hf*h;
+        b.root.rotation.z += -0.34*hr*h;
+        b.eye.rotation.x  += 0.30*hf*h;
+      }
     }
   },
 };
