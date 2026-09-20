@@ -2132,9 +2132,12 @@ function hurtPlayer(raw, eLvl){
 function killFoe(f){
   const i = foes.indexOf(f); if(i<0) return;
   foes.splice(i,1);
-  /* leave a body that collapses rather than popping out of existence */
+  /* leave a body that collapses rather than popping out of existence. The
+     facing is frozen here: a corpse must not keep turning to track the player
+     the way a live foe does, and it topples away from whoever killed it. */
   if(corpses.length<14) corpses.push({corpse:1, def:f.def, x:f.x, y:f.y, r:f.r,
-    t:0, time:f.t, an:{ph:f.an.ph, walk:0, atk:-1, hurt:0, flip:f.an.flip}});
+    t:0, time:f.t, ry:Math.atan2(P.x-f.x, P.y-f.y),
+    an:{ph:f.an.ph, walk:0, atk:-1, hurt:0, flip:f.an.flip}});
   burst(f.x,f.y,f.def.col,14,200,0.55,3);
   ring(f.x,f.y,f.def.col,f.r*0.5,f.r*2.4,0.3);
   sfx('kill');
@@ -2736,7 +2739,7 @@ function update(dt){
   }
   for(let i=corpses.length-1;i>=0;i--){
     const c=corpses[i]; c.t+=dt; c.time+=dt;
-    if(c.t>0.80) corpses.splice(i,1);
+    if(c.t>CORPSE_LIFE) corpses.splice(i,1);
   }
 
   /* ---- projectiles ---- */
@@ -2955,6 +2958,10 @@ function stepAnim(an, e, dt, moved){
   if(an.atk>=0){ an.atk += dt/ATK_DUR; if(an.atk>1) an.atk=-1; }
   an.hurt = Math.max(0, an.hurt - dt*5.2);
 }
+/* How long a body stays on the field: buckle, topple, settle, then sink out.
+   Long enough to read the kill, short enough that a cleared camp does not turn
+   into a car park. */
+const CORPSE_LIFE = 1.15;
 let corpses = [];
 
 /* world (x, height, y) -> screen pixels, for DOM overlays like damage numbers */
@@ -3595,6 +3602,71 @@ const RIG3D_FOR = {
 
 function rigKeyFor(def){ return RIG3D_FOR[def.shape] || 'blob'; }
 
+/* ---------- death collapse ----------
+   Applied ON TOP of the rig's own idle pose, so every rig gets a fall without
+   each one having to author a death animation. Three beats run into each
+   other: the knees buckle, the body topples about its base away from the
+   killing blow, then it lands with one damped bounce. A blob has nothing to
+   topple and a floater was never standing, so those two slump and drop
+   instead of falling over. */
+function collapsePose(b, k, key){
+  const buckle = Math.min(1, k/0.18);
+  const fall   = k<0.14 ? 0 : Math.min(1, (k-0.14)/0.40);
+  /* ACCELERATING, not easing out - a body tips slowly past its balance point
+     and then gravity takes it. An ease-out here reads as being lowered. */
+  const e      = fall*fall;
+  const land   = fall>=1 ? Math.max(0, 1-(k-0.54)*3.4) : 0;
+  const bounce = land>0 ? Math.sin((k-0.54)*22)*land*0.07 : 0;
+
+  if(key==='blob'){
+    b.body.scale.set(1+e*0.55, 1-e*0.72, 1+e*0.55);
+    b.body.position.y = 0.48*(1-e*0.80);
+    b.top.scale.set(1-e*0.60, 1-e*0.80, 1-e*0.60);
+    b.top.position.y = 0.30*(1-e);
+    return;
+  }
+  if(key==='float'){
+    b.body.position.y = 1.00 - e*0.72 + bounce;
+    b.body.scale.set(1+e*0.30, 1-e*0.45, 1+e*0.30);
+    b.root.rotation.x = -e*0.55;
+    b.root.rotation.z =  e*0.35;
+    b.eye.rotation.x  = -e*0.60;
+    return;
+  }
+
+  if(key==='quad'){
+    /* a quadruped is ALREADY horizontal - pitching it 90 degrees the way a
+       humanoid falls stands it on its nose. It rolls onto its flank instead. */
+    b.root.rotation.z = 1.32*e;
+    b.root.rotation.x = -0.18*e + bounce;
+    b.root.position.y = e*0.10;
+    b.body.rotation.x = 0.16*buckle;
+    b.neck.rotation.x = 0.50*buckle + e*0.45;
+    b.head.rotation.x = -0.25*e;
+    b.tail.rotation.x = -0.40*e;
+    const legs = [b.lFL, b.lFR, b.lBL, b.lBR];
+    for(let i=0;i<4;i++) legs[i].rotation.x = (i<2 ? 0.75 : -0.75)*buckle*0.85 + e*0.30;
+    return;
+  }
+
+  /* humanoid: the root sits at ground level, so rotating it swings the whole
+     body down like a felled tree; the lift keeps it lying ON the ground.
+     Knees go first, arms fly up as it goes over, then flop wide. */
+  b.root.rotation.x = -(1.46*e) + bounce;
+  b.root.position.y = e*0.20;
+  b.hips.position.y  = 0.95 - buckle*0.30 + e*0.16;
+  b.legL.rotation.x  =  0.85*buckle - e*0.55;
+  b.legR.rotation.x  =  0.62*buckle - e*0.40;
+  b.shinL.rotation.x =  1.25*buckle;
+  b.shinR.rotation.x =  1.05*buckle;
+  b.chest.rotation.x =  0.40*buckle - e*0.30;
+  b.head.rotation.x  = -0.25*buckle + e*0.55;
+  b.armL.rotation.set(-0.55 - e*1.35, 0,  0.45*e);
+  b.armR.rotation.set(-0.45 - e*1.25, 0, -0.42*e);
+  b.foreL.rotation.x = 0.30 - e*0.20;
+  b.foreR.rotation.x = 0.30 - e*0.20;
+}
+
 /* ---------- actors: one SkinnedMesh per live entity, pooled by rig+palette ---------- */
 function acquireActor(key, pal, specOverride){
   const t = init3D();
@@ -3926,10 +3998,36 @@ function render(){
     if(flash>0) a.mat.emissive.setRGB(flash*2.2, flash*1.8, flash*1.8);
     else if(a.mat.emissive.r) a.mat.emissive.setRGB(0,0,0);
   };
+  /* Corpses get their own path rather than going through place(): a body keeps
+     the facing it died with instead of turning to track the player, and it
+     fades and sinks on its own timer. */
+  const placeCorpse = (c) => {
+    const a = syncActor(c, false);
+    seen.add(c);
+    const sc = c.r*VIS * (a.spec.hs||2.2) / (a.spec.h||2.2);
+    const k  = clamp(c.t/CORPSE_LIFE, 0, 1);
+    const sink = Math.max(0, (k-0.62)/0.38);
+    a.mesh.scale.setScalar(sc);
+    a.mesh.position.set(c.x, -sink*sc*0.55, c.y);
+    a.mesh.rotation.y = c.ry;
+    a.spec.pose(a.bones, c.an, {t:c.time, wk:null, sprint:0});
+    collapsePose(a.bones, k, a.key);
+    /* depthWrite stays on: a body is solid right up until it is nearly gone,
+       and turning it off makes the limbs show through each other */
+    if(!a.mat.transparent) a.mat.transparent = true;
+    a.mat.opacity = 1 - Math.max(0, (k-0.66)/0.34);
+    if(a.mat.emissive.r) a.mat.emissive.setRGB(0,0,0);
+  };
+
   for(const f of foes){
     const dx=f.x-P.x, dy=f.y-P.y;
     if(dx*dx+dy*dy > 2125*2125) continue;      /* far side of the zone */
     place(f, false);
+  }
+  for(const c of corpses){
+    const dx=c.x-P.x, dy=c.y-P.y;
+    if(dx*dx+dy*dy > 2125*2125) continue;
+    placeCorpse(c);
   }
   if(!P.dead) place(P, true);
   for(const [ent,a] of t.actors){
