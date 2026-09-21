@@ -168,6 +168,36 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 @keyframes toastIn{from{opacity:0;transform:translateY(14px) scale(.9);}to{opacity:1;transform:none;}}
 @keyframes toastOut{to{opacity:0;transform:translateY(-8px);}}
 
+/* ---- loot feed ----
+   Kill rewards were invisible unless you opened the bag. Rows slide in on the
+   right and coalesce: gold and a given material stack into ONE line that
+   updates, because a line per kill would be a waterfall nobody can read. */
+#lootFeed{
+  position:absolute; right:8px; top:calc(var(--safe-t) + 244px);
+  display:flex; flex-direction:column; align-items:flex-end; gap:4px;
+  pointer-events:none; z-index:28; max-width:70%;
+}
+.lootRow{
+  display:flex; align-items:center; gap:7px;
+  padding:4px 9px 4px 8px; border-radius:7px;
+  background:rgba(10,13,22,.90); border:1px solid var(--line);
+  border-right:3px solid var(--rc,var(--r0));
+  font-size:11px; font-weight:700; white-space:nowrap;
+  box-shadow:0 3px 12px rgba(0,0,0,.55);
+  animation:feedIn .22s cubic-bezier(.2,1.35,.4,1);
+}
+.lootRow.out{animation:feedOut .42s ease-in forwards;}
+.lootRow .fi{font-size:14px;line-height:1;}
+.lootRow .fn{color:var(--rc,var(--txt));overflow:hidden;text-overflow:ellipsis;}
+.lootRow .fq{color:var(--dim);font-variant-numeric:tabular-nums;}
+.lootRow.gold{border-right-color:var(--gold);}
+.lootRow.gold .fn{color:var(--gold);}
+/* a legendary pull should catch your eye without a modal */
+.lootRow.big{font-size:12px;padding:6px 11px 6px 9px;}
+.lootRow.big .fi{font-size:17px;}
+@keyframes feedIn{from{opacity:0;transform:translateX(28px) scale(.94);}to{opacity:1;transform:none;}}
+@keyframes feedOut{to{opacity:0;transform:translateX(20px);}}
+
 /* ============================================================
    TOUCH CONTROLS
    ============================================================ */
@@ -725,6 +755,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     </div>
 
     <div id="toasts"></div>
+    <div id="lootFeed"></div>
   </div>
 
   <!-- ===================== PANELS ===================== -->
@@ -2638,12 +2669,70 @@ function detonate(f){
 /* ================================================================
    DROPS
    ================================================================ */
+/* ---------- loot feed ----------
+   Coalescing by key is the whole trick: gold and each material collapse into a
+   single row that ticks upward and resets its own timer, so a ten-kill streak
+   reads as "+412g / Beast Hide x7" instead of seventeen stacked lines. Gear is
+   never coalesced - each drop is its own event and deserves its own row. */
+const FEED_LIFE = 4200, FEED_MAX = 7;
+const feedRows = new Map();          /* key -> {el, qty, timer, qel} */
+function feedLoot(key, label, icon, rar, qty, opts){
+  const box = $('lootFeed'); if(!box) return;
+  opts = opts||{};
+  const prev = key && feedRows.get(key);
+  if(prev && box.contains(prev.el)){
+    prev.qty += qty;
+    prev.qel.textContent = opts.gold ? '+'+fmtN(prev.qty)+'g' : '×'+prev.qty;
+    prev.el.classList.remove('out');
+    clearTimeout(prev.timer);
+    prev.timer = setTimeout(()=>retireFeed(key), FEED_LIFE);
+    return;
+  }
+  const el = document.createElement('div');
+  el.className = 'lootRow rar'+(rar||0)+(opts.gold?' gold':'')+((rar||0)>=4?' big':'');
+  const qtxt = opts.gold ? '+'+fmtN(qty)+'g' : (qty>1 ? '×'+qty : '');
+  el.innerHTML = '<span class="fi">'+icon+'</span>'+
+                 '<span class="fn">'+label+'</span>'+
+                 '<span class="fq">'+qtxt+'</span>';
+  box.appendChild(el);
+  /* oldest out first, so the newest drop is always the one you can read */
+  while(box.children.length > FEED_MAX) box.removeChild(box.firstChild);
+  const rec = {el, qty, qel:el.querySelector('.fq')};
+  if(key) feedRows.set(key, rec);
+  rec.timer = setTimeout(()=>{ key ? retireFeed(key) : fadeFeed(el); }, FEED_LIFE);
+}
+function fadeFeed(el){
+  el.classList.add('out');
+  setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 440);
+}
+function retireFeed(key){
+  const r = feedRows.get(key); if(!r) return;
+  feedRows.delete(key);
+  fadeFeed(r.el);
+}
+function fmtN(n){ return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : ''+n; }
+/* zone change wipes it: carrying the last zone's haul across a travel is noise */
+function clearFeed(){
+  const box = $('lootFeed'); if(box) box.innerHTML='';
+  for(const r of feedRows.values()) clearTimeout(r.timer);
+  feedRows.clear();
+}
+function feedGold(g){ feedLoot('gold','Gold','🪙',0,g,{gold:1}); }
+function feedMat(k,q){
+  const M = MATS[k]; if(!M) return;
+  /* the zone's rare material and its catalyst are worth their own colour */
+  const z = ZONE_BY_ID[S.zone];
+  const rar = k===z.cat ? 4 : k===z.mats[1] ? 2 : 0;
+  feedLoot('mat:'+k, M.n, M.ic, rar, q);
+}
+function feedItem(it){ feedLoot(null, it.name, it.ic, it.rar, 1); }
+
 function rollDrops(f){
   const z = ZONE_BY_ID[S.zone], rank = f.rank;
   const gf = 1 + D.goldF/100;
   /* gold */
   const g = Math.round(rnd(3,8)*(1+f.lvl*0.55)*(1+rank*2.4)*gf*z.tier*0.7);
-  gainGold(g);
+  gainGold(g); feedGold(g);
   drops.push({x:f.x,y:f.y,t:'gold',v:g,life:0,vx:rnd(-30,30),vy:rnd(-60,-20)});
 
   /* materials */
@@ -2651,10 +2740,11 @@ function rollDrops(f){
   if(Math.random()<mChance){
     const m = Math.random()<0.86 ? z.mats[0] : z.mats[1];
     const q = m===z.mats[1] ? 1 : rint(1,1+z.tier);
-    addMat(m,q);
+    addMat(m,q); feedMat(m,q);
     drops.push({x:f.x,y:f.y,t:'mat',k:m,v:q,life:0,vx:rnd(-30,30),vy:rnd(-60,-20)});
   }
-  if(rank===2){ addMat(z.cat,1); drops.push({x:f.x,y:f.y,t:'mat',k:z.cat,v:1,life:0,vx:0,vy:-40}); }
+  if(rank===2){ addMat(z.cat,1); feedMat(z.cat,1);
+    drops.push({x:f.x,y:f.y,t:'mat',k:z.cat,v:1,life:0,vx:0,vy:-40}); }
 
   /* gear */
   /* Quantity is close to where it was — it was the QUALITY curve that made
@@ -2666,6 +2756,7 @@ function rollDrops(f){
     const it = genZoneItem(z, rank);
     if(bagAdd(it)){
       drops.push({x:f.x+rnd(-10,10),y:f.y,t:'item',it,life:0,vx:rnd(-40,40),vy:rnd(-70,-30)});
+      feedItem(it);
       sfx('loot', it.rar);
       if(it.rar>=3){ toast(RARITY[it.rar].name+': '+it.name); shake=Math.max(shake,6); buzz(60); }
       markAlert();
@@ -2701,11 +2792,12 @@ function openChest(){
                        : rollRarity(z.tier, 0.8, D.luck);
     const k = pick(['weapon','armor','armor','offhand','trinket']);
     const it = rollItem({kind:k, ilvl, rar});
-    if(bagAdd(it)) got.push(it);
+    if(bagAdd(it)){ got.push(it); feedItem(it); }
   }
   const g = Math.round(rnd(40,90)*z.tier*(1+zoneLvl()*0.4)*(1+D.goldF/100));
-  gainGold(g);
-  addMat(z.mats[0], rint(2,4+z.tier));
+  gainGold(g); feedGold(g);
+  const cm = rint(2,4+z.tier);
+  addMat(z.mats[0], cm); feedMat(z.mats[0], cm);
   burst(c.x,c.y,'#e8b44a',34,240,0.7,3.5);
   ring(c.x,c.y,'#e8b44a',8,110,0.45);
   sfx('chest'); buzz(80); shake=7;
@@ -5400,15 +5492,22 @@ function renderGear(){
 
   /* slots */
   const g = $('slotGrid');
+  /* A two-hander already unequips the offhand mechanically, but the empty
+     offhand slot still sat there reading as gear you had forgotten to fill.
+     It now spans both columns and the offhand slot is dropped entirely. */
+  const wep = S.equip.weapon;
+  const twoH = !!(wep && WEAPONS[wep.arch] && WEAPONS[wep.arch].two);
   g.innerHTML = SLOT_ORDER.map(k=>{
+    if(twoH && k==='offhand') return '';
     const it = S.equip[k];
-    const wide = (k==='weapon'||k==='offhand')?'':'';
-    if(!it) return '<div class="slot empty '+wide+'" data-slot="'+k+'">'+
+    const wide = (twoH && k==='weapon') ? ' wide' : '';
+    if(!it) return '<div class="slot empty'+wide+'" data-slot="'+k+'">'+
       '<div class="slotIc">'+SLOT_ICON[k]+'</div><div class="slotTxt">'+
       '<div class="slotLbl">'+SLOT_LABEL[k]+'</div><div class="slotName">empty</div></div></div>';
-    return '<div class="slot filled rar'+it.rar+' '+wide+'" data-uid="'+it.uid+'">'+
+    return '<div class="slot filled rar'+it.rar+wide+'" data-uid="'+it.uid+'">'+
       '<div class="slotIc">'+it.ic+'</div><div class="slotTxt">'+
-      '<div class="slotLbl">'+SLOT_LABEL[k]+(it.plus?' +'+it.plus:'')+'</div>'+
+      '<div class="slotLbl">'+SLOT_LABEL[k]+(it.plus?' +'+it.plus:'')+
+        (twoH&&k==='weapon'?' <span style="color:var(--dim2)">· two-handed</span>':'')+'</div>'+
       '<div class="slotName">'+it.name+'</div></div></div>';
   }).join('');
 
@@ -5664,6 +5763,7 @@ $('zoneList').addEventListener('click', e=>{
 function travelTo(id){
   S.zone = id;
   kills=0;
+  clearFeed();
   computeStats();
   P.hp=D.maxHp; P.mp=D.maxMp; P.dead=false;
   buildZoneWorld();
