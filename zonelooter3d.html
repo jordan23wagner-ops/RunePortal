@@ -741,7 +741,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
     <div id="bossBar">
       <div id="bossName">—</div>
-      <div class="bar" id="bossHp"><i></i></div>
+      <div class="bar" id="bossHp"><i></i><span class="barTxt"></span></div>
     </div>
 
     <div id="stickZone"><div id="stick"><div id="stickNub"></div></div></div>
@@ -809,8 +809,10 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <div class="pBody">
         <div class="seg" id="craftSeg">
           <button class="sel" data-ct="upgrade">Upgrade</button>
+          <button data-ct="pool">Pool</button>
+          <button data-ct="charm">Charms</button>
           <button data-ct="unique">Relics</button>
-          <button data-ct="mats">Materials</button>
+          <button data-ct="mats">Mats</button>
         </div>
         <div id="craftBody"></div>
       </div>
@@ -1111,6 +1113,55 @@ const MAT_ORDER = ['scrap','dust','core','sigil','hide','heart','cinder','ember'
   'ichor','fungal','void','rift','fang','magma','crown','bloom','eye'];
 
 /* ================================================================
+   CHARMS
+   Crafted, carried, rolled. The point is the ROLL: two Ember Idols are not
+   the same Ember Idol, so there is a reason to make another one. The cursed
+   tier trades defence for offence, which is the interesting decision rather
+   than a straight power ladder.
+   ================================================================ */
+const CHARMS = {
+  ember:   {n:'Ember Idol',    ic:'🔥', tier:1, stat:'allDmg',  lo:4,  hi:11,
+            d:'+{v}% all damage'},
+  ward:    {n:'Warding Stone', ic:'🪨', tier:1, stat:'armor',   lo:6,  hi:16,
+            d:'+{v} armor'},
+  vigor:   {n:'Vigor Knot',    ic:'🧿', tier:1, stat:'maxHpP',  lo:5,  hi:13,
+            d:'+{v}% max health'},
+  focus:   {n:'Focusing Lens', ic:'🔷', tier:2, stat:'critC',   lo:4,  hi:10,
+            d:'+{v}% crit chance'},
+  swift:   {n:'Swift Feather', ic:'🪶', tier:2, stat:'atkSpd',  lo:5,  hi:12,
+            d:'+{v}% attack speed'},
+  greed:   {n:'Greedy Eye',    ic:'👁', tier:2, stat:'luck',    lo:8,  hi:20,
+            d:'+{v} luck'},
+  /* cursed: the trade is the whole appeal */
+  bloodpact:{n:'Blood Pact',   ic:'🩸', tier:3, stat:'allDmg',  lo:18, hi:34,
+            curse:'frail', d:'+{v}% all damage · take 18% more damage'},
+  glasscore:{n:'Glass Core',   ic:'💠', tier:3, stat:'critD',   lo:22, hi:46,
+            curse:'brittle', d:'+{v}% crit damage · -25% max health'},
+  riftbrand:{n:'Riftbrand',    ic:'🌀', tier:3, stat:'allDmg',  lo:12, hi:24,
+            curse:'hunted', d:'+{v}% all damage · enemies find you sooner'},
+};
+const CHARM_KEYS = Object.keys(CHARMS);
+function charmCost(tier){
+  const z = ZONE_BY_ID[S.zone];
+  if(tier===1) return {gold:180, [z.mats[0]]:6};
+  if(tier===2) return {gold:520, [z.mats[0]]:10, [z.mats[1]]:3};
+  return {gold:1400, [z.mats[1]]:8, [z.cat]:1};
+}
+function makeCharm(key){
+  const C = CHARMS[key];
+  /* rolled inside the band, with the top of the band rare enough to chase */
+  const t = Math.pow(Math.random(), 1.7);
+  const v = Math.round(C.lo + (C.hi-C.lo)*t);
+  const pct = (v-C.lo)/Math.max(1,(C.hi-C.lo));
+  const rar = pct>0.92?4 : pct>0.72?3 : pct>0.42?2 : C.tier>=3?2:1;
+  return {uid:'c'+(uidSeq++), kind:'charm', ck:key, name:C.n, ic:C.ic, rar,
+          val:v, lo:C.lo, hi:C.hi, tier:C.tier, curse:C.curse||null,
+          ilvl:Math.max(1, zoneLvl()),
+          desc:C.d.replace('{v}', v)};
+}
+function charmRollPct(it){ return (it.val-it.lo)/Math.max(1,(it.hi-it.lo)); }
+
+/* ================================================================
    ENEMIES + ZONES
    shape: blob|beast|spike|ghost|golem|flyer|worm|eye|knight
    ai:    chase|charger|shooter|orbiter|bomber|splitter
@@ -1357,6 +1408,10 @@ function freshState(cls){
     equip:{weapon:null,offhand:null,head:null,chest:null,hands:null,legs:null,feet:null,
            amulet:null,ring1:null,ring2:null},
     bag:[], mats:{}, pots:{pot_s:3,pot_m:0,pot_l:0}, potSel:'pot_s',
+    /* Charms are carried, not worn - but only three are ATTUNED at a time.
+       Letting every owned charm apply would mean hoarding beats choosing, and
+       the numbers would run away inside an hour. */
+    charms:[null,null,null],
     zone:'verdant', zoneKills:{}, crafted:[],
     opts:{sfx:true,haptic:true,autoAim:true,gfx:'high'},
     meta:{kills:0,deaths:0,items:0,salvaged:0,best:0,chests:0},
@@ -1530,8 +1585,21 @@ function computeStats(){
     for(const a of it.affixes){ if(d[a.k]!=null) d[a.k]+=a.v; }
     if(it.uniq) uniq[it.uniq.k]=it.uniq;
   }
+  /* attuned charms. maxHpP is a PERCENT and has to wait until the flat pool
+     is known, so it is banked here and applied after level scaling. */
+  let hpPct = 0;
+  d.frail = 0; d.hunted = 0;
+  for(const c of (S.charms||[])){
+    if(!c) continue;
+    if(c.stat==='maxHpP' || CHARMS[c.ck].stat==='maxHpP') hpPct += c.val;
+    else { const k = CHARMS[c.ck].stat; if(d[k]!=null) d[k] += c.val; }
+    if(c.curse==='frail')    d.frail = 0.18;
+    if(c.curse==='brittle')  hpPct -= 25;
+    if(c.curse==='hunted')   d.hunted = 1;
+  }
   /* level scaling */
   d.maxHp += 60 + d.vit*11 + S.lvl*6;
+  if(hpPct) d.maxHp = Math.max(20, Math.round(d.maxHp*(1+hpPct/100)));
   d.maxMp  = 34 + d.int*7 + S.lvl*3;
   d.critC += d.dex*0.16;
   d.armor += Math.round(d.str*0.6);
@@ -1575,6 +1643,7 @@ function mitigate(raw, eLvl){
   let dmg = raw*(1-clamp(red,0,0.76));
   if(D.block && Math.random()<D.block) dmg*=0.45;
   if(P && P.bulwark) dmg *= (1 - Math.min(0.36, P.bulwark*0.12));
+  if(D.frail) dmg *= (1 + D.frail);          /* Blood Pact's half of the deal */
   return dmg;
 }
 
@@ -1812,7 +1881,7 @@ function drawGlow(x,y,col,size,alpha){
    ================================================================ */
 const WORLD = {w:1600, h:1900};
 let cam = {x:0, y:0};
-let packs = [], props = [], chests = [], nearChest = null;
+let packs = [], props = [], chests = [], nearChest = null, nearObelisk = null;
 
 /* ================================================================
    TERRAIN
@@ -2567,6 +2636,14 @@ function buildZoneWorld(){
   for(const pk of packs) spawnPack(pk);
   objective = rollObjective();
   surge = {lvl:0, t:0};
+  /* nudged off dead centre onto standable ground, since the centre of a zone
+     is exactly where a ridge or a bog is most likely to be */
+  let ox = WORLD.w*0.5, oy = WORLD.h*0.5;
+  for(let t=0;t<160 && (terrainBlocked(ox,oy,90) || inWater(ox,oy)); t++){
+    const a2=rnd(0,6.283), d=rnd(80,520);
+    ox = WORLD.w*0.5+Math.cos(a2)*d; oy = WORLD.h*0.5+Math.sin(a2)*d;
+  }
+  obelisk = {x:ox, y:oy, r:30, t:0, flare:0};
   spawnObjective();
   toast(objective.ic+' '+objective.n);
   sceneReady = false;            /* scenery, ground and chests rebuild next frame */
@@ -2583,10 +2660,57 @@ function buildZoneWorld(){
    ================================================================ */
 const RARE_PREFIX = ['Gravebound','Hollowed','Rift-Touched','Elder','Scarred','Thornclad'];
 let objective = null;
-const SURGE_EVERY = 105, SURGE_MAX = 5;
+/* ---- rift danger ----
+   The timer version punished you for a bad loot streak: danger climbed whether
+   or not your gear kept up, and there was no way to say no. Now the automatic
+   ramp stops at 1 - enough to keep a zone from going stale - and everything
+   above that is BOUGHT at the obelisk with elite materials. Danger is a
+   decision you make when you think you can take it.
+   And it pays in LOOT, not just gold: raising the stakes without raising the
+   drop quality is the exact trap that made surges feel like a punishment. */
+const SURGE_EVERY = 150, SURGE_AUTO_MAX = 1, SURGE_MAX = 6;
 let surge = {lvl:0, t:0};
-function surgeHpMul(){  return 1 + surge.lvl*0.18; }
-function surgeDmgMul(){ return 1 + surge.lvl*0.12; }
+function surgeHpMul(){  return 1 + surge.lvl*0.16; }
+function surgeDmgMul(){ return 1 + surge.lvl*0.10; }
+function surgeGoldMul(){ return 1 + surge.lvl*0.30; }
+/* extra rarity pushes on every drop roll, and a flat bonus to the gear chance */
+function surgeLuck(){   return surge.lvl*0.34; }
+function surgeDropMul(){ return 1 + surge.lvl*0.22; }
+function raiseSurge(n, why){
+  const before = surge.lvl;
+  surge.lvl = Math.min(SURGE_MAX, surge.lvl + (n||1));
+  if(surge.lvl===before) return false;
+  for(const f of foes){
+    const frac = f.hp/f.max;
+    f.max *= 1.16; f.hp = f.max*Math.min(1, frac+0.10); f.dmg *= 1.10;
+  }
+  toast('⚡ Rift danger '+surge.lvl+(why?' · '+why:'')+' · richer loot');
+  sfx('boss'); shake = Math.max(shake, 9); buzz(90);
+  return true;
+}
+
+/* ---- rift obelisk ----
+   Sits at the centre of every zone. Feed it the zone's rare material and the
+   danger climbs a step - the only way past the automatic cap. It is the
+   counterweight to making surges opt-in: pressure you choose, priced in the
+   thing elites actually drop. */
+let obelisk = null;
+function obeliskCost(){ return 2 + surge.lvl; }
+function useObelisk(){
+  if(!obelisk) return;
+  const z = ZONE_BY_ID[S.zone];
+  if(surge.lvl >= SURGE_MAX){ toast('The rift will take no more'); sfx('no'); return; }
+  const need = obeliskCost(), have = S.mats[z.mats[1]]||0;
+  if(have < need){
+    toast('Need '+need+' '+MATS[z.mats[1]].n+'  ('+have+'/'+need+')'); sfx('no'); return;
+  }
+  S.mats[z.mats[1]] = have - need;
+  obelisk.t = 0; obelisk.flare = 1;
+  ring(obelisk.x, obelisk.y, '#a78bfa', 12, 190, 0.6);
+  burst(obelisk.x, obelisk.y, '#c084fc', 30, 260, 0.7, 3.4);
+  raiseSurge(1, 'offering accepted');
+  saveGame();
+}
 
 function rollObjective(){
   const z = ZONE_BY_ID[S.zone];
@@ -2667,17 +2791,13 @@ function checkObjective(){
 }
 function stepSurge(dt){
   if(!objective) return;
+  /* the automatic ramp stops at 1: a slow nudge so a long stay is not static,
+     never the runaway climb you could not opt out of */
+  if(surge.lvl >= SURGE_AUTO_MAX) return;
   surge.t += dt;
-  if(surge.t < SURGE_EVERY || surge.lvl >= SURGE_MAX) return;
-  surge.t = 0; surge.lvl++;
-  /* living foes get it immediately, or a surge would only show up on the
-     next camp you happen to walk into */
-  for(const f of foes){
-    const frac = f.hp/f.max;
-    f.max *= 1.18; f.hp = f.max*Math.min(1, frac+0.12); f.dmg *= 1.12;
-  }
-  toast('⚡ Rift surge '+surge.lvl+'  ·  stronger foes, richer loot');
-  sfx('boss'); shake = Math.max(shake, 9); buzz(90);
+  if(surge.t < SURGE_EVERY) return;
+  surge.t = 0;
+  raiseSurge(1, 'the rift stirs');
 }
 
 function campsCleared(){ let n=0; for(const p of packs) if(p.kind!=='roam' && p.cleared) n++; return n; }
@@ -2977,7 +3097,7 @@ function rollDrops(f){
   const z = ZONE_BY_ID[S.zone], rank = f.rank;
   const gf = 1 + D.goldF/100;
   /* gold */
-  const g = Math.round(rnd(3,8)*(1+f.lvl*0.55)*(1+rank*2.4)*gf*z.tier*0.7*(1+surge.lvl*0.25));
+  const g = Math.round(rnd(3,8)*(1+f.lvl*0.55)*(1+rank*2.4)*gf*z.tier*0.7*surgeGoldMul());
   gainGold(g); feedGold(g);
   drops.push({x:f.x,y:f.y,t:'gold',v:g,life:0,vx:rnd(-30,30),vy:rnd(-60,-20)});
 
@@ -2995,7 +3115,9 @@ function rollDrops(f){
   /* gear */
   /* Quantity is close to where it was — it was the QUALITY curve that made
      the bag fill with blues. Drown the player in commons, not in epics. */
-  const iChance = rank===2 ? 1 : rank===1 ? 0.45 : 0.07;
+  /* danger has to pay in GEAR or it is pure downside - this is the balance
+     complaint, and the fix is here rather than in the gold line */
+  const iChance = (rank===2 ? 1 : rank===1 ? 0.45 : 0.07) * surgeDropMul();
   const n = rank===2 ? 3 : 1;
   for(let i=0;i<n;i++){
     if(Math.random()>iChance) continue;
@@ -3011,7 +3133,9 @@ function rollDrops(f){
 }
 function genZoneItem(z, rank){
   const ilvl = clamp(Math.round(zoneLvl() + rnd(-1,2) + rank*2), 1, 99);
-  const rar  = rollRarity(z.tier, rank, D.luck);
+  /* surge rides in as bonus rank AND bonus luck, so deeper danger shifts the
+     whole rarity curve rather than just dropping more commons */
+  const rar  = rollRarity(z.tier, rank + surgeLuck(), D.luck*(1+surge.lvl*0.25));
   const kindRoll = Math.random();
   if(kindRoll<0.34) return rollItem({kind:'weapon',ilvl,rar});
   if(kindRoll<0.72) return rollItem({kind:'armor',ilvl,rar});
@@ -3050,6 +3174,28 @@ function openChest(){
   nearChest = null; $('prompt').style.display='none';
   markAlert();
   showLoot(got, g);
+}
+
+function openCharmModal(it){
+  const R = RARITY[it.rar], pct = Math.round(charmRollPct(it)*100);
+  let h = '<div class="detHead rar'+it.rar+'">'+
+    '<div class="detIc">'+it.ic+'</div><div>'+
+    '<div class="detName">'+it.name+'</div>'+
+    '<div class="detSub">'+R.name+' Charm · '+(it.curse?'Cursed':'Tier '+it.tier)+'</div>'+
+    '</div></div>';
+  h += '<div class="detBlock"><div class="dRow"><span class="dk">Effect</span>'+
+       '<span class="dv pos">'+it.desc+'</span></div>'+
+       '<div class="rollMeter"><div class="rl"><span>Roll '+it.lo+'</span>'+
+       '<span>'+pct+'%</span><span>'+it.hi+'</span></div>'+
+       '<div class="rollTrack"><i style="width:'+pct+'%"></i></div></div></div>';
+  if(it.curse) h += '<div class="detFlavor rar'+it.rar+'">This one takes as well as gives.</div>';
+  const atn = S.charms.indexOf(it)>=0;
+  h += '<div class="modalBtns">'+
+    (atn ? '<button class="btn wide" data-cact="unattune">Unattune</button>'
+         : '<button class="btn pri wide" data-cact="attune">Attune</button>')+
+    '<button class="btn dan" data-cact="salvage">Salvage</button></div>';
+  $('modalBody').innerHTML = h;
+  $('modalWrap').classList.add('open');
 }
 
 /* ================================================================
@@ -3127,7 +3273,7 @@ window.addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='q') useSkill();
   if(e.key.toLowerCase()==='e') doDash();
   if(e.key.toLowerCase()==='r') usePotion();
-  if(e.key.toLowerCase()==='f' && nearChest) openChest();
+  if(e.key.toLowerCase()==='f'){ if(nearChest) openChest(); else if(nearObelisk) useObelisk(); }
 });
 window.addEventListener('keyup',e=>{
   keys[e.key.toLowerCase()]=0;
@@ -3154,8 +3300,9 @@ bindHold($('btnAtk'), ()=>{atkHeld=true;}, ()=>{atkHeld=false;});
 bindHold($('btnSkill'), useSkill);
 bindHold($('btnDash'),  doDash);
 bindHold($('btnPot'),   usePotion);
-$('prompt').addEventListener('click', ()=>{ if(nearChest) openChest(); });
-$('prompt').addEventListener('touchstart', e=>{e.preventDefault(); if(nearChest) openChest();},{passive:false});
+const usePrompt = ()=>{ if(nearChest) openChest(); else if(nearObelisk) useObelisk(); };
+$('prompt').addEventListener('click', usePrompt);
+$('prompt').addEventListener('touchstart', e=>{e.preventDefault(); usePrompt();},{passive:false});
 
 /* ================================================================
    PLAYER ACTIONS
@@ -3507,7 +3654,8 @@ function update(dt){
 
     /* --- camp states --- */
     if(f.state==='idle'){
-      if(d < f.aggroR){ aggroPack(f); }
+      /* Riftbrand: they notice you sooner, which is the cost of carrying it */
+      if(d < f.aggroR*(1 + (D.hunted?0.40:0))){ aggroPack(f); }
       else {
         if(d < 1100){                       /* far camps cost nothing to idle */
           f.wt -= dt;
@@ -3524,8 +3672,12 @@ function update(dt){
     if(f.state==='return'){
       const hx=f.home.x-f.x, hy=f.home.y-f.y, hd=Math.hypot(hx,hy)||1;
       f.x+=hx/hd*f.spd*1.6*dt; f.y+=hy/hd*f.spd*1.6*dt;
-      f.hp=Math.min(f.max, f.hp+f.max*0.55*dt);
-      if(hd<18){ f.state='idle'; f.hp=f.max; f.alerted=0; if(f===bossRef){ bossRef=null;
+      /* NO reset to full. A kiting elite that walked out of its leash and came
+         back at 100% erased the whole fight, which is worse than any amount of
+         it running away. It trickles back instead, so disengaging costs you
+         progress without deleting it. */
+      f.hp=Math.min(f.max, f.hp+f.max*0.06*dt);
+      if(hd<18){ f.state='idle'; f.alerted=0; if(f===bossRef){ bossRef=null;
         $('bossBar').classList.remove('on'); } }
       continue;
     }
@@ -3597,6 +3749,17 @@ function update(dt){
           burst(f.x,f.y,'#f43f5e',4,90,0.3,2); }
       }
       if(D.thorns>0) damageFoe(f, D.thorns, false, {silent:true,noProc:true});
+    }
+    /* ---- arena tether ----
+       Shooters and orbiters back away while they fire, which walked them past
+       their own leash and triggered the return-and-reset loop. Rather than
+       leash them after the fact, an engaged foe is simply held inside its
+       camp: it will still kite, but only as far as the arena allows, so the
+       fight stays where you started it. */
+    if(f.state==='aggro'){
+      const ax = f.x-f.home.x, ay = f.y-f.home.y, ad = Math.hypot(ax,ay);
+      const arena = f.leashR*0.82;
+      if(ad > arena){ const k = arena/ad; f.x = f.home.x+ax*k; f.y = f.home.y+ay*k; }
     }
     terrainPush(f, f.r);
     f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
@@ -3727,7 +3890,21 @@ function update(dt){
     if(c.open){ c.openT = Math.min(1, (c.openT||0) + dt*2.6); continue; }
     if(Math.hypot(P.x-c.x, P.y-c.y) < 56) nearChest = c;
   }
-  $('prompt').style.display = nearChest ? 'block' : 'none';
+  /* one prompt, two uses: a chest if you are on one, otherwise the obelisk */
+  nearObelisk = null;
+  if(!nearChest && obelisk){
+    obelisk.t += dt;
+    obelisk.flare = Math.max(0, obelisk.flare - dt*1.6);
+    if(Math.hypot(P.x-obelisk.x, P.y-obelisk.y) < 72) nearObelisk = obelisk;
+  }
+  const pr = $('prompt');
+  if(nearChest){ pr.textContent = 'OPEN CHEST'; pr.style.display='block'; }
+  else if(nearObelisk){
+    const z = ZONE_BY_ID[S.zone];
+    pr.textContent = surge.lvl>=SURGE_MAX ? 'RIFT SATED'
+      : 'OFFER '+obeliskCost()+' '+MATS[z.mats[1]].n.toUpperCase();
+    pr.style.display='block';
+  } else pr.style.display='none';
 
   /* ---- camera ---- */
   const tcx = clamp(P.x - W/2, 0, Math.max(0, WORLD.w-W));
@@ -4960,6 +5137,37 @@ function buildZoneScene(){
     addInst(unit, postMat, posts, put);
   }
 
+  /* ---- rift obelisk ----
+     A floating shard over a stepped plinth. It has to be visible from across
+     the zone, since it is the one fixture you go back to on purpose. */
+  if(t.obelisk){ t.scene.remove(t.obelisk); t.obelisk = null; }
+  if(obelisk){
+    const og = new THREE.Group();
+    og.position.set(obelisk.x, 0, obelisk.y);
+    const stoneMat = new THREE.MeshStandardMaterial({
+      color:mix(shade(z.ground,0.4), '#8e86a8', 0.6), roughness:1, flatShading:true});
+    const runeMat = new THREE.MeshStandardMaterial({
+      color:'#c084fc', roughness:0.3, flatShading:true,
+      emissive:new THREE.Color('#5b21b6')});
+    const put=(geo,mat,y,parent)=>{ const m=new THREE.Mesh(geo,mat);
+      m.position.y=y; m.castShadow=true; m.receiveShadow=true;
+      (parent||og).add(m); return m; };
+    put(new THREE.CylinderGeometry(46,54,12,8), stoneMat, 6);
+    put(new THREE.CylinderGeometry(34,42,11,8), stoneMat, 16);
+    for(let i=0;i<4;i++){
+      const px = Math.cos(i/4*6.283)*40, pz = Math.sin(i/4*6.283)*40;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(9,34,9), stoneMat);
+      m.position.set(px, 30, pz); m.castShadow = true; og.add(m);
+    }
+    const shard = put(new THREE.OctahedronGeometry(21,0), runeMat, 70);
+    const halo = new THREE.Mesh(new THREE.CylinderGeometry(4, 20, 190, 8, 1, true),
+      new THREE.MeshBasicMaterial({color:'#b98cff', transparent:true, opacity:0.16,
+        depthWrite:false, blending:THREE.AdditiveBlending}));
+    halo.position.y = 108; og.add(halo);
+    og.userData = {shard, halo};
+    t.scene.add(og); t.obelisk = og;
+  }
+
   /* ---- chests ----
      A single emissive box was the whole model, which is why they looked worse
      than everything around them. Now that a chest is a rare find it has to
@@ -5267,6 +5475,18 @@ function render(){
     if(!seen.has(ent)){ releaseActor(a); t.actors.delete(ent); }
   }
 
+  if(t.obelisk && obelisk){
+    const {shard, halo} = t.obelisk.userData;
+    shard.rotation.y = obelisk.t*0.7;
+    shard.rotation.x = Math.sin(obelisk.t*0.9)*0.22;
+    shard.position.y = 70 + Math.sin(obelisk.t*1.5)*5;
+    /* brightness tracks the danger you have bought, so the thing that raised
+       the stakes is also the thing showing you how high they are */
+    const lit = 0.14 + surge.lvl*0.07 + obelisk.flare*0.5;
+    halo.material.opacity = lit;
+    shard.scale.setScalar(1 + obelisk.flare*0.5);
+  }
+
   /* ---- chests ----
      An opened chest STAYS, lid swung back and beacon dead. Popping it out of
      existence threw away the one bit of evidence that you found something. */
@@ -5339,6 +5559,13 @@ function drawPlates(){
     /* a thin light line on the fill reads as a bar rather than a smear */
     hctx.fillStyle = 'rgba(255,255,255,.22)';
     hctx.fillRect(sp.x-w/2, sp.y, w*frac, 1);
+    /* the number, so "nearly dead" is a reading and not a guess */
+    hctx.font = '700 8px system-ui,-apple-system,sans-serif';
+    const pct = Math.ceil(frac*100)+'%';
+    hctx.lineWidth = 2.5; hctx.strokeStyle = 'rgba(4,6,12,.9)';
+    hctx.strokeText(pct, sp.x, sp.y+bh+8);
+    hctx.fillStyle = 'rgba(232,236,246,.92)';
+    hctx.fillText(pct, sp.x, sp.y+bh+8);
     if(f.rank){
       hctx.strokeStyle = 'rgba(255,255,255,.35)'; hctx.lineWidth = 1;
       hctx.strokeRect(sp.x-w/2-1.5, sp.y-1.5, w+3, bh+3);
@@ -5423,6 +5650,17 @@ function drawMinimap(){
     hctx.fillRect(ox+c.x*s-1.5, oy+c.y*s-1.5, 3.5, 3.5); }
   /* objective targets get their own marker: a hunt you cannot locate is a
      sweep of the whole zone, which is exactly the tedium this replaces */
+  if(obelisk){
+    hctx.globalAlpha = 1;
+    hctx.fillStyle = '#c084fc';
+    hctx.beginPath();
+    hctx.moveTo(ox+obelisk.x*s, oy+obelisk.y*s-4.4);
+    hctx.lineTo(ox+obelisk.x*s+3.8, oy+obelisk.y*s);
+    hctx.lineTo(ox+obelisk.x*s, oy+obelisk.y*s+4.4);
+    hctx.lineTo(ox+obelisk.x*s-3.8, oy+obelisk.y*s);
+    hctx.closePath(); hctx.fill();
+    hctx.strokeStyle='rgba(255,255,255,.75)'; hctx.lineWidth=1; hctx.stroke();
+  }
   hctx.globalAlpha = 1;
   for(const f of foes){
     if(!f.isQuarry && !f.isAnchor) continue;
@@ -5474,7 +5712,8 @@ function setBar(id, pct, txt){
 }
 let hudT=0;
 function syncHud(){
-  setBar('hpBar', P.hp/D.maxHp, Math.round(P.hp)+' / '+Math.round(D.maxHp));
+  setBar('hpBar', P.hp/D.maxHp, Math.round(P.hp)+' / '+Math.round(D.maxHp)+
+    '  ·  '+Math.ceil(clamp(P.hp/D.maxHp,0,1)*100)+'%');
   setBar('mpBar', P.mp/D.maxMp);
   setBar('xpBar', S.xp/TUNE.xpNeed(S.lvl));
   $('lvlPill').textContent = S.lvl;
@@ -5487,7 +5726,8 @@ function syncHud(){
   if(surge.lvl>0) line = '⚡'+surge.lvl+'  '+line;
   $('hudKills').textContent = line;
   $('hudZone').textContent = ZONE_BY_ID[S.zone].n;
-  if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max); }
+  if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max,
+    Math.ceil(clamp(bossRef.hp/bossRef.max,0,1)*100)+'%'); }
   /* cooldown wipes */
   setCd('btnDash', P.dashCd/4);
   setCd('btnSkill',P.skillCd/8);
@@ -5682,6 +5922,9 @@ function openItemModal(uid){
   const f = findItem(uid); if(!f) return;
   const it = f.it; modalUid = it.uid;
   delete it.new;
+  /* A charm has no archetype, no affix list and no plus rank, so the gear
+     modal below would read straight through undefined. It gets its own. */
+  if(it.kind==='charm'){ openCharmModal(it); return; }
   const R = RARITY[it.rar];
   const A = it.kind==='weapon' ? (WEAPONS[it.arch]||UNARMED) : null;
   const pb = 1+it.plus*0.06;
@@ -5752,6 +5995,18 @@ function openItemModal(uid){
   $('modalWrap').classList.add('open');
 }
 $('modalBody').addEventListener('click', e=>{
+  const c = e.target.closest('[data-cact]');
+  if(c){
+    const slot = S.charms.findIndex(x=>x && x.uid===modalUid);
+    if(c.dataset.cact==='attune')   attuneCharm(modalUid);
+    if(c.dataset.cact==='unattune' && slot>=0) unattuneCharm(slot);
+    if(c.dataset.cact==='salvage'){
+      if(slot>=0){ const it=S.charms[slot]; S.charms[slot]=null; salvage(it); computeStats(); }
+      else salvageUid(modalUid);
+    }
+    closeModal(); renderBag(); renderCraft(); syncHud(); saveGame();
+    return;
+  }
   const b = e.target.closest('[data-act]'); if(!b) return;
   const act = b.dataset.act;
   if(act==='equip')    equipItem(modalUid);
@@ -5966,6 +6221,79 @@ function costRow(cost){
     return '<span class="cost '+(ok?'ok':'no')+'">'+label+' <span style="opacity:.6">('+fmt(have)+')</span></span>';
   }).join('')+'</div>';
 }
+/* ---- blood pool ----
+   Materials in, a random item of the TYPE YOU CHOSE out. It does not promise
+   quality, only direction: the early-game problem is not "no loot", it is
+   "no loot for the slot I actually need". */
+const POOL_KINDS = [
+  {k:'weapon',  n:'Weapon',  ic:'⚔️'},
+  {k:'armor',   n:'Armor',   ic:'🛡'},
+  {k:'offhand', n:'Offhand', ic:'🔰'},
+  {k:'trinket', n:'Trinket', ic:'💍'},
+];
+function poolCost(){
+  const z = ZONE_BY_ID[S.zone];
+  return {gold: 90 + zoneLvl()*22, [z.mats[0]]: 5};
+}
+function bloodPool(kind){
+  if(S.bag.length >= TUNE.bagMax){ toast('Backpack full'); sfx('no'); return; }
+  const cost = poolCost();
+  if(!hasMats(cost)){ toast('Not enough to offer'); sfx('no'); return; }
+  payMats(cost);
+  const z = ZONE_BY_ID[S.zone];
+  const ilvl = clamp(Math.round(zoneLvl()+rnd(-1,2)),1,99);
+  /* the pool's floor is Common but it reads the same luck and surge the world
+     does, so pushing danger makes the pool better too */
+  const rar = rollRarity(z.tier, 0.5 + surgeLuck(), D.luck*(1+surge.lvl*0.25));
+  const it = rollItem({kind, ilvl, rar});
+  if(bagAdd(it)){
+    feedItem(it); markAlert(); sfx('loot', it.rar);
+    toast(RARITY[it.rar].name+': '+it.name);
+  }
+  saveGame(); renderCraft(); syncHud();
+}
+function craftCharm(key){
+  if(S.bag.length >= TUNE.bagMax){ toast('Backpack full'); sfx('no'); return; }
+  const C = CHARMS[key], cost = charmCost(C.tier);
+  if(!hasMats(cost)){ toast('Not enough materials'); sfx('no'); return; }
+  payMats(cost);
+  const c = makeCharm(key);
+  S.bag.push(c);
+  feedItem(c); markAlert(); sfx('loot', c.rar);
+  toast(c.name+'  '+c.desc);
+  saveGame(); renderCraft(); syncHud();
+}
+function attuneCharm(uid){
+  const i = S.bag.findIndex(x=>x.uid===uid); if(i<0) return;
+  const c = S.bag[i];
+  let slot = S.charms.findIndex(x=>!x);
+  if(slot<0) slot = 0;                       /* full: the first one rotates out */
+  const out = S.charms[slot];
+  S.charms[slot] = c; S.bag.splice(i,1);
+  if(out) S.bag.push(out);
+  computeStats(); saveGame(); renderCraft(); syncHud(); sfx('buy');
+  toast('Attuned '+c.name);
+}
+function unattuneCharm(slot){
+  const c = S.charms[slot]; if(!c) return;
+  if(S.bag.length >= TUNE.bagMax){ toast('Backpack full'); sfx('no'); return; }
+  S.charms[slot]=null; S.bag.push(c);
+  computeStats(); saveGame(); renderCraft(); syncHud();
+}
+function charmCard(c, mode, slot){
+  const pct = Math.round(charmRollPct(c)*100);
+  return '<div class="recipe rar'+c.rar+'" data-charm="'+(mode==='bag'?c.uid:'')+'"'+
+    (mode==='slot'?' data-unattune="'+slot+'"':'')+'>'+
+    '<div class="rHead"><div class="cIcon">'+c.ic+'</div>'+
+      '<div class="rName">'+c.name+'</div>'+
+      '<span class="ilvl">'+pct+'% roll</span></div>'+
+    '<div class="rDesc">'+c.desc+'</div>'+
+    '<div class="rollMeter"><div class="rl"><span>'+c.lo+'</span><span>'+c.hi+'</span></div>'+
+      '<div class="rollTrack"><i style="width:'+pct+'%"></i></div></div>'+
+    '<div class="costRow"><span class="cost ok">'+
+      (mode==='slot'?'Tap to unattune':'Tap to attune')+'</span></div></div>';
+}
+
 function renderCraft(){
   const totalMats = MAT_ORDER.reduce((a,k)=>a+(S.mats[k]||0),0);
   $('craftSub').textContent = fmt(S.gold)+' gold · '+fmt(totalMats)+' materials';
@@ -5980,6 +6308,59 @@ function renderCraft(){
     if(best.length){
       h += '<div class="sectionLbl">Backpack (top 6)</div>';
       for(const it of best) h += upgradeCard(it);
+    }
+  }
+  else if(craftTab==='pool'){
+    const z = ZONE_BY_ID[S.zone], cost = poolCost();
+    const can = hasMats(cost);
+    h += '<div class="warn">The Blood Pool takes an offering and returns a random item '+
+         'of the type you choose. It does not promise quality — only the slot.</div>';
+    h += '<div class="sectionLbl">Offering</div>';
+    h += '<div class="costRow" style="margin-bottom:12px;">'+
+      '<span class="cost '+(S.gold>=cost.gold?'ok':'no')+'">'+fmt(cost.gold)+' gold</span>'+
+      '<span class="cost '+((S.mats[z.mats[0]]||0)>=cost[z.mats[0]]?'ok':'no')+'">'+
+        MATS[z.mats[0]].ic+' '+cost[z.mats[0]]+' '+MATS[z.mats[0]].n+
+        ' ('+fmt(S.mats[z.mats[0]]||0)+')</span></div>';
+    if(surge.lvl>0) h += '<div class="warn">Rift danger '+surge.lvl+
+      ' is improving the pool\'s rolls.</div>';
+    h += '<div class="sectionLbl">Draw</div><div class="slotGrid">';
+    for(const k of POOL_KINDS)
+      h += '<div class="slot'+(can?' filled':' empty')+'" data-pool="'+k.k+'">'+
+        '<div class="slotIc">'+k.ic+'</div><div class="slotTxt">'+
+        '<div class="slotLbl">Draw</div><div class="slotName">'+k.n+'</div></div></div>';
+    h += '</div>';
+  }
+  else if(craftTab==='charm'){
+    h += '<div class="warn">Charms are carried, not worn. Three can be attuned at once — '+
+         'their values are rolled, so another of the same charm is never the same charm.</div>';
+    h += '<div class="sectionLbl">Attuned ('+S.charms.filter(Boolean).length+'/3)</div>';
+    let any=false;
+    S.charms.forEach((c,i)=>{ if(c){ any=true; h += charmCard(c,'slot',i); } });
+    if(!any) h += '<div class="empty">Nothing attuned. Craft one below, then tap it.</div>';
+    const owned = S.bag.filter(x=>x.kind==='charm');
+    if(owned.length){
+      h += '<div class="sectionLbl">In backpack</div>';
+      for(const c of owned) h += charmCard(c,'bag');
+    }
+    for(const tier of [1,2,3]){
+      h += '<div class="sectionLbl">'+(tier===3?'Cursed':'Tier '+tier)+'</div>';
+      if(tier===3) h += '<div class="warn">Cursed charms give more than they should. '+
+        'They also take something.</div>';
+      for(const key of CHARM_KEYS){
+        const C = CHARMS[key]; if(C.tier!==tier) continue;
+        const cost = charmCost(tier), can = hasMats(cost);
+        h += '<div class="recipe rar'+(tier===3?5:tier)+(can?'':' locked')+'">'+
+          '<div class="rHead"><div class="cIcon">'+C.ic+'</div>'+
+            '<div class="rName">'+C.n+'</div></div>'+
+          '<div class="rDesc">'+C.d.replace('{v}', C.lo+'–'+C.hi)+'</div>'+
+          '<div class="costRow">'+Object.keys(cost).map(k=>{
+            const have = k==='gold'? S.gold : (S.mats[k]||0);
+            const lbl = k==='gold'? fmt(cost[k])+' gold' : MATS[k].ic+' '+cost[k]+' '+MATS[k].n;
+            return '<span class="cost '+(have>=cost[k]?'ok':'no')+'">'+lbl+'</span>';
+          }).join('')+'</div>'+
+          '<button class="btn '+(can?'pri':'')+'" data-forge="'+key+'" '+(can?'':'disabled')+
+            ' style="width:100%;margin-top:9px;">Forge</button></div>';
+      }
     }
   }
   else if(craftTab==='unique'){
@@ -6062,6 +6443,14 @@ function doCraft(rid){
   showLoot([it],0,'Relic Forged');
 }
 $('craftBody').addEventListener('click', e=>{
+  const pool = e.target.closest('[data-pool]');
+  if(pool){ bloodPool(pool.dataset.pool); return; }
+  const forge = e.target.closest('[data-forge]');
+  if(forge && !forge.disabled){ craftCharm(forge.dataset.forge); return; }
+  const un = e.target.closest('[data-unattune]');
+  if(un){ unattuneCharm(+un.dataset.unattune); return; }
+  const at = e.target.closest('[data-charm]');
+  if(at && at.dataset.charm){ attuneCharm(at.dataset.charm); return; }
   const b = e.target.closest('[data-act]'); if(!b) return;
   if(b.dataset.act==='upgrade') doUpgrade(+b.dataset.uid);
   if(b.dataset.act==='craft')   doCraft(b.dataset.rid);
