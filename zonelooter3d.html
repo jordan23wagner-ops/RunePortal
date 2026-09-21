@@ -5509,6 +5509,2262 @@ function wolfSpec(variant){
   return sp;
 }
 
+/* ================================================================
+   PURPOSE-BUILT RIGS — one skeleton per body plan
+   Every rig below follows the pattern the wolf established: a real
+   joint chain, an anatomy() that builds the creature under whatever
+   it is wearing, and coat functions that dress the same skeleton
+   differently. A new monster is then a parts list, not a new rig.
+
+   Two rules learned the hard way and enforced everywhere here:
+   - Spheres and tapered cylinders only for body mass. A 7-sided
+     barrel reads as a box in profile; that is where "blocky" lives.
+   - Every rotation channel an attack or a flinch writes with += must
+     be ASSIGNED by the base pose, or it compounds while hurt is
+     non-zero. The no-drift probe caught this at 31 radians once.
+   ================================================================ */
+
+/* ---------------------------------------------------------------- HUMANOID */
+const HUMANOID_BONES = [
+  ['root',null,[0,0,0]],
+  ['hips','root',[0,0.99,0]],
+  /* a three-link spine is the whole difference between a person and a
+     mannequin: it lets the torso twist against the hips as it walks */
+  ['spineA','hips',[0,0.17,0]],
+  ['spineB','spineA',[0,0.19,0]],
+  ['chest','spineB',[0,0.21,0]],
+  ['neck','chest',[0,0.23,0]],
+  ['head','neck',[0,0.11,0]],
+  ['jaw','head',[0,-0.05,0.05]],
+  /* clavicles let a shoulder shrug and roll instead of the arm pivoting
+     out of a hole in the ribcage */
+  ['clavL','chest',[ 0.11,0.15,0.01]], ['armL','clavL',[ 0.22,-0.03,0]],
+  ['foreL','armL',[0,-0.34,0]],        ['handL','foreL',[0,-0.32,0]],
+  ['clavR','chest',[-0.11,0.15,0.01]], ['armR','clavR',[-0.22,-0.03,0]],
+  ['foreR','armR',[0,-0.34,0]],        ['handR','foreR',[0,-0.32,0]],
+  ['thighL','hips',[ 0.155,-0.06,0]],  ['shinL','thighL',[0,-0.45,0]],
+  ['footL','shinL',[0,-0.43,0]],       ['toeL','footL',[0,-0.05,0.12]],
+  ['thighR','hips',[-0.155,-0.06,0]],  ['shinR','thighR',[0,-0.45,0]],
+  ['footR','shinR',[0,-0.43,0]],       ['toeR','footR',[0,-0.05,0.12]],
+  ['cloakA','chest',[0,0.14,-0.13]],   ['cloakB','cloakA',[0,-0.42,-0.03]],
+];
+
+function humanoidPose(b, an, st){
+  const s=Math.sin(an.ph), c=Math.cos(an.ph), w=an.walk;
+  const br=Math.sin(st.t*2.1)*0.5+0.5;
+
+  /* legs: hip swings, knee only bends on the BACK half of the stride, ankle
+     rolls the foot off the toe. A knee that bends both ways is the classic
+     puppet tell. */
+  const leg=(th,sh,ft,to,off)=>{
+    const ss=Math.sin(an.ph+off), back=Math.max(0,-ss);
+    th.rotation.x =  ss*0.78*w;
+    sh.rotation.x =  back*1.02*w;
+    ft.rotation.x = -ss*0.26*w + back*-0.34*w;
+    to.rotation.x =  Math.max(0,ss)*0.34*w;
+  };
+  leg(b.thighL,b.shinL,b.footL,b.toeL, 0);
+  leg(b.thighR,b.shinR,b.footR,b.toeR, Math.PI);
+
+  /* arms counter-swing the legs, elbow leads slightly */
+  b.armL.rotation.x = -s*0.66*w - 0.06;
+  b.armR.rotation.x =  s*0.66*w - 0.06;
+  b.armL.rotation.z =  0.13 + Math.abs(s)*0.05*w;
+  b.armR.rotation.z = -0.13 - Math.abs(s)*0.05*w;
+  b.foreL.rotation.x = -0.30 - Math.max(0,-s)*0.42*w;
+  b.foreR.rotation.x = -0.30 - Math.max(0, s)*0.42*w;
+  b.foreL.rotation.z = 0; b.foreR.rotation.z = 0;
+  b.handL.rotation.x = 0.12; b.handR.rotation.x = 0.12;
+  b.clavL.rotation.z = -0.05*w*s; b.clavR.rotation.z = -0.05*w*s;
+  b.clavL.rotation.x = 0; b.clavR.rotation.x = 0;
+
+  /* torso: hips and shoulders rotate in OPPOSITE directions */
+  b.hips.position.y  = 0.99 - Math.abs(s)*0.055*w + br*0.010;
+  b.hips.rotation.y  =  s*0.10*w;
+  b.hips.rotation.x  = 0.02 + w*0.05;
+  b.hips.rotation.z  = c*0.045*w;
+  b.spineA.rotation.y = -s*0.06*w;
+  b.spineA.rotation.x = 0;
+  b.spineB.rotation.y = -s*0.07*w;
+  b.spineB.rotation.z = 0;
+  b.chest.rotation.y = -s*0.10*w;
+  b.chest.rotation.x = 0.03 + br*0.025 - w*0.06;
+  b.chest.rotation.z = 0;
+  /* head stays level while the body moves under it */
+  b.neck.rotation.x = -0.05 + w*0.04;
+  b.neck.rotation.z = 0;
+  b.head.rotation.x = -0.02 - br*0.03;
+  b.head.rotation.y = s*0.06*w + Math.sin(st.t*0.6)*0.05;
+  b.jaw.rotation.x  = 0.03 + br*0.03;
+  b.cloakA.rotation.x = 0.10 + Math.sin(st.t*1.7)*0.05 + w*0.30;
+  b.cloakB.rotation.x = 0.06 + Math.sin(st.t*1.7-0.7)*0.07 + w*0.22;
+  b.cloakA.rotation.z = Math.sin(st.t*1.1)*0.05;
+  b.cloakB.rotation.z = Math.sin(st.t*1.1-0.6)*0.06;
+
+  if(an.atk>=0){
+    /* wind up across the body, swing through, recover. The hips lead the
+       chest by a beat, which is what makes a swing look like it has weight. */
+    const a=an.atk;
+    const wind = a<0.30 ? a/0.30 : Math.max(0, 1-(a-0.30)/0.16);
+    const sw   = a<0.30 ? -(a/0.30) : (a<0.54 ? lerp(-1,1.85,(a-0.30)/0.24)
+                                              : lerp(1.85,0,(a-0.54)/0.46));
+    b.hips.rotation.y   = -sw*0.20;
+    b.spineB.rotation.y = -sw*0.22;
+    b.chest.rotation.y  = -sw*0.44;
+    b.chest.rotation.x  = 0.03 - sw*0.10;
+    b.armR.rotation.x   = -1.20 + sw*1.20;
+    b.armR.rotation.z   = -0.22 - wind*0.45;
+    b.foreR.rotation.x  = -0.85 + Math.max(0,sw)*0.62;
+    b.foreR.rotation.z  = wind*0.40;
+    b.armL.rotation.x   = -0.22 - sw*0.20;
+    b.handR.rotation.x  = 0.05;
+    b.clavR.rotation.x  = -0.16*Math.max(0,sw);
+    b.thighL.rotation.x += 0.18*Math.max(0,sw);
+    b.thighR.rotation.x -= 0.14*Math.max(0,sw);
+  }
+  if(an.hurt>0){
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.spineA.rotation.x += 0.24*hf*h;
+    b.spineB.rotation.z += -0.22*hr*h;
+    b.chest.rotation.x  += 0.30*hf*h;
+    b.chest.rotation.z  += -0.26*hr*h;
+    b.neck.rotation.x   += 0.26*hf*h;
+    b.neck.rotation.z   += -0.18*hr*h;
+    b.head.rotation.x   += 0.22*hf*h;
+    b.jaw.rotation.x    += 0.34*h;
+    b.clavL.rotation.x  += -0.22*h; b.clavR.rotation.x += -0.22*h;
+    b.armL.rotation.x   += -0.40*h; b.armL.rotation.z += 0.32*h;
+    b.armR.rotation.x   += -0.40*h; b.armR.rotation.z -= 0.32*h;
+    b.foreL.rotation.x  += -0.30*h; b.foreR.rotation.x += -0.30*h;
+    b.hips.position.y   -= 0.07*h;
+    b.thighL.rotation.x += 0.16*h; b.thighR.rotation.x += 0.16*h;
+    b.shinL.rotation.x  += 0.22*h; b.shinR.rotation.x  += 0.22*h;
+    b.cloakA.rotation.x += 0.30*h;
+  }
+}
+
+/* ---- the body under the armour ---- */
+function humanoidAnatomy(V){
+  const SKIN = V.skin||'lite', DEEP = V.deep||'out', NAIL = V.nail||'#2a2f3a';
+  return [
+    /* pelvis and ribcage as stacked spheres tapering OUT to the shoulders:
+       a wedge silhouette, which is what reads as "person" at 30 metres */
+    {b:'hips',  shape:'sphere', w:0.46, det:1, sy:0.74, y:0.02, c:'dark'},
+    {b:'hips',  shape:'sphere', w:0.31, det:1, sy:0.82, x: 0.14, y:-0.03, c:'dark'},
+    {b:'hips',  shape:'sphere', w:0.31, det:1, sy:0.82, x:-0.14, y:-0.03, c:'dark'},
+    {b:'spineA',shape:'sphere', w:0.42, det:1, sy:0.84, y:0.02, c:'mid'},
+    {b:'spineA',shape:'sphere', w:0.36, det:1, sy:0.70, y:0.02, z:0.10, c:'mid'},
+    {b:'spineB',shape:'sphere', w:0.47, det:1, sy:0.86, y:0.02, c:'mid'},
+    {b:'chest', shape:'sphere', w:0.55, det:1, sy:0.84, y:0.04, c:'mid'},
+    {b:'chest', shape:'sphere', w:0.29, det:1, sy:0.66, x: 0.14, y:0.03, z:0.14, c:SKIN},
+    {b:'chest', shape:'sphere', w:0.29, det:1, sy:0.66, x:-0.14, y:0.03, z:0.14, c:SKIN},
+    {b:'chest', shape:'sphere', w:0.50, det:1, sy:0.42, y:0.17, c:'lite'},          /* traps */
+    {b:'chest', shape:'sphere', w:0.40, det:1, sy:0.70, y:0.02, z:-0.10, c:'dark'}, /* back  */
+
+    /* neck and skull */
+    {b:'neck',  shape:'cyl', w:0.20, w2:0.23, h:0.20, y:0.03, c:SKIN},
+    {b:'head',  shape:'sphere', w:0.37, det:1, sy:1.00, y:0.08, c:SKIN},
+    {b:'head',  shape:'sphere', w:0.32, det:1, sy:0.78, y:0.01, z:0.05, c:SKIN},
+    {b:'head',  shape:'sphere', w:0.27, det:1, sy:0.58, y:0.04, z:0.11, c:SKIN},   /* cheeks */
+    {b:'head',  shape:'box', w:0.27, h:0.055, d:0.13, rot:[0.18,0,0], y:0.108, z:0.110, c:DEEP},
+    {b:'head',  shape:'cone', w:0.075,h:0.12, rot:[1.32,0,0], y:0.012, z:0.150, c:SKIN},
+    /* eyes: socket, iris, specular. Three layers, every time. */
+    {b:'head',  shape:'sphere', w:0.088,det:1, x: 0.077,y:0.052,z:0.112, c:DEEP},
+    {b:'head',  shape:'sphere', w:0.088,det:1, x:-0.077,y:0.052,z:0.112, c:DEEP},
+    {b:'head',  shape:'sphere', w:0.058,det:1, x: 0.081,y:0.052,z:0.136, c:'glow'},
+    {b:'head',  shape:'sphere', w:0.058,det:1, x:-0.081,y:0.052,z:0.136, c:'glow'},
+    {b:'head',  shape:'sphere', w:0.022,det:0, x: 0.088,y:0.068,z:0.152, c:'#ffffff'},
+    {b:'head',  shape:'sphere', w:0.022,det:0, x:-0.088,y:0.068,z:0.152, c:'#ffffff'},
+    {b:'head',  shape:'sphere', w:0.08, det:0, sy:1.35, x: 0.180,y:0.025,z:-0.01, c:SKIN},
+    {b:'head',  shape:'sphere', w:0.08, det:0, sy:1.35, x:-0.180,y:0.025,z:-0.01, c:SKIN},
+    {b:'jaw',   shape:'sphere', w:0.25, det:1, sy:0.50, y:-0.035,z:0.055, c:SKIN},
+    {b:'jaw',   shape:'sphere', w:0.17, det:1, sy:0.52, y:-0.045,z:0.115, c:SKIN}, /* chin */
+    {b:'jaw',   shape:'box', w:0.15, h:0.028,d:0.05, y:0.015, z:0.125, c:'#e6dfc8'},
+
+    /* arms and legs: tapered, jointed, with real hands and feet */
+    ...['L','R'].flatMap(sd=>{
+      const f = sd==='L' ? 1 : -1;
+      return [
+        {b:'clav'+sd, shape:'sphere', w:0.26, det:1, sy:0.70, x:0.10*f, y:0.00, c:'lite'},
+        {b:'arm'+sd,  shape:'sphere', w:0.29, det:1, sy:0.92, y:0.00, c:'lite'},   /* deltoid */
+        {b:'arm'+sd,  shape:'cyl', w:0.23, w2:0.18, h:0.34, y:-0.17, c:SKIN},
+        {b:'fore'+sd, shape:'sphere', w:0.185,det:1, y:0.00, c:SKIN},              /* elbow  */
+        {b:'fore'+sd, shape:'cyl', w:0.185,w2:0.135,h:0.32, y:-0.16, c:SKIN},
+        /* hands: a palm plus four fingers and a thumb. A ball on a stick is
+           the difference between a character and a mannequin. */
+        {b:'hand'+sd, shape:'sphere', w:0.155,det:1, sy:0.80, y:-0.05, c:SKIN},
+        {b:'hand'+sd, shape:'cyl', w:0.040,w2:0.034,h:0.115, rot:[0.30,0,0], x: 0.048*f, y:-0.145, z:0.020, c:SKIN},
+        {b:'hand'+sd, shape:'cyl', w:0.042,w2:0.035,h:0.125, rot:[0.30,0,0], x: 0.016*f, y:-0.150, z:0.022, c:SKIN},
+        {b:'hand'+sd, shape:'cyl', w:0.040,w2:0.033,h:0.115, rot:[0.30,0,0], x:-0.016*f, y:-0.145, z:0.020, c:SKIN},
+        {b:'hand'+sd, shape:'cyl', w:0.036,w2:0.030,h:0.100, rot:[0.30,0,0], x:-0.046*f, y:-0.138, z:0.018, c:SKIN},
+        {b:'hand'+sd, shape:'cyl', w:0.044,w2:0.036,h:0.100, rot:[0.10,0,-0.85*f], x: 0.078*f, y:-0.085, z:0.030, c:SKIN},
+        {b:'hand'+sd, shape:'sphere', w:0.030,det:0, x: 0.016*f, y:-0.212, z:0.055, c:NAIL},
+        {b:'hand'+sd, shape:'sphere', w:0.028,det:0, x:-0.016*f, y:-0.205, z:0.052, c:NAIL},
+
+        {b:'thigh'+sd, shape:'sphere', w:0.30, det:1, sy:0.90, y:-0.02, c:'dark'},
+        {b:'thigh'+sd, shape:'cyl', w:0.27, w2:0.21, h:0.43, y:-0.215, c:'dark'},
+        {b:'shin'+sd,  shape:'sphere', w:0.205,det:1, y:0.00, c:'dark'},           /* knee */
+        {b:'shin'+sd,  shape:'cyl', w:0.205,w2:0.155,h:0.41, y:-0.205, c:'dark'},
+        {b:'shin'+sd,  shape:'sphere', w:0.145,det:1, sy:0.80, y:-0.39, c:'dark'}, /* ankle */
+        {b:'foot'+sd,  shape:'sphere', w:0.20, det:1, sy:0.52, y:-0.015,z:0.045, c:'out'},
+        {b:'foot'+sd,  shape:'cyl', w:0.185,w2:0.155,h:0.16, rot:[1.5708,0,0], y:-0.020, z:0.065, c:'out'},
+        {b:'toe'+sd,   shape:'sphere', w:0.165,det:1, sy:0.46, y:0.010, z:0.030, c:'out'},
+      ];
+    }),
+  ];
+}
+
+/* ---- coats: the same body, three different lives ---- */
+const HUMANOID_COAT = {
+  /* A — PLATE: a fighting man in full harness. */
+  plate(){
+    const STEEL='lite', TRIM='glow', DARK='out';
+    const t=[
+      /* helm: skull, visor slit, cheek guards, crest */
+      {b:'head', shape:'sphere', w:0.44, det:1, sy:0.96, y:0.10, c:STEEL},
+      {b:'head', shape:'sphere', w:0.40, det:1, sy:0.60, y:0.02, z:0.06, c:STEEL},
+      {b:'head', shape:'box', w:0.30, h:0.055,d:0.14, y:0.045,z:0.175, c:'#0a0c12'}, /* visor slit */
+      {b:'head', shape:'cone', w:0.13, h:0.20, rot:[1.5708,0,0], y:-0.03, z:0.20, c:STEEL}, /* beak */
+      /* a swept plume, not a plank: four cones laid back over the skull */
+      {b:'head', shape:'cone', w:0.16, h:0.26, rot:[-0.20,0,0], y:0.34, z:-0.02, c:TRIM},
+      {b:'head', shape:'cone', w:0.13, h:0.24, rot:[-0.75,0,0], y:0.46, z:-0.12, c:TRIM},
+      {b:'head', shape:'cone', w:0.10, h:0.22, rot:[-1.25,0,0], y:0.50, z:-0.28, c:TRIM},
+      {b:'head', shape:'cone', w:0.08, h:0.20, rot:[-1.75,0,0], y:0.46, z:-0.42, c:TRIM},
+      {b:'head', shape:'sphere', w:0.13, det:0, sy:1.5, x: 0.195,y:0.03, z:0.02, c:DARK},
+      {b:'head', shape:'sphere', w:0.13, det:0, sy:1.5, x:-0.195,y:0.03, z:0.02, c:DARK},
+      {b:'jaw',  shape:'sphere', w:0.30, det:1, sy:0.44, y:-0.045,z:0.07, c:STEEL},
+      /* gorget, breastplate, fauld */
+      {b:'neck', shape:'cyl', w:0.30, w2:0.26, h:0.11, y:0.01, c:STEEL},
+      {b:'chest',shape:'sphere', w:0.60, det:1, sy:0.82, y:0.04, z:0.02, c:STEEL},
+      {b:'chest',shape:'cone', w:0.34, h:0.30, rot:[3.1416,0,0], y:-0.02, z:0.20, c:STEEL},
+      {b:'chest',shape:'box', w:0.10, h:0.30, d:0.06, y:0.06, z:0.27, c:TRIM},
+      {b:'chest',shape:'sphere', w:0.16, det:1, y:0.20, z:0.26, c:'glow'},          /* heart gem */
+      {b:'spineB',shape:'cyl', w:0.52, w2:0.56, h:0.22, y:0.02, c:STEEL},
+      {b:'hips', shape:'cyl', w:0.54, w2:0.60, h:0.16, y:0.06, c:DARK},             /* belt */
+      {b:'hips', shape:'box', w:0.14, h:0.13, d:0.08, y:0.06, z:0.26, c:TRIM},
+      {b:'hips', shape:'cyl', w:0.58, w2:0.50, h:0.26, y:-0.10, c:STEEL},           /* fauld */
+      {b:'hips', shape:'box', w:0.17, h:0.30, d:0.07, y:-0.20, z:0.25, c:STEEL},    /* tasset */
+    ];
+    for(const sd of ['L','R']){
+      const f = sd==='L'?1:-1;
+      t.push({b:'clav'+sd, shape:'sphere', w:0.34, det:1, sy:0.68, x:0.10*f, y:0.04, c:STEEL});
+      t.push({b:'arm'+sd,  shape:'sphere', w:0.38, det:1, sy:0.74, y:0.01, c:STEEL});  /* pauldron */
+      t.push({b:'arm'+sd,  shape:'sphere', w:0.34, det:1, sy:0.44, y:-0.09, c:STEEL});
+      t.push({b:'arm'+sd,  shape:'cone', w:0.11, h:0.18, rot:[0,0,-0.5*f], x:0.17*f, y:0.10, c:TRIM});
+      t.push({b:'arm'+sd,  shape:'cyl', w:0.25, w2:0.20, h:0.20, y:-0.24, c:STEEL});
+      t.push({b:'fore'+sd, shape:'cyl', w:0.215,w2:0.165,h:0.30, y:-0.16, c:STEEL}); /* vambrace */
+      t.push({b:'fore'+sd, shape:'cyl', w:0.23, w2:0.23, h:0.05, y:-0.03, c:TRIM});
+      t.push({b:'hand'+sd, shape:'sphere', w:0.185,det:1, sy:0.82, y:-0.055, c:STEEL});
+      t.push({b:'thigh'+sd,shape:'cyl', w:0.31, w2:0.24, h:0.33, y:-0.17, c:STEEL}); /* cuisse */
+      t.push({b:'shin'+sd, shape:'sphere', w:0.245,det:1, sy:0.80, y:0.00, c:STEEL});/* poleyn */
+      t.push({b:'shin'+sd, shape:'cone', w:0.13, h:0.15, rot:[-1.4,0,0], y:0.00, z:0.14, c:STEEL});
+      t.push({b:'shin'+sd, shape:'cyl', w:0.225,w2:0.175,h:0.37, y:-0.205, c:STEEL}); /* greave */
+      t.push({b:'foot'+sd, shape:'sphere', w:0.23, det:1, sy:0.50, y:-0.015,z:0.05, c:DARK});
+      t.push({b:'toe'+sd,  shape:'cone', w:0.17, h:0.20, rot:[1.5708,0,0], y:0.005, z:0.08, c:DARK}); /* sabaton point */
+    }
+    /* cloak: two panels so it can fold, not one rigid plank */
+    t.push({b:'cloakA', shape:'cyl', w:0.52, w2:0.58, h:0.44, rot:[0.10,0,0], y:-0.20, c:'dark'});
+    t.push({b:'cloakA', shape:'cyl', w:0.56, w2:0.56, h:0.07, y:0.06, c:TRIM});
+    t.push({b:'cloakB', shape:'cyl', w:0.58, w2:0.50, h:0.42, rot:[0.06,0,0], y:-0.20, c:'dark'});
+    t.push({b:'cloakB', shape:'cone', w:0.24, h:0.22, rot:[3.1416,0,0], x: 0.16, y:-0.46, c:'dark'});
+    t.push({b:'cloakB', shape:'cone', w:0.24, h:0.22, rot:[3.1416,0,0], x:-0.16, y:-0.46, c:'dark'});
+    return t;
+  },
+
+  /* B — DROWNED: waterlogged, half-rotted, still carrying its kit. */
+  drowned(){
+    const RAG='dark', WEED='#4a6a3a', BONE='#cfc6a8';
+    const t=[
+      /* no helm: a gaunt skull, sunken temples, a hanging jaw */
+      {b:'head', shape:'sphere', w:0.31, det:1, sy:0.96, y:0.10, c:'mid'},
+      {b:'head', shape:'sphere', w:0.23, det:1, sy:0.70, y:0.00, z:0.08, c:'mid'},
+      {b:'head', shape:'sphere', w:0.10, det:0, sy:1.10, x: 0.135,y:0.075,z:0.03, c:'#141a16'},
+      {b:'head', shape:'sphere', w:0.10, det:0, sy:1.10, x:-0.135,y:0.075,z:0.03, c:'#141a16'},
+      {b:'jaw',  shape:'sphere', w:0.20, det:1, sy:0.44, y:-0.06, z:0.06, c:'mid'},
+      {b:'head', shape:'sphere', w:0.120,det:1, x: 0.072,y:0.048,z:0.118, c:'#0a0f0c'},
+      {b:'head', shape:'sphere', w:0.120,det:1, x:-0.072,y:0.048,z:0.118, c:'#0a0f0c'},
+      {b:'head', shape:'sphere', w:0.062,det:0, x: 0.074,y:0.048,z:0.156, c:'glow'},
+      {b:'head', shape:'sphere', w:0.062,det:0, x:-0.074,y:0.048,z:0.156, c:'glow'},
+      /* lank hair and weed, hanging off everything */
+      ...[-0.19,-0.10,0,0.10,0.19].flatMap((x,i)=>[
+        {b:'head', shape:'cyl', w:0.05,w2:0.02,h:0.34, rot:[-0.25,0,x*0.9], x:x, y:0.06, z:-0.15, c:WEED},
+      ]),
+      {b:'head', shape:'cyl', w:0.06,w2:0.02,h:0.26, rot:[0.30,0,0.4], x: 0.15, y:0.02, z:0.10, c:WEED},
+      {b:'head', shape:'cyl', w:0.06,w2:0.02,h:0.26, rot:[0.30,0,-0.4], x:-0.15, y:0.02, z:0.10, c:WEED},
+      /* a burst tunic over an actual ribcage: five THIN hoops. Three fat
+         bands read as banded armour, which is the opposite of the brief. */
+      {b:'chest',shape:'cyl', w:0.54, w2:0.44, h:0.24, y:0.11, c:RAG},
+      {b:'spineB',shape:'cyl', w:0.46, w2:0.50, h:0.16, y:0.07, c:RAG},
+      ...[[0.15,0.46],[0.05,0.48],[-0.05,0.47],[-0.15,0.43],[-0.24,0.37]].map(([yy,ww],i)=>
+        ({b:'spineA', shape:'cyl', w:ww, w2:ww, h:0.042, rot:[0,0,(i%2?0.05:-0.05)],
+          y:yy, z:0.05, c:BONE})),
+      {b:'chest', shape:'cyl', w:0.40,w2:0.44, h:0.042, y:-0.08, z:0.07, c:BONE},
+      {b:'spineA',shape:'box', w:0.07, h:0.44, d:0.07, y:-0.04, z:-0.15, c:BONE},
+      /* sodden skirts and a rope belt */
+      {b:'hips', shape:'cyl', w:0.50, w2:0.56, h:0.11, y:0.06, c:'#6a5a3a'},
+      {b:'hips', shape:'cyl', w:0.52, w2:0.40, h:0.46, y:-0.20, c:RAG},
+      ...[0,1,2,3,4,5].map(i=>{
+        const a=i/6*6.283;
+        return {b:'hips', shape:'cone', w:0.13, h:0.26, rot:[3.1416,0,0],
+                x:Math.sin(a)*0.21, y:-0.44, z:Math.cos(a)*0.21, c:RAG};
+      }),
+      /* one shoulder still carries a rusted, buckled pauldron — a scrap of
+         somebody's kit, not a matching set */
+      {b:'armL',  shape:'sphere', w:0.30, det:1, sy:0.46, y:0.02, c:'#5e5040'},
+      {b:'armL',  shape:'cone', w:0.13, h:0.16, rot:[0,0,-0.7], x:0.14, y:0.08, c:'#4a3f32'},
+    ];
+    for(const sd of ['L','R']){
+      t.push({b:'fore'+sd, shape:'cyl', w:0.20,w2:0.15,h:0.16, y:-0.06, c:RAG});
+      t.push({b:'hand'+sd, shape:'cone', w:0.035,h:0.13, rot:[2.9,0,0], x:0.018, y:-0.205, z:0.055, c:BONE});
+      t.push({b:'hand'+sd, shape:'cone', w:0.033,h:0.12, rot:[2.9,0,0], x:-0.018,y:-0.200, z:0.052, c:BONE});
+      t.push({b:'shin'+sd, shape:'cyl', w:0.22,w2:0.17,h:0.14, y:-0.10, c:RAG});
+      t.push({b:'thigh'+sd,shape:'cyl', w:0.05,w2:0.02,h:0.22, rot:[-0.2,0,0.3], x:0.13, y:-0.30, c:WEED});
+      t.push({b:'cloakB',  shape:'cyl', w:0.05,w2:0.02,h:0.30, rot:[0.1,0,0.2], x:(sd==='L'?0.2:-0.2), y:-0.36, c:WEED});
+    }
+    /* the tattered remains of a cloak: strips, not a sheet */
+    for(let i=0;i<7;i++){
+      const x=(i-3)*0.085;
+      t.push({b:'cloakA', shape:'cyl', w:0.10,w2:0.07,h:0.40+((i*7)%3)*0.10,
+              rot:[0.08,0,x*0.5], x:x, y:-0.20, c:RAG});
+      t.push({b:'cloakB', shape:'cone', w:0.09,h:0.26+((i*5)%3)*0.09,
+              rot:[3.1416,0,x*0.4], x:x*1.05, y:-0.26, c:RAG});
+    }
+    return t;
+  },
+
+  /* C — SEER: a robed caster. Read it by the silhouette: hood, sleeves, hem. */
+  seer(){
+    const ROBE='mid', TRIM='lite', GOLD='glow';
+    const t=[
+      /* hood: a cone with a shadowed void where the face should be */
+      {b:'head', shape:'cone', w:0.50, h:0.46, y:0.30, c:ROBE},
+      {b:'head', shape:'sphere', w:0.42, det:1, sy:0.90, y:0.08, z:-0.03, c:ROBE},
+      {b:'head', shape:'cyl', w:0.33, w2:0.36, h:0.14, rot:[1.5708,0,0], y:0.04, z:0.14, c:ROBE},
+      {b:'head', shape:'sphere', w:0.26, det:1, sy:0.80, y:0.04, z:0.12, c:'#0a0c14'},  /* void */
+      {b:'head', shape:'sphere', w:0.06, det:0, x: 0.062,y:0.055,z:0.185, c:'glow'},
+      {b:'head', shape:'sphere', w:0.06, det:0, x:-0.062,y:0.055,z:0.185, c:'glow'},
+      {b:'head', shape:'sphere', w:0.028,det:0, x: 0.062,y:0.055,z:0.205, c:'#ffffff'},
+      {b:'head', shape:'sphere', w:0.028,det:0, x:-0.062,y:0.055,z:0.205, c:'#ffffff'},
+      {b:'head', shape:'cone', w:0.16, h:0.26, rot:[-0.5,0,0], y:0.34, z:-0.22, c:ROBE}, /* hood point */
+      /* mantle and robe: the hem flares, which is the whole read */
+      {b:'chest', shape:'sphere', w:0.66, det:1, sy:0.50, y:0.14, c:TRIM},
+      {b:'chest', shape:'cyl', w:0.52, w2:0.58, h:0.34, y:0.02, c:ROBE},
+      {b:'chest', shape:'box', w:0.13, h:0.42, d:0.06, y:0.02, z:0.27, c:TRIM},
+      {b:'chest', shape:'sphere', w:0.15, det:1, y:0.20, z:0.29, c:GOLD},
+      {b:'spineB',shape:'cyl', w:0.48, w2:0.52, h:0.24, y:0.02, c:ROBE},
+      {b:'spineA',shape:'cyl', w:0.48, w2:0.46, h:0.22, y:0.02, c:ROBE},
+      {b:'hips',  shape:'cyl', w:0.50, w2:0.54, h:0.10, y:0.08, c:GOLD},            /* sash */
+      {b:'hips',  shape:'cyl', w:0.54, w2:0.86, h:0.74, y:-0.26, c:ROBE},           /* skirt */
+      {b:'hips',  shape:'cyl', w:0.88, w2:0.88, h:0.07, y:-0.60, c:TRIM},           /* hem */
+      ...[0,1,2,3,4,5,6,7].map(i=>{
+        const a=i/8*6.283;
+        return {b:'hips', shape:'cone', w:0.17, h:0.20, rot:[3.1416,0,0],
+                x:Math.sin(a)*0.38, y:-0.66, z:Math.cos(a)*0.38, c:ROBE};
+      }),
+    ];
+    for(const sd of ['L','R']){
+      const f = sd==='L'?1:-1;
+      /* a bell sleeve that hides the elbow: the classic caster read */
+      t.push({b:'clav'+sd, shape:'sphere', w:0.30, det:1, sy:0.64, x:0.10*f, y:0.03, c:TRIM});
+      t.push({b:'arm'+sd,  shape:'cyl', w:0.30, w2:0.36, h:0.38, y:-0.18, c:ROBE});
+      t.push({b:'arm'+sd,  shape:'cyl', w:0.37, w2:0.37, h:0.05, y:-0.35, c:GOLD});
+      t.push({b:'fore'+sd, shape:'cyl', w:0.19, w2:0.15, h:0.20, y:-0.08, c:TRIM});
+      t.push({b:'thigh'+sd,shape:'cyl', w:0.05, w2:0.02,h:0.20, rot:[0,0,0.2*f], x:0.10*f, y:-0.30, c:GOLD});
+    }
+    /* trailing mantle */
+    t.push({b:'cloakA', shape:'cyl', w:0.50, w2:0.62, h:0.46, rot:[0.10,0,0], y:-0.21, c:ROBE});
+    t.push({b:'cloakB', shape:'cyl', w:0.62, w2:0.52, h:0.44, rot:[0.05,0,0], y:-0.21, c:ROBE});
+    t.push({b:'cloakB', shape:'cyl', w:0.54, w2:0.54, h:0.06, y:-0.42, c:GOLD});
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- GOLEM */
+/* Not a big human. No neck, no waist: the head is a growth on the mass, the
+   arms hang past the knees, and the legs are columns. Getting the PROPORTION
+   right is what separates a golem from a knight wearing rocks. */
+const GOLEM_BONES = [
+  ['root',null,[0,0,0]],
+  ['base','root',[0,0.70,0]],
+  ['coreA','base',[0,0.34,0]],
+  ['coreB','coreA',[0,0.40,0]],
+  ['hood','coreB',[0,0.26,0.04]],
+  ['jaw','hood',[0,-0.10,0.10]],
+  ['shldL','coreB',[ 0.50,0.10,0]], ['armL','shldL',[0,-0.40,0]], ['fistL','armL',[0,-0.44,0]],
+  ['shldR','coreB',[-0.50,0.10,0]], ['armR','shldR',[0,-0.40,0]], ['fistR','armR',[0,-0.44,0]],
+  ['legL','base',[ 0.26,-0.14,0]],  ['kneeL','legL',[0,-0.30,0]],  ['footL','kneeL',[0,-0.28,0]],
+  ['legR','base',[-0.26,-0.14,0]],  ['kneeR','legR',[0,-0.30,0]],  ['footR','kneeR',[0,-0.28,0]],
+  /* the plates do not touch the body — they hang in the field around it */
+  ['plA','coreB',[0,0.14,-0.34]], ['plB','coreA',[0.36,0.06,-0.20]], ['plC','coreA',[-0.36,0.06,-0.20]],
+];
+
+function golemPose(b, an, st){
+  const s=Math.sin(an.ph*0.72), w=an.walk;
+  const pulse=Math.sin(st.t*1.5)*0.5+0.5;
+  /* a slow, heavy stride: the knee barely bends, the foot slams flat, and the
+     whole mass rocks side to side because it cannot balance on one column */
+  b.legL.rotation.x =  s*0.52*w;   b.legR.rotation.x = -s*0.52*w;
+  b.kneeL.rotation.x = Math.max(0,-s)*0.46*w;
+  b.kneeR.rotation.x = Math.max(0, s)*0.46*w;
+  b.footL.rotation.x = -Math.max(0,-s)*0.30*w;
+  b.footR.rotation.x = -Math.max(0, s)*0.30*w;
+  b.base.position.y = 0.70 - Math.abs(s)*0.05*w;
+  b.base.rotation.z = -s*0.10*w;
+  b.base.rotation.x = 0.03*w;
+  b.base.rotation.y = 0;
+  /* arms lag the body by half a beat — that lag is the weight */
+  const lag=Math.sin(an.ph*0.72-0.8);
+  b.shldL.rotation.x = -lag*0.40*w - 0.06;
+  b.shldR.rotation.x =  lag*0.40*w - 0.06;
+  b.shldL.rotation.z =  0.20 + Math.abs(lag)*0.05*w;
+  b.shldR.rotation.z = -0.20 - Math.abs(lag)*0.05*w;
+  b.armL.rotation.x = -0.34 - Math.max(0,-lag)*0.20*w;
+  b.armR.rotation.x = -0.34 - Math.max(0, lag)*0.20*w;
+  b.armL.rotation.z = 0; b.armR.rotation.z = 0;
+  b.fistL.rotation.x = 0.16; b.fistR.rotation.x = 0.16;
+  b.coreA.rotation.y = s*0.06*w;
+  b.coreA.rotation.x = 0;  b.coreA.rotation.z = 0;
+  b.coreB.rotation.y = -s*0.07*w;
+  b.coreB.rotation.x = -0.04 + pulse*0.02;
+  b.coreB.rotation.z = 0;
+  b.hood.rotation.x = 0.05 - pulse*0.03;
+  b.hood.rotation.y = Math.sin(st.t*0.5)*0.08;
+  b.hood.rotation.z = 0;
+  b.jaw.rotation.x  = 0.06 + pulse*0.10;
+  /* the loose plates orbit lazily and breathe with the core */
+  b.plA.rotation.y = st.t*0.5;   b.plA.rotation.x = Math.sin(st.t*0.9)*0.14;
+  b.plB.rotation.y = -st.t*0.4;  b.plB.rotation.z = Math.sin(st.t*1.1)*0.18;
+  b.plC.rotation.y = -st.t*0.4;  b.plC.rotation.z = Math.sin(st.t*1.1+2.0)*0.18;
+  b.plA.position.y = 0.14 + pulse*0.05;
+  b.plB.position.x = 0.36 + pulse*0.05;
+  b.plC.position.x = -0.36 - pulse*0.05;
+
+  if(an.atk>=0){
+    /* an overhead two-fisted slam: it winds up SLOWLY and lands all at once */
+    const a=an.atk;
+    const wind = a<0.42 ? a/0.42 : Math.max(0, 1-(a-0.42)/0.12);
+    const drop = a>=0.42 ? Math.min(1,(a-0.42)/0.10) * Math.max(0,1-(a-0.62)/0.38) : 0;
+    b.shldL.rotation.x = -0.06 - 2.30*wind + 1.70*drop;
+    b.shldR.rotation.x = -0.06 - 2.30*wind + 1.70*drop;
+    b.armL.rotation.x  = -0.34 - 0.55*wind + 0.40*drop;
+    b.armR.rotation.x  = -0.34 - 0.55*wind + 0.40*drop;
+    b.coreB.rotation.x = -0.04 - 0.30*wind + 0.46*drop;
+    b.coreA.rotation.x = -0.14*wind + 0.22*drop;
+    b.hood.rotation.x  = 0.05 - 0.24*wind + 0.34*drop;
+    b.jaw.rotation.x   = 0.06 + 0.60*wind;
+    b.base.position.y  = 0.70 + 0.09*wind - 0.16*drop;
+    b.legL.rotation.x += 0.20*drop; b.legR.rotation.x += 0.20*drop;
+    b.kneeL.rotation.x += 0.30*drop; b.kneeR.rotation.x += 0.30*drop;
+  }
+  if(an.hurt>0){
+    /* a golem does not stagger, it grinds: the flinch is small and the plates
+       are what scatter */
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.coreA.rotation.x += 0.14*hf*h;
+    b.coreA.rotation.z += -0.12*hr*h;
+    b.coreB.rotation.x += 0.16*hf*h;
+    b.coreB.rotation.z += -0.14*hr*h;
+    b.hood.rotation.x  += 0.20*hf*h;
+    b.hood.rotation.z  += -0.16*hr*h;
+    b.jaw.rotation.x   += 0.40*h;
+    b.shldL.rotation.z += 0.22*h; b.shldR.rotation.z -= 0.22*h;
+    b.base.position.y  -= 0.05*h;
+    b.plA.position.y   += 0.16*h;
+    b.plB.position.x   += 0.14*h; b.plC.position.x -= 0.14*h;
+  }
+}
+
+function golemAnatomy(V){
+  const SEAM = V.seam||'glow';
+  return [
+    /* the mass: overlapping boulders, largest at the shoulders */
+    {b:'base',  shape:'sphere', w:0.86, det:1, sy:0.74, y:0.00, c:'dark'},
+    {b:'base',  shape:'sphere', w:0.52, det:1, sy:0.70, x: 0.30, y:-0.06, c:'dark'},
+    {b:'base',  shape:'sphere', w:0.52, det:1, sy:0.70, x:-0.30, y:-0.06, c:'dark'},
+    {b:'coreA', shape:'sphere', w:0.92, det:1, sy:0.82, y:0.02, c:'mid'},
+    {b:'coreA', shape:'sphere', w:0.58, det:1, sy:0.74, y:0.00, z:0.28, c:'mid'},
+    {b:'coreB', shape:'sphere', w:1.06, det:1, sy:0.74, y:0.04, c:'mid'},
+    {b:'coreB', shape:'sphere', w:0.72, det:1, sy:0.66, y:0.06, z:0.28, c:'lite'},
+    {b:'coreB', shape:'sphere', w:0.66, det:1, sy:0.60, y:0.08, z:-0.26, c:'dark'},
+    /* the core: a socket with a burning stone in it */
+    {b:'coreA', shape:'sphere', w:0.46, det:1, sy:0.90, y:0.06, z:0.34, c:'out'},
+    {b:'coreA', shape:'sphere', w:0.31, det:1, y:0.06, z:0.40, c:SEAM},
+    {b:'coreA', shape:'sphere', w:0.17, det:1, y:0.06, z:0.46, c:'#ffffff'},
+    ...[0,1,2,3,4,5].map(i=>{
+      const a=i/6*6.283;
+      return {b:'coreA', shape:'box', w:0.07, h:0.20, d:0.05, rot:[0,0,a],
+              x:Math.sin(a)*0.29, y:0.06+Math.cos(a)*0.29, z:0.36, c:'out'};
+    }),
+    /* head: a wedge growing straight out of the shoulders, no neck */
+    {b:'hood', shape:'sphere', w:0.60, det:1, sy:0.82, y:0.04, c:'lite'},
+    {b:'hood', shape:'sphere', w:0.44, det:1, sy:0.66, y:-0.04, z:0.20, c:'lite'},
+    {b:'hood', shape:'box', w:0.46, h:0.09, d:0.20, rot:[0.20,0,0], y:0.09, z:0.20, c:'out'},
+    {b:'hood', shape:'sphere', w:0.17, det:1, x: 0.135,y:0.000,z:0.300, c:SEAM},
+    {b:'hood', shape:'sphere', w:0.17, det:1, x:-0.135,y:0.000,z:0.300, c:SEAM},
+    {b:'hood', shape:'sphere', w:0.075,det:0, x: 0.140,y:0.020,z:0.355, c:'#ffffff'},
+    {b:'hood', shape:'sphere', w:0.075,det:0, x:-0.140,y:0.020,z:0.355, c:'#ffffff'},
+    {b:'jaw',  shape:'sphere', w:0.40, det:1, sy:0.44, y:-0.02, z:0.12, c:'lite'},
+    {b:'jaw',  shape:'box', w:0.30, h:0.05, d:0.06, y:0.04, z:0.24, c:SEAM},
+    ...[0.09,-0.09].map(x=>({b:'jaw', shape:'cone', w:0.09,h:0.13, rot:[3.1416,0,0], x, y:0.10, z:0.20, c:'out'})),
+    ...['L','R'].flatMap(sd=>{
+      const f = sd==='L'?1:-1;
+      return [
+        {b:'shld'+sd, shape:'sphere', w:0.62, det:1, sy:0.80, x:0.06*f, y:0.04, c:'lite'},
+        {b:'shld'+sd, shape:'sphere', w:0.40, det:1, sy:0.66, x:0.20*f, y:0.14, c:'lite'},
+        {b:'arm'+sd,  shape:'cyl', w:0.46, w2:0.40, h:0.40, y:-0.19, c:'mid'},
+        {b:'arm'+sd,  shape:'sphere', w:0.46, det:1, sy:0.88, y:-0.02, c:'mid'},
+        {b:'arm'+sd,  shape:'sphere', w:0.42, det:1, sy:0.86, y:-0.40, c:'mid'},   /* elbow */
+        {b:'fist'+sd, shape:'sphere', w:0.56, det:1, sy:0.92, y:-0.20, c:'lite'},
+        {b:'fist'+sd, shape:'sphere', w:0.30, det:1, x: 0.17*f, y:-0.30, z:0.10, c:'lite'},
+        {b:'fist'+sd, shape:'sphere', w:0.26, det:1, x:-0.08*f, y:-0.32, z:0.18, c:'lite'},
+        {b:'fist'+sd, shape:'cone', w:0.15, h:0.22, rot:[0,0,3.1416], y:-0.44, z:0.06, c:'out'},
+        {b:'leg'+sd,  shape:'cyl', w:0.46, w2:0.42, h:0.32, y:-0.15, c:'dark'},
+        {b:'leg'+sd,  shape:'sphere', w:0.48, det:1, sy:0.82, y:0.00, c:'dark'},
+        {b:'knee'+sd, shape:'sphere', w:0.44, det:1, sy:0.80, y:0.00, c:'dark'},
+        {b:'knee'+sd, shape:'cyl', w:0.42, w2:0.44, h:0.28, y:-0.14, c:'dark'},
+        {b:'foot'+sd, shape:'sphere', w:0.54, det:1, sy:0.46, y:-0.02, z:0.06, c:'out'},
+        {b:'foot'+sd, shape:'sphere', w:0.24, det:1, sy:0.50, x: 0.14*f, y:-0.04, z:0.20, c:'out'},
+        {b:'foot'+sd, shape:'sphere', w:0.22, det:1, sy:0.50, x:-0.10*f, y:-0.04, z:0.21, c:'out'},
+      ];
+    }),
+  ];
+}
+
+const GOLEM_COAT = {
+  /* A — STONE: mossy, root-bound, ancient. */
+  stone(){
+    const MOSS='#5f8f3e', ROOT='#4a3a22';
+    const t=[];
+    for(const [bn,y,z,w] of [['coreB',0.30,0.10,0.86],['coreA',0.26,0.06,0.70],['base',0.24,0.0,0.62]]){
+      t.push({b:bn, shape:'sphere', w:w, det:1, sy:0.26, y:y, z:z, c:MOSS});
+    }
+    t.push({b:'hood', shape:'sphere', w:0.52, det:1, sy:0.26, y:0.22, z:-0.02, c:MOSS});
+    /* roots wrapping the limbs */
+    for(const sd of ['L','R']){
+      const f=sd==='L'?1:-1;
+      t.push({b:'shld'+sd, shape:'cyl', w:0.14,w2:0.10,h:0.42, rot:[0.3,0,0.5*f], x:0.12*f, y:0.02, z:0.16, c:ROOT});
+      t.push({b:'arm'+sd,  shape:'cyl', w:0.11,w2:0.08,h:0.44, rot:[0.1,0,0.15*f], x:0.20*f, y:-0.18, c:ROOT});
+      t.push({b:'leg'+sd,  shape:'cyl', w:0.12,w2:0.09,h:0.36, rot:[0,0,-0.18*f], x:0.20*f, y:-0.14, c:ROOT});
+      t.push({b:'foot'+sd, shape:'cyl', w:0.10,w2:0.06,h:0.28, rot:[1.1,0,0], y:-0.06, z:0.22, c:ROOT});
+    }
+    /* a crown of standing stones, and moss hanging off the jaw */
+    for(let i=0;i<5;i++){
+      const a=(i/5-0.5)*2.4;
+      t.push({b:'hood', shape:'cone', w:0.13, h:0.30+((i%2)*0.12),
+              rot:[-0.18,0,a*0.5], x:Math.sin(a)*0.22, y:0.30, z:-0.05, c:'out'});
+    }
+    for(let i=0;i<4;i++){
+      t.push({b:'jaw', shape:'cyl', w:0.05,w2:0.02,h:0.22, rot:[0.5,0,(i-1.5)*0.3],
+              x:(i-1.5)*0.09, y:-0.08, z:0.18, c:MOSS});
+    }
+    /* the plates are slabs of rock */
+    for(const [bn,sc] of [['plA',1.0],['plB',0.8],['plC',0.8]]){
+      t.push({b:bn, shape:'box', w:0.40*sc, h:0.62*sc, d:0.13*sc, c:'lite'});
+      t.push({b:bn, shape:'box', w:0.30*sc, h:0.10*sc, d:0.15*sc, y:0.10*sc, c:'glow'});
+      t.push({b:bn, shape:'sphere', w:0.20*sc, det:0, y:-0.28*sc, c:'out'});
+    }
+    return t;
+  },
+
+  /* B — SLAG: half-melted, running with molten seams. */
+  slag(){
+    const MELT='#ff8a3c', CRUST='#2a1a14';
+    const t=[];
+    /* seams: cracks you can see the furnace through */
+    const seam=(bn,x,y,z,h2,rz)=>t.push({b:bn, shape:'box', w:0.07,h:h2,d:0.07, rot:[0,0,rz], x,y,z, c:MELT});
+    seam('coreB', 0.18,0.10,0.44,0.46, 0.35); seam('coreB',-0.22,0.02,0.40,0.34,-0.45);
+    seam('coreA', 0.30,0.00,0.36,0.32, 0.20); seam('coreA',-0.14,-0.10,0.40,0.26,-0.25);
+    seam('base',  0.24,0.02,0.36,0.30, 0.30); seam('base', -0.26,-0.02,0.32,0.24,-0.20);
+    seam('hood',  0.20,0.06,0.20,0.26, 0.40); seam('hood', -0.20,0.04,0.18,0.22,-0.40);
+    /* drips frozen mid-fall */
+    for(let i=0;i<8;i++){
+      const a=i/8*6.283, r=0.44;
+      t.push({b:'coreA', shape:'cone', w:0.09, h:0.26, rot:[3.1416,0,0],
+              x:Math.sin(a)*r, y:-0.22, z:Math.cos(a)*r*0.7, c:MELT});
+      t.push({b:'coreA', shape:'sphere', w:0.08, det:0,
+              x:Math.sin(a)*r, y:-0.36, z:Math.cos(a)*r*0.7, c:MELT});
+    }
+    /* crust flaking off the back and shoulders */
+    for(const sd of ['L','R']){
+      const f=sd==='L'?1:-1;
+      t.push({b:'shld'+sd, shape:'cone', w:0.24, h:0.34, rot:[-0.4,0,0.6*f], x:0.20*f, y:0.18, c:CRUST});
+      t.push({b:'shld'+sd, shape:'cone', w:0.18, h:0.26, rot:[-0.5,0,0.9*f], x:0.30*f, y:0.06, c:CRUST});
+      t.push({b:'arm'+sd,  shape:'sphere', w:0.30, det:0, sy:0.5, x:0.18*f, y:-0.22, c:CRUST});
+      t.push({b:'fist'+sd, shape:'sphere', w:0.28, det:0, y:-0.24, z:-0.16, c:MELT});
+      t.push({b:'knee'+sd, shape:'cone', w:0.18, h:0.22, rot:[-1.2,0,0], y:0.02, z:0.18, c:CRUST});
+    }
+    /* a vent stack instead of a crown */
+    for(let i=0;i<4;i++){
+      const a=(i/4-0.4)*2.0;
+      t.push({b:'hood', shape:'cyl', w:0.13,w2:0.10,h:0.26, rot:[-0.2,0,a*0.4],
+              x:Math.sin(a)*0.20, y:0.30, z:-0.06, c:CRUST});
+      t.push({b:'hood', shape:'sphere', w:0.10, det:0, x:Math.sin(a)*0.22, y:0.44, z:-0.07, c:MELT});
+    }
+    for(const [bn,sc] of [['plA',1.0],['plB',0.8],['plC',0.8]]){
+      t.push({b:bn, shape:'sphere', w:0.42*sc, det:1, sy:1.3, c:CRUST});
+      t.push({b:bn, shape:'box', w:0.09*sc, h:0.46*sc, d:0.09*sc, c:MELT});
+    }
+    return t;
+  },
+
+  /* C — RIME: ice grown over a frozen core. */
+  rime(){
+    const ICE='#cdeeff', DEEP='#3d84a8';
+    const t=[];
+    /* shards erupting along the back and shoulders, largest at the spine */
+    const shard=(bn,x,y,z,w,h2,rx,rz)=>{
+      t.push({b:bn, shape:'cone', w:w, h:h2, rot:[rx,0,rz], x,y,z, c:ICE});
+      t.push({b:bn, shape:'cone', w:w*0.5, h:h2*0.55, rot:[rx,0,rz], x,y:y+h2*0.10,z, c:'glow'});
+    };
+    shard('coreB', 0.00,0.34,-0.24, 0.26,0.66,-0.55,0);
+    shard('coreB', 0.30,0.26,-0.20, 0.20,0.48,-0.45, 0.40);
+    shard('coreB',-0.30,0.26,-0.20, 0.20,0.48,-0.45,-0.40);
+    shard('coreA', 0.24,0.16,-0.30, 0.17,0.40,-0.70, 0.30);
+    shard('coreA',-0.24,0.16,-0.30, 0.17,0.40,-0.70,-0.30);
+    shard('base',  0.00,0.14,-0.36, 0.15,0.34,-0.80, 0);
+    for(const sd of ['L','R']){
+      const f=sd==='L'?1:-1;
+      shard('shld'+sd, 0.22*f, 0.20,-0.04, 0.20,0.44,-0.30, 0.55*f);
+      shard('shld'+sd, 0.34*f, 0.02,-0.02, 0.15,0.30,-0.10, 1.00*f);
+      shard('arm'+sd,  0.20*f,-0.24, 0.02, 0.13,0.28, 0.00, 1.20*f);
+      shard('fist'+sd, 0.00, -0.30, 0.22, 0.16,0.36, 1.30, 0);
+      shard('knee'+sd, 0.00, -0.02, 0.20, 0.13,0.26, 1.35, 0);
+      t.push({b:'foot'+sd, shape:'sphere', w:0.46, det:1, sy:0.34, y:-0.14, z:0.04, c:ICE});
+    }
+    /* a crown of icicles, and frozen breath at the jaw */
+    for(let i=0;i<6;i++){
+      const a=(i/6-0.5)*2.8;
+      shard('hood', Math.sin(a)*0.24, 0.24, -0.04+Math.cos(a)*0.08, 0.11, 0.30+((i%2)*0.14), -0.15, a*0.5);
+    }
+    t.push({b:'jaw', shape:'sphere', w:0.22, det:0, sy:0.5, y:0.02, z:0.30, c:'glow'});
+    for(const [bn,sc] of [['plA',1.0],['plB',0.8],['plC',0.8]]){
+      t.push({b:bn, shape:'cone', w:0.34*sc, h:0.70*sc, rot:[0,0,0.2], c:ICE});
+      t.push({b:bn, shape:'cone', w:0.18*sc, h:0.40*sc, rot:[0,0,0.2], y:0.06*sc, c:'glow'});
+    }
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- ARACHNID */
+/* Eight legs, three joints each. Authored in bind pose as eight straight legs
+   hanging down; the pose function folds them into the crab stance, which is
+   why the femur can splay out AND swing fore/aft from one Euler. */
+const ARACH_BONES = (()=>{
+  const b = [
+    ['root',null,[0,0,0]],
+    ['ceph','root',[0,0.62,0.16]],           /* cephalothorax */
+    ['abdo','ceph',[0,0.06,-0.52]],
+    ['abTip','abdo',[0,-0.04,-0.46]],
+    ['head','ceph',[0,0.02,0.34]],
+    ['cheL','head',[ 0.10,-0.08,0.14]], ['cheR','head',[-0.10,-0.08,0.14]],
+    ['palpL','head',[ 0.19,-0.06,0.16]], ['palpR','head',[-0.19,-0.06,0.16]],
+  ];
+  for(const sd of ['L','R']) for(let i=0;i<4;i++){
+    b.push(['fm'+sd+i,'ceph',[(sd==='L'?0.18:-0.18), 0.02, 0.22-i*0.17]]);
+    b.push(['tb'+sd+i,'fm'+sd+i,[0,-0.34,0]]);
+    b.push(['ts'+sd+i,'tb'+sd+i,[0,-0.30,0]]);
+  }
+  return b;
+})();
+
+/* splay and fore/aft spread per leg pair, widest at the front */
+const ARACH_SPLAY = [1.98, 2.06, 2.10, 2.02];
+const ARACH_YAW   = [0.72, 0.26, -0.24, -0.70];
+
+function arachPose(b, an, st){
+  const w=an.walk, br=Math.sin(st.t*3.0)*0.5+0.5;
+  /* Alternating tetrapod: legs L0,R1,L2,R3 step while the others plant. Any
+     other pattern on eight legs reads as a wind-up toy. */
+  for(const sd of ['L','R']){
+    const f = sd==='L' ? 1 : -1;
+    for(let i=0;i<4;i++){
+      const group = ((i + (sd==='L'?0:1)) % 2);
+      const ph = an.ph*1.6 + group*Math.PI;
+      const s = Math.sin(ph), lift = Math.max(0, s);
+      const fm=b['fm'+sd+i], tb=b['tb'+sd+i], ts=b['ts'+sd+i];
+      fm.rotation.z = (ARACH_SPLAY[i] - lift*0.34*w) * f;
+      fm.rotation.y = (ARACH_YAW[i] + s*0.30*w) * f;
+      fm.rotation.x = 0;
+      tb.rotation.z = (-1.36 + lift*0.30*w) * f;
+      tb.rotation.x = 0;
+      ts.rotation.z = (-0.39 - lift*0.16*w) * f;
+      ts.rotation.x = 0;
+    }
+  }
+  /* the body hangs in the sling of the legs: it bobs at twice leg frequency */
+  b.ceph.position.y = 0.62 - Math.abs(Math.sin(an.ph*1.6))*0.045*w + br*0.010;
+  b.ceph.rotation.x = 0.02 + br*0.02;
+  b.ceph.rotation.y = Math.sin(an.ph*1.6)*0.05*w;
+  b.ceph.rotation.z = 0;
+  /* the abdomen is heavy and lags, which is most of what sells "spider" */
+  b.abdo.rotation.x = -0.16 + Math.sin(an.ph*1.6-0.9)*0.07*w + br*0.02;
+  b.abdo.rotation.y = Math.sin(an.ph*1.6-1.2)*0.09*w;
+  b.abdo.rotation.z = 0;
+  b.abTip.rotation.x = -0.10 + Math.sin(an.ph*1.6-1.6)*0.06*w;
+  b.abTip.rotation.y = Math.sin(an.ph*1.6-1.9)*0.07*w;
+  b.head.rotation.x = 0.06 - br*0.04;
+  b.head.rotation.y = Math.sin(st.t*0.8)*0.07;
+  b.head.rotation.z = 0;
+  /* chelicerae twitch constantly; pedipalps taste the air */
+  b.cheL.rotation.x = 0.10 + Math.sin(st.t*5.1)*0.10;
+  b.cheR.rotation.x = 0.10 + Math.sin(st.t*4.7+1.1)*0.10;
+  b.cheL.rotation.z =  0.18; b.cheR.rotation.z = -0.18;
+  b.palpL.rotation.x = -0.35 + Math.sin(st.t*2.3)*0.22;
+  b.palpR.rotation.x = -0.35 + Math.sin(st.t*2.1+2.0)*0.22;
+  b.palpL.rotation.z =  0.55; b.palpR.rotation.z = -0.55;
+
+  if(an.atk>=0){
+    /* rear onto the back four, fangs forward, then drop the whole body in */
+    const a=an.atk;
+    const rear = a<0.36 ? a/0.36 : Math.max(0, 1-(a-0.36)/0.14);
+    const stab = a>=0.36 ? Math.min(1,(a-0.36)/0.10)*Math.max(0,1-(a-0.58)/0.42) : 0;
+    b.ceph.rotation.x = 0.02 - 0.62*rear + 0.40*stab;
+    b.ceph.position.y = 0.62 + 0.20*rear - 0.10*stab;
+    b.abdo.rotation.x = -0.16 + 0.34*rear - 0.22*stab;
+    b.head.rotation.x = 0.06 + 0.30*rear - 0.44*stab;
+    b.cheL.rotation.x = 0.10 - 0.80*rear + 0.95*stab;
+    b.cheR.rotation.x = 0.10 - 0.80*rear + 0.95*stab;
+    b.cheL.rotation.z =  0.18 + 0.30*rear; b.cheR.rotation.z = -0.18 - 0.30*rear;
+    b.palpL.rotation.x = -0.35 - 0.70*rear; b.palpR.rotation.x = -0.35 - 0.70*rear;
+    for(const sd of ['L','R']){
+      const f=sd==='L'?1:-1;
+      for(let i=0;i<2;i++){
+        b['fm'+sd+i].rotation.z = (ARACH_SPLAY[i] - 0.70*rear)*f;
+        b['tb'+sd+i].rotation.z = (-1.36 - 0.45*rear + 0.60*stab)*f;
+      }
+    }
+  }
+  if(an.hurt>0){
+    /* legs snap inward — the universal arthropod flinch */
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.ceph.rotation.x += 0.26*hf*h;
+    b.ceph.rotation.z += -0.24*hr*h;
+    b.ceph.position.y -= 0.10*h;
+    b.abdo.rotation.x += 0.30*hf*h;
+    b.abdo.rotation.z += -0.20*hr*h;
+    b.head.rotation.x += 0.24*hf*h;
+    b.cheL.rotation.x += 0.50*h; b.cheR.rotation.x += 0.50*h;
+    b.palpL.rotation.x += 0.60*h; b.palpR.rotation.x += 0.60*h;
+    for(const sd of ['L','R']){
+      const f=sd==='L'?1:-1;
+      for(let i=0;i<4;i++){
+        b['fm'+sd+i].rotation.z += -0.42*h*f;
+        b['tb'+sd+i].rotation.z += -0.50*h*f;
+      }
+    }
+  }
+}
+
+function arachAnatomy(V){
+  const JOINT = V.joint||'out', CLAW = V.claw||'#22262f';
+  const p = [
+    /* cephalothorax: a domed carapace over a narrower underside */
+    {b:'ceph', shape:'sphere', w:0.72, det:1, sy:0.62, y:0.02, c:'mid'},
+    {b:'ceph', shape:'sphere', w:0.58, det:1, sy:0.50, y:0.10, z:0.06, c:'lite'},
+    {b:'ceph', shape:'sphere', w:0.60, det:1, sy:0.42, y:-0.08, c:'dark'},
+    {b:'ceph', shape:'sphere', w:0.42, det:1, sy:0.54, y:0.02, z:0.24, c:'mid'},
+    /* abdomen: two overlapping ovoids, the classic teardrop */
+    {b:'abdo', shape:'sphere', w:0.86, det:1, sy:0.82, y:-0.02, z:-0.10, c:'dark'},
+    {b:'abdo', shape:'sphere', w:0.70, det:1, sy:0.80, y:0.00, z:0.16, c:'dark'},
+    {b:'abTip',shape:'sphere', w:0.58, det:1, sy:0.78, y:-0.02, z:-0.14, c:'dark'},
+    {b:'abTip',shape:'sphere', w:0.30, det:1, sy:0.72, y:-0.04, z:-0.36, c:'out'},
+    /* spinnerets */
+    ...[[0.07,0.02],[-0.07,0.02],[0.04,-0.06],[-0.04,-0.06]].map(([x,y])=>
+      ({b:'abTip', shape:'cone', w:0.09, h:0.14, rot:[-1.5708,0,0], x, y:y-0.03, z:-0.46, c:'out'})),
+    /* head plate with the eye cluster: two big, six small, in two rows */
+    {b:'head', shape:'sphere', w:0.40, det:1, sy:0.70, y:0.00, z:0.06, c:'lite'},
+    {b:'head', shape:'sphere', w:0.30, det:1, sy:0.62, y:-0.03, z:0.18, c:'lite'},
+    {b:'head', shape:'sphere', w:0.125,det:1, x: 0.085,y:0.075,z:0.215, c:JOINT},
+    {b:'head', shape:'sphere', w:0.125,det:1, x:-0.085,y:0.075,z:0.215, c:JOINT},
+    {b:'head', shape:'sphere', w:0.090,det:1, x: 0.085,y:0.080,z:0.240, c:'glow'},
+    {b:'head', shape:'sphere', w:0.090,det:1, x:-0.085,y:0.080,z:0.240, c:'glow'},
+    {b:'head', shape:'sphere', w:0.032,det:0, x: 0.098,y:0.100,z:0.268, c:'#ffffff'},
+    {b:'head', shape:'sphere', w:0.032,det:0, x:-0.098,y:0.100,z:0.268, c:'#ffffff'},
+    ...[[0.185,0.045],[-0.185,0.045],[0.150,0.125],[-0.150,0.125],[0.052,0.135],[-0.052,0.135]]
+      .map(([x,y])=>({b:'head', shape:'sphere', w:0.058, det:0, x, y, z:0.190, c:'glow'})),
+    /* chelicerae with a hinged fang each */
+    {b:'cheL', shape:'sphere', w:0.20, det:1, sy:0.90, y:-0.05, c:'mid'},
+    {b:'cheR', shape:'sphere', w:0.20, det:1, sy:0.90, y:-0.05, c:'mid'},
+    {b:'cheL', shape:'cone', w:0.11, h:0.30, rot:[0.45,0,0.18], y:-0.20, z:0.02, c:CLAW},
+    {b:'cheR', shape:'cone', w:0.11, h:0.30, rot:[0.45,0,-0.18],y:-0.20, z:0.02, c:CLAW},
+    {b:'cheL', shape:'cone', w:0.055,h:0.14, rot:[0.45,0,0.18], y:-0.32, z:0.08, c:'glow'},
+    {b:'cheR', shape:'cone', w:0.055,h:0.14, rot:[0.45,0,-0.18],y:-0.32, z:0.08, c:'glow'},
+    /* pedipalps: short feeler limbs, always moving */
+    {b:'palpL',shape:'cyl', w:0.10,w2:0.07,h:0.24, y:-0.11, c:'mid'},
+    {b:'palpR',shape:'cyl', w:0.10,w2:0.07,h:0.24, y:-0.11, c:'mid'},
+    {b:'palpL',shape:'sphere', w:0.13, det:1, y:-0.25, c:'out'},
+    {b:'palpR',shape:'sphere', w:0.13, det:1, y:-0.25, c:'out'},
+  ];
+  /* legs: tapered segments with knuckles at every joint and a claw at the tip */
+  for(const sd of ['L','R']) for(let i=0;i<4;i++){
+    const t = 1 - i*0.07;                 /* front legs longest and thickest */
+    p.push({b:'fm'+sd+i, shape:'sphere', w:0.17*t, det:1, y:0.00, c:JOINT});
+    p.push({b:'fm'+sd+i, shape:'cyl', w:0.145*t, w2:0.115*t, h:0.34, y:-0.17, c:'mid'});
+    p.push({b:'tb'+sd+i, shape:'sphere', w:0.135*t, det:1, y:0.00, c:JOINT});
+    p.push({b:'tb'+sd+i, shape:'cyl', w:0.115*t, w2:0.085*t, h:0.30, y:-0.15, c:'mid'});
+    p.push({b:'ts'+sd+i, shape:'sphere', w:0.105*t, det:1, y:0.00, c:JOINT});
+    p.push({b:'ts'+sd+i, shape:'cyl', w:0.085*t, w2:0.040*t, h:0.38, y:-0.19, c:'dark'});
+    p.push({b:'ts'+sd+i, shape:'cone', w:0.055*t, h:0.13, rot:[0.6,0,0], y:-0.42, z:0.03, c:CLAW});
+  }
+  return p;
+}
+
+const ARACH_COAT = {
+  /* A — SPIDER: bristled and banded. The hair is what makes it crawl. */
+  spider(){
+    const t=[];
+    /* bristles on the abdomen, laid back in rows */
+    for(let r=0;r<4;r++) for(let i=0;i<6;i++){
+      const a=(i/6-0.42)*3.0, y=0.24-r*0.14, z=0.10-r*0.20;
+      t.push({b: r<2?'abdo':'abTip', shape:'cone', w:0.075, h:0.22,
+              rot:[-2.4,0,a*0.6], x:Math.sin(a)*(0.30-r*0.03), y:y*0.8, z:z, c:'out'});
+    }
+    /* dorsal markings: a pale chevron down the abdomen */
+    t.push({b:'abdo', shape:'sphere', w:0.30, det:1, sy:0.22, y:0.30, z:0.04, c:'lite'});
+    t.push({b:'abdo', shape:'sphere', w:0.22, det:1, sy:0.22, y:0.28, z:-0.22, c:'lite'});
+    t.push({b:'abTip',shape:'sphere', w:0.16, det:1, sy:0.22, y:0.22, z:-0.16, c:'lite'});
+    t.push({b:'ceph', shape:'sphere', w:0.34, det:1, sy:0.20, y:0.20, z:0.02, c:'lite'});
+    /* leg hair and pale joint bands */
+    for(const sd of ['L','R']) for(let i=0;i<4;i++){
+      const f=sd==='L'?1:-1;
+      t.push({b:'fm'+sd+i, shape:'cyl', w:0.155,w2:0.155,h:0.05, y:-0.30, c:'lite'});
+      t.push({b:'tb'+sd+i, shape:'cyl', w:0.125,w2:0.125,h:0.05, y:-0.27, c:'lite'});
+      for(let k=0;k<3;k++){
+        t.push({b:'fm'+sd+i, shape:'cone', w:0.05, h:0.16, rot:[0,0,1.2*f],
+                x:0.07*f, y:-0.08-k*0.10, c:'out'});
+        t.push({b:'tb'+sd+i, shape:'cone', w:0.04, h:0.13, rot:[0,0,1.2*f],
+                x:0.055*f, y:-0.07-k*0.09, c:'out'});
+      }
+    }
+    return t;
+  },
+
+  /* B — THORN: a plant wearing a spider's body plan. */
+  thorn(){
+    const BARK='#4a3a24', LEAF='#6fae4e';
+    const t=[];
+    /* bark plates over the carapace */
+    t.push({b:'ceph', shape:'sphere', w:0.74, det:1, sy:0.34, y:0.14, c:BARK});
+    t.push({b:'abdo', shape:'sphere', w:0.80, det:1, sy:0.44, y:0.20, z:-0.06, c:BARK});
+    t.push({b:'abTip',shape:'sphere', w:0.52, det:1, sy:0.42, y:0.14, z:-0.14, c:BARK});
+    /* thorns: a ridge down the back, longest over the abdomen */
+    for(let i=0;i<5;i++){
+      const s=1-i*0.12;
+      t.push({b:'abdo', shape:'cone', w:0.13*s, h:0.40*s, rot:[-0.45,0,0], y:0.26, z:0.14-i*0.16, c:'out'});
+    }
+    for(let i=0;i<3;i++){
+      t.push({b:'abTip', shape:'cone', w:0.10, h:0.28, rot:[-1.0,0,0], y:0.18, z:-0.14-i*0.13, c:'out'});
+    }
+    t.push({b:'ceph', shape:'cone', w:0.12, h:0.30, rot:[-0.3,0,0], y:0.22, z:0.06, c:'out'});
+    /* a flower on the abdomen: six petals and a glowing pistil */
+    for(let i=0;i<6;i++){
+      const a=i/6*6.283;
+      t.push({b:'abdo', shape:'cone', w:0.17, h:0.24, rot:[-0.9+Math.cos(a)*0.5,0,Math.sin(a)*0.6],
+              x:Math.sin(a)*0.16, y:0.34, z:-0.04+Math.cos(a)*0.16, c:'lite'});
+    }
+    t.push({b:'abdo', shape:'sphere', w:0.20, det:1, y:0.40, z:-0.04, c:'glow'});
+    /* leaves sprouting from the joints, and vine wraps on the femurs */
+    for(const sd of ['L','R']) for(let i=0;i<4;i++){
+      const f=sd==='L'?1:-1;
+      t.push({b:'fm'+sd+i, shape:'cyl', w:0.16,w2:0.16,h:0.06, y:-0.31, c:BARK});
+      t.push({b:'fm'+sd+i, shape:'cone', w:0.16, h:0.24, rot:[-1.6,0,0.9*f], x:0.07*f, y:-0.14, z:0.05, c:LEAF});
+      t.push({b:'tb'+sd+i, shape:'cone', w:0.12, h:0.19, rot:[-1.6,0,1.1*f], x:0.05*f, y:-0.12, z:0.04, c:LEAF});
+      t.push({b:'ts'+sd+i, shape:'cone', w:0.05, h:0.14, rot:[0,0,1.3*f], x:0.05*f, y:-0.22, c:'out'});
+    }
+    /* mandibles become woody pincers */
+    t.push({b:'cheL', shape:'cone', w:0.13, h:0.34, rot:[0.5,0,0.30], y:-0.22, z:0.02, c:BARK});
+    t.push({b:'cheR', shape:'cone', w:0.13, h:0.34, rot:[0.5,0,-0.30],y:-0.22, z:0.02, c:BARK});
+    t.push({b:'palpL',shape:'cone', w:0.14, h:0.20, rot:[-1.6,0,0.8], y:-0.14, z:0.04, c:LEAF});
+    t.push({b:'palpR',shape:'cone', w:0.14, h:0.20, rot:[-1.6,0,-0.8],y:-0.14, z:0.04, c:LEAF});
+    return t;
+  },
+
+  /* C — SHARD: grown out of the rift, not born. Faceted and lit from inside. */
+  shard(){
+    const t=[];
+    /* the abdomen is a crystal cluster, not a sac */
+    const spike=(bn,x,y,z,w,h2,rx,rz,c)=>t.push({b:bn, shape:'cone', w, h:h2, rot:[rx,0,rz], x,y,z, c});
+    spike('abdo', 0.00,0.34,-0.06, 0.26,0.62,-0.35,0,'lite');
+    spike('abdo', 0.26,0.22,-0.10, 0.19,0.44,-0.30, 0.55,'lite');
+    spike('abdo',-0.26,0.22,-0.10, 0.19,0.44,-0.30,-0.55,'lite');
+    spike('abTip',0.00,0.20,-0.28, 0.20,0.48,-0.90,0,'lite');
+    spike('abTip',0.16,0.06,-0.34, 0.13,0.30,-1.20, 0.40,'lite');
+    spike('abTip',-0.16,0.06,-0.34,0.13,0.30,-1.20,-0.40,'lite');
+    /* an exposed core burning inside the abdomen */
+    t.push({b:'abdo', shape:'sphere', w:0.40, det:1, y:0.04, z:-0.06, c:'out'});
+    t.push({b:'abdo', shape:'sphere', w:0.27, det:1, y:0.04, z:-0.06, c:'glow'});
+    t.push({b:'abdo', shape:'sphere', w:0.14, det:0, y:0.04, z:-0.06, c:'#ffffff'});
+    /* carapace facets and a crown over the eyes */
+    t.push({b:'ceph', shape:'cone', w:0.56, h:0.38, rot:[-0.25,0,0], y:0.14, z:0.02, c:'lite'});
+    spike('ceph', 0.22,0.22, 0.10, 0.13,0.30,-0.30, 0.45,'glow');
+    spike('ceph',-0.22,0.22, 0.10, 0.13,0.30,-0.30,-0.45,'glow');
+    spike('head', 0.00,0.20, 0.06, 0.12,0.30,-0.20,0,'glow');
+    /* the legs are blades: flat facets instead of tubes */
+    for(const sd of ['L','R']) for(let i=0;i<4;i++){
+      const f=sd==='L'?1:-1;
+      t.push({b:'fm'+sd+i, shape:'cone', w:0.20, h:0.36, rot:[0,0,3.1416], y:-0.16, c:'lite'});
+      t.push({b:'tb'+sd+i, shape:'cone', w:0.16, h:0.32, rot:[0,0,3.1416], y:-0.15, c:'lite'});
+      t.push({b:'fm'+sd+i, shape:'cone', w:0.07, h:0.18, rot:[0,0,1.3*f], x:0.08*f, y:-0.14, c:'glow'});
+      t.push({b:'ts'+sd+i, shape:'cone', w:0.07, h:0.42, rot:[0,0,3.1416], y:-0.22, c:'glow'});
+    }
+    t.push({b:'cheL', shape:'cone', w:0.12, h:0.36, rot:[0.45,0,0.18], y:-0.22, z:0.02, c:'glow'});
+    t.push({b:'cheR', shape:'cone', w:0.12, h:0.36, rot:[0.45,0,-0.18],y:-0.22, z:0.02, c:'glow'});
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- SERPENT */
+/* A chain of nine segments driven by a travelling wave. The wave PHASE
+   offset per segment is the whole trick: give every segment the same phase
+   and it wags like a stick, give it a gradient and it swims. */
+const SERPENT_BONES = [
+  ['root',null,[0,0,0]],
+  ['c0','root',[0,0.34,-1.00]],
+  ['c1','c0',[0,0.03,0.35]],
+  ['c2','c1',[0,0.03,0.35]],
+  ['c3','c2',[0,0.03,0.34]],
+  ['c4','c3',[0,0.03,0.33]],
+  ['c5','c4',[0,0.04,0.32]],
+  ['c6','c5',[0,0.05,0.30]],
+  ['c7','c6',[0,0.06,0.28]],
+  ['neck','c7',[0,0.06,0.24]],
+  ['head','neck',[0,0.05,0.20]],
+  ['jawU','head',[0,0.07,0.09]],
+  ['jawL','head',[0,-0.08,0.07]],
+  ['mandL','head',[ 0.15,-0.02,0.13]],
+  ['mandR','head',[-0.15,-0.02,0.13]],
+  ['finL','c4',[ 0.22,0.06,0]],
+  ['finR','c4',[-0.22,0.06,0]],
+];
+const SERP_CHAIN = ['c0','c1','c2','c3','c4','c5','c6','c7'];
+
+function serpentPose(b, an, st){
+  const w=an.walk, tt=st.t;
+  /* travelling wave: lateral, plus a smaller vertical one a quarter out of
+     phase, so it corkscrews instead of slithering flat */
+  const amp = 0.16 + w*0.16;
+  SERP_CHAIN.forEach((n,i)=>{
+    const ph = tt*3.0 + an.ph - i*0.72;
+    b[n].rotation.y = Math.sin(ph)*amp;
+    b[n].rotation.x = (i<5 ? 0.02 : 0.05) + Math.sin(ph-1.57)*amp*0.36;
+    b[n].rotation.z = 0;
+  });
+  /* the front third rears up and tracks the target */
+  /* The front third has to lift a long way before this stops reading as a
+     slug. Spread the pitch across four links so the rise is a curve, then
+     level the head back out on top of it. */
+  const rear = 0.62 + Math.sin(tt*1.3)*0.07;
+  b.c4.rotation.x -= rear*0.14;
+  b.c5.rotation.x -= rear*0.28;
+  b.c6.rotation.x -= rear*0.45;
+  b.c7.rotation.x -= rear*0.60;
+  b.neck.rotation.x = -rear*0.52 + Math.sin(tt*2.2)*0.05;
+  b.neck.rotation.y = Math.sin(tt*1.1)*0.10;
+  b.neck.rotation.z = 0;
+  b.head.rotation.x = rear*1.30 + Math.sin(tt*2.6)*0.04;
+  b.head.rotation.y = Math.sin(tt*0.9)*0.10;
+  b.head.rotation.z = 0;
+  const gape = 0.10 + Math.sin(tt*1.7)*0.06;
+  b.jawU.rotation.x = -gape*0.5;
+  b.jawL.rotation.x =  gape;
+  b.mandL.rotation.y = -0.30 + Math.sin(tt*4.1)*0.12;
+  b.mandR.rotation.y =  0.30 - Math.sin(tt*3.7+1.0)*0.12;
+  b.mandL.rotation.x = 0.10; b.mandR.rotation.x = 0.10;
+  b.finL.rotation.z =  0.30 + Math.sin(tt*3.4)*0.18*(0.4+w);
+  b.finR.rotation.z = -0.30 - Math.sin(tt*3.4)*0.18*(0.4+w);
+  b.finL.rotation.x = 0; b.finR.rotation.x = 0;
+  b.c0.position.y = 0.34;
+
+  if(an.atk>=0){
+    /* coil back, then strike the whole front half forward like a spring */
+    const a=an.atk;
+    const coil = a<0.34 ? a/0.34 : Math.max(0, 1-(a-0.34)/0.12);
+    const strike = a>=0.34 ? Math.min(1,(a-0.34)/0.09)*Math.max(0,1-(a-0.56)/0.44) : 0;
+    b.c5.rotation.x += 0.30*coil - 0.34*strike;
+    b.c6.rotation.x += 0.52*coil - 0.62*strike;
+    b.c7.rotation.x += 0.60*coil - 0.80*strike;
+    b.neck.rotation.x += 0.55*coil - 0.95*strike;
+    b.head.rotation.x += -0.30*coil + 0.60*strike;
+    b.jawU.rotation.x = -gape*0.5 - 0.55*coil - 0.30*strike;
+    b.jawL.rotation.x =  gape + 0.85*coil + 0.45*strike;
+    b.mandL.rotation.y = -0.30 - 0.55*coil + 0.30*strike;
+    b.mandR.rotation.y =  0.30 + 0.55*coil - 0.30*strike;
+    b.finL.rotation.z += 0.45*coil; b.finR.rotation.z -= 0.45*coil;
+    b.c0.position.y = 0.34 + 0.10*coil;
+  }
+  if(an.hurt>0){
+    /* the whole chain recoils in a ripple from the head back */
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    SERP_CHAIN.forEach((n,i)=>{
+      const fall = 1 - i/9;
+      b[n].rotation.x += 0.20*hf*h*fall;
+      b[n].rotation.z += -0.16*hr*h*fall;
+    });
+    b.neck.rotation.x += 0.34*hf*h;
+    b.neck.rotation.z += -0.22*hr*h;
+    b.head.rotation.x += 0.28*hf*h;
+    b.jawL.rotation.x += 0.70*h;
+    b.jawU.rotation.x -= 0.40*h;
+    b.mandL.rotation.y -= 0.50*h; b.mandR.rotation.y += 0.50*h;
+    b.c0.position.y -= 0.06*h;
+  }
+}
+
+function serpentAnatomy(V){
+  const R = V.r || [0.21,0.29,0.36,0.41,0.42,0.39,0.34,0.28];   /* body profile */
+  const p = [];
+  /* the body: two spheres per segment so the surface is continuous with no
+     seam anywhere along a two-metre animal */
+  SERP_CHAIN.forEach((n,i)=>{
+    const r=R[i];
+    p.push({b:n, shape:'sphere', w:r*2,      det:1, sy:0.88, y:0.00, z:0.04, c: i%2 ? 'mid':'lite'});
+    p.push({b:n, shape:'sphere', w:r*1.94,   det:1, sy:0.86, y:0.00, z:0.17, c: i%2 ? 'mid':'lite'});
+    p.push({b:n, shape:'sphere', w:r*1.86,   det:1, sy:0.84, y:0.00, z:0.28, c: i%2 ? 'mid':'lite'});
+    p.push({b:n, shape:'sphere', w:r*1.50,   det:1, sy:0.60, y:-r*0.42, z:0.14, c:'dark'}); /* belly */
+  });
+  p.push({b:'c0', shape:'cone', w:0.24, h:0.46, rot:[-1.5708,0,0], z:-0.26, c:'dark'});
+  /* head: a wedge skull with a hinged maw */
+  p.push({b:'neck', shape:'sphere', w:0.66, det:1, sy:0.88, z:0.06, c:'lite'});
+  /* the skull is WIDER than the neck behind it — a head that only tapers is
+     just the tail on the other end */
+  p.push({b:'head', shape:'sphere', w:0.84, det:1, sy:0.76, y:0.02, z:0.02, c:'lite'});
+  p.push({b:'head', shape:'sphere', w:0.74, det:1, sy:0.70, y:0.00, z:0.20, c:'lite'});
+  p.push({b:'head', shape:'cyl', w:0.60, w2:0.42, h:0.30, rot:[1.5708,0,0], y:-0.02, z:0.34, c:'lite'});
+  p.push({b:'head', shape:'sphere', w:0.38, det:1, sy:0.80, y:-0.02, z:0.46, c:'lite'});
+  p.push({b:'head', shape:'box', w:0.62, h:0.11, d:0.22, rot:[0.20,0,0], y:0.22, z:0.16, c:'out'});
+  /* eyes, set back on the skull and sunk in a socket */
+  for(const f of [1,-1]){
+    p.push({b:'head', shape:'sphere', w:0.24, det:1, x:0.275*f, y:0.115, z:0.095, c:'out'});
+    p.push({b:'head', shape:'sphere', w:0.165,det:1, x:0.300*f, y:0.115, z:0.135, c:'glow'});
+    p.push({b:'head', shape:'sphere', w:0.06, det:0, x:0.318*f, y:0.145, z:0.170, c:'#ffffff'});
+    p.push({b:'head', shape:'sphere', w:0.07, det:0, x:0.090*f, y:0.020, z:0.565, c:'out'}); /* nostril */
+  }
+  p.push({b:'jawU', shape:'cyl', w:0.54, w2:0.38, h:0.34, rot:[1.5708,0,0], y:-0.02, z:0.22, c:'lite'});
+  p.push({b:'jawL', shape:'cyl', w:0.52, w2:0.34, h:0.38, rot:[1.5708,0,0], y:0.00, z:0.23, c:'mid'});
+  p.push({b:'jawL', shape:'sphere', w:0.30, det:1, sy:0.44, y:0.04, z:0.16, c:'#8c3f4c'}); /* tongue */
+  /* opposing teeth: the upper set points down, the lower set up */
+  for(let i=0;i<4;i++) for(const f of [1,-1]){
+    const z=0.10+i*0.10, w=0.075-i*0.010;
+    p.push({b:'jawU', shape:'cone', w, h:0.16, rot:[3.1416,0,0], x:0.14*f, y:-0.10, z, c:V.tooth||'#e8e0c4'});
+    p.push({b:'jawL', shape:'cone', w:w*0.9, h:0.14, x:0.13*f, y:0.09, z:z+0.02, c:V.tooth||'#e8e0c4'});
+  }
+  p.push({b:'mandL', shape:'cone', w:0.16, h:0.42, rot:[0.9,0.5,0], y:-0.06, z:0.10, c:'dark'});
+  p.push({b:'mandR', shape:'cone', w:0.16, h:0.42, rot:[0.9,-0.5,0],y:-0.06, z:0.10, c:'dark'});
+  p.push({b:'finL',  shape:'cone', w:0.34, h:0.46, rot:[0,0,-1.1], x:0.14, y:0.06, c:'mid'});
+  p.push({b:'finR',  shape:'cone', w:0.34, h:0.46, rot:[0,0, 1.1], x:-0.14,y:0.06, c:'mid'});
+  return p;
+}
+
+const SERPENT_COAT = {
+  /* A — GRUB: soft, segmented, wet. Rings and bristles, no armour. */
+  grub(){
+    const t=[];
+    SERP_CHAIN.forEach((n,i)=>{
+      const r=[0.21,0.29,0.36,0.41,0.42,0.39,0.34,0.28][i];
+      /* a constriction ring between every pair of segments */
+      t.push({b:n, shape:'cyl', w:r*1.74, w2:r*1.74, h:0.07, rot:[1.5708,0,0], z:0.31, c:'dark'});
+      /* stubby prolegs underneath — how a grub actually moves */
+      for(const f of [1,-1]){
+        t.push({b:n, shape:'cyl', w:0.13, w2:0.09, h:0.20, rot:[0,0,-0.5*f],
+                x:r*0.62*f, y:-r*0.62, z:0.10, c:'dark'});
+        t.push({b:n, shape:'sphere', w:0.10, det:0, x:r*0.72*f, y:-r*0.80, z:0.11, c:'out'});
+      }
+      /* bristles along the dorsal line */
+      if(i%2===0) for(const f of [1,-1])
+        t.push({b:n, shape:'cone', w:0.07, h:0.22, rot:[-0.6,0,0.7*f], x:r*0.42*f, y:r*0.66, z:0.10, c:'out'});
+    });
+    /* wet sheen: a pale stripe down the spine */
+    SERP_CHAIN.forEach((n,i)=>{
+      const r=[0.21,0.29,0.36,0.41,0.42,0.39,0.34,0.28][i];
+      t.push({b:n, shape:'sphere', w:r*0.9, det:1, sy:0.22, y:r*0.76, z:0.12, c:'glow'});
+    });
+    t.push({b:'head', shape:'sphere', w:0.36, det:1, sy:0.26, y:0.30, z:0.08, c:'glow'});
+    return t;
+  },
+
+  /* B — WYRM: plated, ringed with teeth, built to come up through the floor. */
+  wyrm(){
+    const t=[];
+    SERP_CHAIN.forEach((n,i)=>{
+      const r=[0.21,0.29,0.36,0.41,0.42,0.39,0.34,0.28][i];
+      /* dorsal plate per segment, largest mid-body */
+      t.push({b:n, shape:'cone', w:r*1.5, h:r*1.15, rot:[-0.35,0,0], y:r*0.60, z:0.06, c:'out'});
+      /* lateral spines swept back */
+      for(const f of [1,-1]){
+        t.push({b:n, shape:'cone', w:r*0.52, h:r*1.5, rot:[-2.0,0,1.2*f],
+                x:r*0.86*f, y:r*0.16, z:0.08, c:'out'});
+      }
+      /* segment ridge */
+      t.push({b:n, shape:'cyl', w:r*2.04, w2:r*2.04, h:0.06, rot:[1.5708,0,0], z:0.31, c:'dark'});
+    });
+    /* an armoured skull with a horn crown */
+    t.push({b:'head', shape:'sphere', w:0.76, det:1, sy:0.50, y:0.20, z:0.02, c:'out'});
+    for(let i=0;i<5;i++){
+      const a=(i/5-0.5)*2.6;
+      t.push({b:'head', shape:'cone', w:0.13, h:0.36+((i%2)*0.14), rot:[-0.7,0,a*0.6],
+              x:Math.sin(a)*0.26, y:0.28, z:-0.02, c:'out'});
+    }
+    for(const f of [1,-1]){
+      t.push({b:'head', shape:'cone', w:0.17, h:0.50, rot:[-0.9,0,1.15*f], x:0.30*f, y:0.16, z:0.04, c:'out'});
+      t.push({b:'neck', shape:'cone', w:0.16, h:0.40, rot:[-1.7,0,1.0*f], x:0.34*f, y:0.10, c:'out'});
+    }
+    /* a second, inner ring of teeth — the lamprey read */
+    for(let i=0;i<8;i++){
+      const a=i/8*6.283;
+      t.push({b:'jawU', shape:'cone', w:0.06, h:0.16, rot:[3.1416,0,0],
+              x:Math.sin(a)*0.15, y:-0.06+Math.cos(a)*0.06, z:0.30, c:'#e8e0c4'});
+    }
+    t.push({b:'jawL', shape:'sphere', w:0.30, det:1, sy:0.40, y:0.02, z:0.26, c:'glow'});
+    /* molten/void seams down the flanks, brightest near the head */
+    SERP_CHAIN.forEach((n,i)=>{
+      const r=[0.21,0.29,0.36,0.41,0.42,0.39,0.34,0.28][i];
+      if(i<2) return;
+      for(const f of [1,-1])
+        t.push({b:n, shape:'box', w:0.06, h:r*0.90, d:0.06, rot:[0,0,0.3*f],
+                x:r*0.92*f, y:-r*0.10, z:0.12, c:'glow'});
+    });
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- WRAITH */
+/* No legs. Everything below the ribcage is shroud, and the shroud is a
+   three-link chain so it ripples instead of swinging like a pendulum. */
+const WRAITH_BONES = [
+  ['root',null,[0,0,0]],
+  ['core','root',[0,1.16,0]],
+  ['chest','core',[0,0.26,0]],
+  ['hood','chest',[0,0.26,0]],
+  ['jaw','hood',[0,-0.11,0.07]],
+  ['armL','chest',[ 0.30,0.10,0]], ['foreL','armL',[0,-0.34,0]], ['handL','foreL',[0,-0.32,0]],
+  ['armR','chest',[-0.30,0.10,0]], ['foreR','armR',[0,-0.34,0]], ['handR','foreR',[0,-0.32,0]],
+  ['shrA','core',[0,-0.26,0]], ['shrB','shrA',[0,-0.40,0]], ['shrC','shrB',[0,-0.38,0]],
+  ['wspL','core',[ 0.40,-0.06,-0.12]], ['wspR','core',[-0.40,-0.06,-0.12]],
+];
+
+function wraithPose(b, an, st){
+  const tt=st.t, w=an.walk;
+  const bob=Math.sin(tt*1.7), drift=Math.sin(tt*0.9);
+  b.core.position.y = 1.16 + bob*0.09;
+  b.core.rotation.x = 0.03 + w*0.10;
+  b.core.rotation.y = drift*0.22;
+  b.core.rotation.z = Math.sin(tt*1.1)*0.05;
+  b.chest.rotation.x = -0.04 + Math.sin(tt*1.4)*0.04;
+  b.chest.rotation.y = Math.sin(tt*0.7)*0.10;
+  b.chest.rotation.z = 0;
+  b.hood.rotation.x = 0.06 + Math.sin(tt*1.2)*0.05;
+  b.hood.rotation.y = Math.sin(tt*0.55)*0.16;
+  b.hood.rotation.z = Math.sin(tt*0.8)*0.06;
+  b.jaw.rotation.x = 0.10 + Math.sin(tt*1.9)*0.08;
+  /* arms hang and sway; the forearm lags the upper arm, which is what makes
+     a limb look boneless rather than broken */
+  b.armL.rotation.x = -0.20 + Math.sin(tt*1.3)*0.14 - w*0.35;
+  b.armR.rotation.x = -0.20 + Math.sin(tt*1.3+0.8)*0.14 - w*0.35;
+  b.armL.rotation.z =  0.42 + Math.sin(tt*1.0)*0.10;
+  b.armR.rotation.z = -0.42 - Math.sin(tt*1.0+0.6)*0.10;
+  b.foreL.rotation.x = -0.45 + Math.sin(tt*1.3-0.7)*0.16;
+  b.foreR.rotation.x = -0.45 + Math.sin(tt*1.3+0.1)*0.16;
+  b.foreL.rotation.z = 0; b.foreR.rotation.z = 0;
+  b.handL.rotation.x = 0.22 + Math.sin(tt*2.4)*0.12;
+  b.handR.rotation.x = 0.22 + Math.sin(tt*2.4+1.3)*0.12;
+  /* the shroud ripples: a travelling wave, same trick as the serpent */
+  const sw=(i)=>Math.sin(tt*2.1 - i*0.9);
+  b.shrA.rotation.x = 0.08 + sw(0)*0.10 + w*0.34;
+  b.shrB.rotation.x = 0.06 + sw(1)*0.13 + w*0.26;
+  b.shrC.rotation.x = 0.04 + sw(2)*0.16 + w*0.20;
+  b.shrA.rotation.z = Math.sin(tt*1.5)*0.07;
+  b.shrB.rotation.z = Math.sin(tt*1.5-0.8)*0.09;
+  b.shrC.rotation.z = Math.sin(tt*1.5-1.6)*0.11;
+  b.wspL.rotation.y = tt*1.1;  b.wspR.rotation.y = -tt*1.0;
+  b.wspL.rotation.x = Math.sin(tt*2.0)*0.30;
+  b.wspR.rotation.x = Math.sin(tt*2.0+2.1)*0.30;
+  b.wspL.position.y = -0.06 + Math.sin(tt*1.6)*0.10;
+  b.wspR.position.y = -0.06 + Math.sin(tt*1.6+1.7)*0.10;
+
+  if(an.atk>=0){
+    /* draw back into itself, then surge forward with both claws out */
+    const a=an.atk;
+    const draw = a<0.34 ? a/0.34 : Math.max(0, 1-(a-0.34)/0.12);
+    const cast = a>=0.34 ? Math.min(1,(a-0.34)/0.10)*Math.max(0,1-(a-0.58)/0.42) : 0;
+    b.core.position.y = 1.16 + bob*0.09 + 0.22*draw - 0.10*cast;
+    b.core.rotation.x = 0.03 - 0.30*draw + 0.42*cast;
+    b.chest.rotation.x = -0.04 - 0.26*draw + 0.40*cast;
+    b.hood.rotation.x = 0.06 + 0.30*draw - 0.36*cast;
+    b.jaw.rotation.x = 0.10 + 0.75*draw + 0.30*cast;
+    b.armL.rotation.x = -0.20 + 1.05*draw - 1.65*cast;
+    b.armR.rotation.x = -0.20 + 1.05*draw - 1.65*cast;
+    b.armL.rotation.z =  0.42 + 0.40*draw - 0.55*cast;
+    b.armR.rotation.z = -0.42 - 0.40*draw + 0.55*cast;
+    b.foreL.rotation.x = -0.45 - 0.60*draw + 0.75*cast;
+    b.foreR.rotation.x = -0.45 - 0.60*draw + 0.75*cast;
+    b.handL.rotation.x = 0.22 - 0.50*cast; b.handR.rotation.x = 0.22 - 0.50*cast;
+    b.shrA.rotation.x += -0.30*draw + 0.36*cast;
+    b.shrB.rotation.x += -0.24*draw + 0.30*cast;
+    b.shrC.rotation.x += -0.18*draw + 0.24*cast;
+  }
+  if(an.hurt>0){
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.core.position.y -= 0.16*h;
+    b.core.rotation.x += 0.36*hf*h;
+    b.core.rotation.z += -0.30*hr*h;
+    b.chest.rotation.x += 0.26*hf*h;
+    b.hood.rotation.x += 0.30*hf*h;
+    b.hood.rotation.z += -0.24*hr*h;
+    b.jaw.rotation.x += 0.55*h;
+    b.armL.rotation.z += 0.50*h; b.armR.rotation.z -= 0.50*h;
+    b.armL.rotation.x += -0.45*h; b.armR.rotation.x += -0.45*h;
+    b.shrA.rotation.x += 0.36*h; b.shrB.rotation.x += 0.30*h; b.shrC.rotation.x += 0.26*h;
+  }
+}
+
+function wraithAnatomy(V){
+  const VOID = V.void||'#090b12';
+  const p = [
+    /* torso: it fades from solid at the shoulders to nothing at the waist */
+    {b:'core',  shape:'sphere', w:0.66, det:1, sy:0.84, y:0.06, c:'mid'},
+    {b:'chest', shape:'sphere', w:0.78, det:1, sy:0.78, y:0.04, c:'mid'},
+    {b:'chest', shape:'sphere', w:0.86, det:1, sy:0.42, y:0.18, c:'lite'},   /* mantle */
+    {b:'chest', shape:'sphere', w:0.52, det:1, sy:0.62, y:0.02, z:0.20, c:'lite'},
+    /* the hood, and the nothing inside it */
+    {b:'hood', shape:'cone', w:0.64, h:0.58, rot:[-0.22,0,0], y:0.24, z:-0.10, c:'mid'},
+    {b:'hood', shape:'sphere', w:0.52, det:1, sy:0.92, y:0.02, z:-0.02, c:'mid'},
+    {b:'hood', shape:'cyl', w:0.48, w2:0.62, h:0.24, rot:[1.5708,0,0], y:0.02, z:0.12, c:'mid'},
+    {b:'hood', shape:'sphere', w:0.36, det:1, sy:0.94, y:0.02, z:0.15, c:VOID},
+    {b:'hood', shape:'cone', w:0.22, h:0.34, rot:[-0.55,0,0], y:0.30, z:-0.26, c:'mid'},
+    /* two burning points in the void, each with a halo */
+    {b:'hood', shape:'sphere', w:0.20, det:1, x: 0.100,y:0.050,z:0.360, c:'glow'},
+    {b:'hood', shape:'sphere', w:0.20, det:1, x:-0.100,y:0.050,z:0.360, c:'glow'},
+    {b:'hood', shape:'sphere', w:0.105,det:0, x: 0.100,y:0.058,z:0.415, c:'#ffffff'},
+    {b:'hood', shape:'sphere', w:0.105,det:0, x:-0.100,y:0.058,z:0.415, c:'#ffffff'},
+    {b:'jaw',  shape:'sphere', w:0.32, det:1, sy:0.44, y:-0.04, z:0.10, c:'dark'},
+    ...[0.09,0.03,-0.03,-0.09].map(x=>
+      ({b:'jaw', shape:'cone', w:0.05, h:0.12, x, y:0.06, z:0.16, c:'lite'})),
+    /* arms: long, thin, ending in a five-clawed hand */
+    ...['L','R'].flatMap(sd=>{
+      const f = sd==='L'?1:-1;
+      return [
+        {b:'arm'+sd,  shape:'sphere', w:0.30, det:1, sy:0.72, y:0.02, c:'lite'},
+        {b:'arm'+sd,  shape:'cyl', w:0.20, w2:0.145, h:0.34, y:-0.17, c:'mid'},
+        {b:'fore'+sd, shape:'sphere', w:0.155,det:1, y:0.00, c:'mid'},
+        {b:'fore'+sd, shape:'cyl', w:0.145,w2:0.105, h:0.32, y:-0.16, c:'mid'},
+        {b:'hand'+sd, shape:'sphere', w:0.135,det:1, sy:0.84, y:-0.05, c:'dark'},
+        ...[0,1,2].map(i=>({b:'hand'+sd, shape:'cone', w:0.070, h:0.36+((i%2)*0.08),
+             rot:[2.88,0,(i-1)*0.30*f], x:(i-1)*0.075*f, y:-0.24, z:0.03, c:'dark'})),
+        ...[0,1,2].map(i=>({b:'hand'+sd, shape:'cone', w:0.036, h:0.15,
+             rot:[2.88,0,(i-1)*0.30*f], x:(i-1)*0.095*f, y:-0.42, z:0.07, c:'glow'})),
+        {b:'hand'+sd, shape:'cone', w:0.060, h:0.26, rot:[2.55,0,-0.95*f], x:0.11*f, y:-0.14, z:0.03, c:'dark'},
+      ];
+    }),
+    /* wisps orbiting the body */
+    {b:'wspL', shape:'sphere', w:0.20, det:1, x:0.10, c:'glow'},
+    {b:'wspL', shape:'sphere', w:0.11, det:0, x:0.22, y:0.08, c:'glow'},
+    {b:'wspR', shape:'sphere', w:0.18, det:1, x:-0.10, c:'glow'},
+    {b:'wspR', shape:'sphere', w:0.10, det:0, x:-0.21, y:-0.07, c:'glow'},
+  ];
+  return p;
+}
+
+const WRAITH_COAT = {
+  /* A — SHADE: a ragged column of smoke that narrows to nothing. */
+  shade(){
+    const t=[];
+    /* the shroud: eight strips per link, each a different length, so the hem
+       is torn rather than cut straight */
+    const ring=(bn, r, len, c)=>{
+      for(let i=0;i<8;i++){
+        const a=i/8*6.283, L=len*(0.72+((i*5)%4)*0.14);
+        t.push({b:bn, shape:'cyl', w:r*0.46, w2:r*0.30, h:L,
+                rot:[0,0,0], x:Math.sin(a)*r*0.72, y:-L*0.45, z:Math.cos(a)*r*0.72, c});
+      }
+    };
+    t.push({b:'shrA', shape:'cyl', w:0.80, w2:0.66, h:0.42, y:-0.20, c:'mid'});
+    t.push({b:'shrB', shape:'cyl', w:0.66, w2:0.48, h:0.40, y:-0.19, c:'dark'});
+    t.push({b:'shrC', shape:'cyl', w:0.48, w2:0.16, h:0.42, y:-0.20, c:'dark'});
+    t.push({b:'shrC', shape:'cone', w:0.18, h:0.30, rot:[3.1416,0,0], y:-0.52, c:'dark'});
+    ring('shrA', 0.74, 0.40, 'mid');
+    ring('shrB', 0.58, 0.38, 'dark');
+    ring('shrC', 0.40, 0.34, 'dark');
+    /* the smoke thins upward: pale motes rising off the shoulders */
+    for(let i=0;i<6;i++){
+      const a=i/6*6.283;
+      t.push({b:'chest', shape:'sphere', w:0.10+((i%3)*0.03), det:0,
+              x:Math.sin(a)*0.46, y:0.24+((i*7)%3)*0.10, z:Math.cos(a)*0.40, c:'glow'});
+    }
+    return t;
+  },
+
+  /* B — WITCH: a caster. Horned crown, focus orb, heavy skirted shroud. */
+  witch(){
+    const t=[];
+    /* a crown of horns swept back from the hood */
+    for(let i=0;i<4;i++){
+      const f = i<2 ? 1 : -1, k = i%2;
+      t.push({b:'hood', shape:'cone', w:0.15-k*0.04, h:0.52-k*0.16,
+              rot:[-1.15,0,(0.55+k*0.42)*f], x:(0.20+k*0.13)*f, y:0.24-k*0.08, z:-0.04, c:'out'});
+    }
+    t.push({b:'hood', shape:'cone', w:0.13, h:0.44, rot:[-0.9,0,0], y:0.30, z:-0.10, c:'out'});
+    /* a heavy collar and a focus orb caged at the sternum */
+    t.push({b:'chest', shape:'cyl', w:0.80, w2:0.60, h:0.14, y:0.26, c:'out'});
+    t.push({b:'chest', shape:'sphere', w:0.30, det:1, y:0.02, z:0.30, c:'out'});
+    t.push({b:'chest', shape:'sphere', w:0.21, det:1, y:0.02, z:0.32, c:'glow'});
+    for(let i=0;i<4;i++){
+      const a=i/4*6.283+0.8;
+      t.push({b:'chest', shape:'box', w:0.04, h:0.26, d:0.04, rot:[0,0,a],
+              x:Math.sin(a)*0.15, y:0.02+Math.cos(a)*0.15, z:0.30, c:'out'});
+    }
+    /* the shroud is a skirt with a weighted hem, not a column of smoke */
+    /* pleats, not a barrel: a ring of overlapping panels at a widening
+       radius gives the skirt folds and a broken hem */
+    const pleat=(bn, r0, r1, len, c)=>{
+      t.push({b:bn, shape:'cyl', w:r0*1.55, w2:r1*1.55, h:len*0.94, y:-len*0.46, c:c});
+      for(let i=0;i<9;i++){
+        const a=i/9*6.283, wob=0.86+((i*5)%3)*0.10;
+        t.push({b:bn, shape:'cyl', w:r0*0.62, w2:r1*0.74, h:len*wob,
+                x:Math.sin(a)*(r0+r1)*0.46, y:-len*0.46, z:Math.cos(a)*(r0+r1)*0.46, c:c});
+      }
+    };
+    pleat('shrA', 0.44, 0.54, 0.44, 'mid');
+    pleat('shrB', 0.54, 0.66, 0.42, 'mid');
+    pleat('shrC', 0.66, 0.82, 0.44, 'dark');
+    for(let i=0;i<10;i++){
+      const a=i/10*6.283;
+      t.push({b:'shrC', shape:'cone', w:0.22, h:0.24+((i%3)*0.12), rot:[3.1416,0,0],
+              x:Math.sin(a)*0.66, y:-0.46, z:Math.cos(a)*0.66, c:'dark'});
+      t.push({b:'shrB', shape:'box', w:0.05, h:0.26, d:0.05,
+              x:Math.sin(a)*0.60, y:-0.20, z:Math.cos(a)*0.60, c:'glow'});
+    }
+    /* runes orbiting the hands */
+    for(const sd of ['L','R']){
+      for(let i=0;i<3;i++){
+        const a=i/3*6.283;
+        t.push({b:'hand'+sd, shape:'box', w:0.075, h:0.075, d:0.02,
+                rot:[0,0,a], x:Math.sin(a)*0.20, y:-0.10+Math.cos(a)*0.20, z:0.02, c:'glow'});
+      }
+    }
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- EYE */
+/* One orb, two lids, four tentacles of three links, and a shard ring.
+   The blink is what makes it alive — a sphere with a dot painted on it is
+   a prop, a sphere that BLINKS is watching you. */
+const EYE_BONES = (()=>{
+  const b = [
+    ['root',null,[0,0,0]],
+    ['orb','root',[0,1.24,0]],
+    /* iris and both lids hinge at the GLOBE CENTRE, so rotating them sweeps
+       across the surface. Hinged anywhere else, the iris swings off the eye
+       and the lids close on a point in mid-air. */
+    ['iris','orb',[0,0,0]],
+    ['lidU','orb',[0,0,0]],
+    ['lidD','orb',[0,0,0]],
+    ['ringA','orb',[0,0,0]], ['ringB','orb',[0,0,0]],
+  ];
+  const TEN = [[ 0.40,-0.26,-0.14],[-0.40,-0.26,-0.14],[ 0.24,-0.42,0.20],[-0.24,-0.42,0.20]];
+  TEN.forEach((p,i)=>{
+    b.push(['tn'+i,'orb',p]);
+    b.push(['tm'+i,'tn'+i,[0,-0.34,0]]);
+    b.push(['tt'+i,'tm'+i,[0,-0.30,0]]);
+  });
+  return b;
+})();
+
+function eyePose(b, an, st){
+  const tt=st.t, w=an.walk;
+  /* blink: a fast close-open on an irregular cycle, so it never looks metered */
+  const cyc = (tt*0.31)%1;
+  const blink = cyc>0.94 ? Math.sin((cyc-0.94)/0.06*Math.PI) : 0;
+  const bob = Math.sin(tt*1.6);
+  b.orb.position.y = 1.24 + bob*0.10;
+  b.orb.rotation.x = 0.02 + w*0.10 + Math.sin(tt*1.2)*0.04;
+  b.orb.rotation.y = Math.sin(tt*0.62)*0.26;
+  b.orb.rotation.z = Math.sin(tt*0.9)*0.06;
+  /* the iris tracks around inside the sclera instead of the whole head turning */
+  b.iris.rotation.x = Math.sin(tt*0.8)*0.22;
+  b.iris.rotation.y = Math.sin(tt*0.53)*0.34;
+  b.iris.rotation.z = 0;
+  b.iris.scale.setScalar(1 + Math.sin(tt*2.3)*0.05);
+  b.lidU.rotation.x =  0.16 + blink*1.30;
+  b.lidD.rotation.x = -0.14 - blink*1.24;
+  b.lidU.rotation.z = 0; b.lidD.rotation.z = 0;
+  /* tentacles: each one a quarter-phase behind the last */
+  for(let i=0;i<4;i++){
+    const ph = tt*1.9 + i*1.55 + an.ph;
+    const f = i%2 ? -1 : 1;
+    b['tn'+i].rotation.x =  0.30 + Math.sin(ph)*0.26 - w*0.30;
+    b['tn'+i].rotation.z =  (0.34 + Math.sin(ph*0.7)*0.16)*f;
+    b['tm'+i].rotation.x =  0.34 + Math.sin(ph-0.8)*0.32;
+    b['tm'+i].rotation.z =  (0.22 + Math.sin(ph*0.7-0.8)*0.20)*f;
+    b['tt'+i].rotation.x =  0.30 + Math.sin(ph-1.6)*0.38;
+    b['tt'+i].rotation.z =  (0.18 + Math.sin(ph*0.7-1.6)*0.24)*f;
+  }
+  b.ringA.rotation.y = tt*0.75;  b.ringA.rotation.x = 0.42;
+  b.ringB.rotation.y = -tt*0.55; b.ringB.rotation.x = -0.30;
+  b.ringA.rotation.z = 0; b.ringB.rotation.z = 0;
+
+  if(an.atk>=0){
+    /* the lids snap wide, the pupil dilates, the tentacles flare then whip */
+    const a=an.atk;
+    const charge = a<0.40 ? a/0.40 : Math.max(0, 1-(a-0.40)/0.14);
+    const fire   = a>=0.40 ? Math.min(1,(a-0.40)/0.08)*Math.max(0,1-(a-0.60)/0.40) : 0;
+    /* the lids pull BACK as it charges: it opens wider, it does not squint */
+    b.lidU.rotation.x =  0.16 - 0.34*charge + 0.18*fire;
+    b.lidD.rotation.x = -0.14 + 0.34*charge - 0.18*fire;
+    b.iris.scale.setScalar(1 + 0.22*charge + 0.34*fire);
+    b.iris.rotation.x = 0; b.iris.rotation.y = 0;
+    b.orb.position.y = 1.24 + bob*0.10 + 0.16*charge - 0.08*fire;
+    b.orb.rotation.x = 0.02 - 0.20*charge + 0.30*fire;
+    for(let i=0;i<4;i++){
+      const f = i%2 ? -1 : 1;
+      b['tn'+i].rotation.x = 0.30 - 0.85*charge + 0.70*fire;
+      b['tn'+i].rotation.z = (0.34 + 0.55*charge - 0.30*fire)*f;
+      b['tm'+i].rotation.x = 0.34 - 0.60*charge + 0.90*fire;
+      b['tt'+i].rotation.x = 0.30 - 0.40*charge + 0.95*fire;
+    }
+  }
+  if(an.hurt>0){
+    /* it squeezes shut and pulls its tentacles in */
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.orb.position.y -= 0.16*h;
+    b.orb.rotation.x += 0.34*hf*h;
+    b.orb.rotation.z += -0.30*hr*h;
+    b.lidU.rotation.x += 1.10*h;
+    b.lidD.rotation.x -= 1.04*h;
+    b.iris.scale.setScalar(Math.max(0.35, 1 - 0.45*h));
+    for(let i=0;i<4;i++){
+      const f = i%2 ? -1 : 1;
+      b['tn'+i].rotation.x += 0.70*h;
+      b['tm'+i].rotation.x += 0.80*h;
+      b['tt'+i].rotation.x += 0.85*h;
+      b['tn'+i].rotation.z += 0.30*h*f;
+    }
+  }
+}
+
+function eyeAnatomy(V){
+  const SCLERA = V.sclera||'mid', VEIN = V.vein||'out';
+  const p = [
+    /* the globe, with a flattened back so it has a front */
+    {b:'orb', shape:'sphere', w:1.16, det:2, c:SCLERA},
+    {b:'orb', shape:'sphere', w:1.02, det:2, sy:0.88, z:-0.14, c:'dark'},
+    /* Iris, pupil and specular as DISCS lying on the front of the globe. The
+       first pass put a domed 'cornea' sphere in front of them, which simply
+       buried the whole eye — the thing read as a closed pod. Nothing may sit
+       in front of the iris. */
+    /* Concentric SPHERES, each a little smaller and a little further forward,
+       so they read as rings from the front and as a bulging cornea in profile.
+       Flat discs here came out as a faceted washer: the cylinder builder is
+       seven-sided, which is fine for a limb and awful for a pupil. */
+    {b:'iris',shape:'sphere', w:0.90, det:2, sy:0.96, z:0.36, c:'out'},
+    {b:'iris',shape:'sphere', w:0.70, det:2, z:0.48, c:'glow'},
+    {b:'iris',shape:'sphere', w:0.36, det:2, z:0.66, c:'#08060c'},
+    {b:'iris',shape:'sphere', w:0.11, det:0, x: 0.105,y: 0.115,z:0.74, c:'#ffffff'},
+    {b:'iris',shape:'sphere', w:0.055,det:0, x:-0.095,y:-0.095,z:0.74, c:'#ffffff'},
+    /* radial iris fibres, sitting in the dark ring */
+    ...Array.from({length:12},(_,i)=>{
+      const a=i/12*6.283;
+      return {b:'iris', shape:'box', w:0.04, h:0.15, d:0.03, rot:[0,0,a],
+              x:Math.sin(a)*0.33, y:Math.cos(a)*0.33, z:0.44, c:'out'};
+    }),
+    /* veins crawling across the sclera, clear of the iris */
+    ...Array.from({length:9},(_,i)=>{
+      const a=i/9*6.283, r=0.54;
+      return {b:'orb', shape:'box', w:0.035, h:0.34+((i%3)*0.10), d:0.035, rot:[0,0,a],
+              x:Math.sin(a)*r, y:Math.cos(a)*r, z:0.16, c:VEIN};
+    }),
+    /* Lids: caps parked ABOVE and BELOW the globe at rest, so the eye is
+       genuinely open. The blink swings them forward about the centre until
+       they meet over the pupil. */
+    /* The lids must be NARROWER than the globe, or they form a shelf at the
+       equator and the whole thing reads as a bun with a filling. */
+    {b:'lidU', shape:'sphere', w:1.10, det:2, sy:0.42, y: 0.60, z:0.06, c:'dark'},
+    {b:'lidU', shape:'cyl', w:1.06, w2:0.90, h:0.09, y: 0.44, c:'out'},
+    {b:'lidD', shape:'sphere', w:1.08, det:2, sy:0.40, y:-0.60, z:0.06, c:'dark'},
+    {b:'lidD', shape:'cyl', w:1.04, w2:0.88, h:0.09, y:-0.44, c:'out'},
+    ...Array.from({length:7},(_,i)=>{
+      const x=(i-3)*0.13;
+      return {b:'lidU', shape:'cone', w:0.065,h:0.22, rot:[0.45,0,x*0.9],
+              x, y:0.74, z:0.10, c:'out'};
+    }),
+  ];
+  /* tentacles: tapering, ringed, ending in a barb */
+  for(let i=0;i<4;i++){
+    const s = i<2 ? 1 : 0.82;
+    p.push({b:'tn'+i, shape:'sphere', w:0.24*s, det:1, c:'out'});
+    p.push({b:'tn'+i, shape:'cyl', w:0.21*s, w2:0.17*s, h:0.34, y:-0.17, c:'mid'});
+    p.push({b:'tn'+i, shape:'cyl', w:0.225*s,w2:0.225*s,h:0.05, y:-0.24, c:'out'});
+    p.push({b:'tm'+i, shape:'sphere', w:0.185*s,det:1, c:'out'});
+    p.push({b:'tm'+i, shape:'cyl', w:0.165*s,w2:0.125*s,h:0.30, y:-0.15, c:'mid'});
+    p.push({b:'tm'+i, shape:'cyl', w:0.180*s,w2:0.180*s,h:0.05, y:-0.21, c:'out'});
+    p.push({b:'tt'+i, shape:'sphere', w:0.140*s,det:1, c:'out'});
+    p.push({b:'tt'+i, shape:'cyl', w:0.125*s,w2:0.060*s,h:0.30, y:-0.15, c:'mid'});
+    p.push({b:'tt'+i, shape:'cone', w:0.085*s,h:0.22, rot:[3.1416,0,0], y:-0.36, c:'glow'});
+  }
+  return p;
+}
+
+const EYE_COAT = {
+  /* A — WATCHER: bone brow, chitin hood, a ring of orbiting shards. */
+  watcher(){
+    const t=[];
+    /* a heavy chitin hood over the top half of the globe */
+    t.push({b:'orb', shape:'sphere', w:1.16, det:2, sy:0.48, y:0.38, z:-0.24, c:'out'});
+    t.push({b:'orb', shape:'cyl', w:1.10, w2:0.88, h:0.11, rot:[0.42,0,0], y:0.34, z:0.02, c:'dark'});
+    for(let i=0;i<7;i++){
+      const a=(i/7-0.5)*2.9;
+      t.push({b:'orb', shape:'cone', w:0.16, h:0.40+((i%2)*0.16), rot:[-0.55,0,a*0.7],
+              x:Math.sin(a)*0.52, y:0.50, z:-0.10+Math.cos(a)*0.10, c:'out'});
+    }
+    /* jaw plates under the globe */
+    t.push({b:'orb', shape:'sphere', w:1.04, det:2, sy:0.40, y:-0.44, z:-0.18, c:'out'});
+    for(let i=0;i<5;i++){
+      const a=(i/5-0.5)*2.4;
+      t.push({b:'orb', shape:'cone', w:0.13, h:0.30, rot:[3.6,0,a*0.6],
+              x:Math.sin(a)*0.42, y:-0.56, z:0.12, c:'dark'});
+    }
+    /* the shard ring: six pieces on each of two orbits */
+    for(const [bn,r,n,w] of [['ringA',1.05,6,0.22],['ringB',0.82,5,0.16]]){
+      for(let i=0;i<n;i++){
+        const a=i/n*6.283;
+        t.push({b:bn, shape:'cone', w:w, h:w*2.6, rot:[0,0,a+1.5708],
+                x:Math.sin(a)*r, y:Math.cos(a)*r, c:'lite'});
+        t.push({b:bn, shape:'sphere', w:w*0.5, det:0, x:Math.sin(a)*r, y:Math.cos(a)*r, c:'glow'});
+      }
+    }
+    return t;
+  },
+
+  /* B — FENWATCHER: soft, wet, fungal. Same eye, entirely different animal. */
+  fen(){
+    const t=[];
+    /* a sagging membrane hood with pustules */
+    t.push({b:'orb', shape:'sphere', w:1.14, det:2, sy:0.52, y:0.34, z:-0.28, c:'dark'});
+    for(let i=0;i<9;i++){
+      const a=i/9*6.283, r=0.50;
+      t.push({b:'orb', shape:'sphere', w:0.22+((i%3)*0.07), det:1,
+              x:Math.sin(a)*r, y:0.42+((i%2)*0.10), z:-0.16+Math.cos(a)*r*0.6, c:'mid'});
+      t.push({b:'orb', shape:'sphere', w:0.09, det:0,
+              x:Math.sin(a)*r, y:0.52+((i%2)*0.10), z:-0.16+Math.cos(a)*r*0.6, c:'glow'});
+    }
+    /* it drips: strands hanging off the lower lid and the tentacle roots */
+    for(let i=0;i<6;i++){
+      const x=(i-2.5)*0.17;
+      t.push({b:'lidD', shape:'cyl', w:0.06, w2:0.02, h:0.30+((i%3)*0.12), x, y:-0.34, z:0.06, c:'mid'});
+      t.push({b:'lidD', shape:'sphere', w:0.07, det:0, x, y:-0.54-((i%3)*0.10), z:0.06, c:'glow'});
+    }
+    /* spore caps riding the tentacles */
+    for(let i=0;i<4;i++){
+      t.push({b:'tn'+i, shape:'sphere', w:0.30, det:1, sy:0.44, y:-0.10, c:'lite'});
+      t.push({b:'tm'+i, shape:'sphere', w:0.24, det:1, sy:0.44, y:-0.08, c:'lite'});
+      t.push({b:'tt'+i, shape:'sphere', w:0.17, det:1, sy:0.50, y:-0.20, c:'glow'});
+    }
+    /* motes instead of shards */
+    for(const [bn,r,n] of [['ringA',1.0,7],['ringB',0.76,5]]){
+      for(let i=0;i<n;i++){
+        const a=i/n*6.283;
+        t.push({b:bn, shape:'sphere', w:0.13, det:0, x:Math.sin(a)*r, y:Math.cos(a)*r, c:'glow'});
+      }
+    }
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- FLYER */
+/* Three bones per wing. The outer panel LAGS the inner one — that lag is the
+   entire difference between a bird and a paper aeroplane on a string. */
+const FLYER_BONES = [
+  ['root',null,[0,0,0]],
+  ['body','root',[0,1.22,0]],
+  ['neck','body',[0,0.12,0.22]],
+  ['head','neck',[0,0.08,0.14]],
+  ['bkU','head',[0,-0.01,0.15]],
+  ['bkL','head',[0,-0.07,0.13]],
+  ['wiL','body',[ 0.20,0.14,0.02]], ['wmL','wiL',[ 0.42,0,0]], ['wtL','wmL',[ 0.40,0,0]],
+  ['wiR','body',[-0.20,0.14,0.02]], ['wmR','wiR',[-0.42,0,0]], ['wtR','wmR',[-0.40,0,0]],
+  ['tlA','body',[0,0.02,-0.34]], ['tlB','tlA',[0,-0.02,-0.30]],
+  ['lgL','body',[ 0.13,-0.22,0.04]], ['lgR','body',[-0.13,-0.22,0.04]],
+];
+
+function flyerPose(b, an, st){
+  const tt=st.t, w=an.walk;
+  const fl = tt*7.4 + an.ph;
+  const s = Math.sin(fl), sLag = Math.sin(fl-0.85);
+  const amp = 0.62 + w*0.34;
+  b.wiL.rotation.z =  s*amp + 0.34;
+  b.wiR.rotation.z = -s*amp - 0.34;
+  b.wmL.rotation.z =  sLag*amp*0.80 - 0.14;
+  b.wmR.rotation.z = -sLag*amp*0.80 + 0.14;
+  b.wtL.rotation.z =  Math.sin(fl-1.6)*amp*0.62 + 0.06;
+  b.wtR.rotation.z = -Math.sin(fl-1.6)*amp*0.62 - 0.06;
+  /* the wing also sweeps fore/aft, which is what stops it looking like a hinge */
+  b.wiL.rotation.y = -Math.sin(fl-0.4)*0.22;
+  b.wiR.rotation.y =  Math.sin(fl-0.4)*0.22;
+  b.wmL.rotation.y = -Math.sin(fl-1.1)*0.26;
+  b.wmR.rotation.y =  Math.sin(fl-1.1)*0.26;
+  b.wiL.rotation.x = 0; b.wiR.rotation.x = 0;
+  b.wmL.rotation.x = 0; b.wmR.rotation.x = 0;
+  b.wtL.rotation.x = 0; b.wtR.rotation.x = 0;
+  b.wtL.rotation.y = 0; b.wtR.rotation.y = 0;
+  /* the body rides opposite the downstroke */
+  b.body.position.y = 1.22 - s*0.09;
+  b.body.rotation.x = 0.10 + w*0.24 + s*0.06;
+  b.body.rotation.y = Math.sin(tt*0.7)*0.10;
+  b.body.rotation.z = Math.sin(tt*1.3)*0.06;
+  /* the head stays LEVEL while the body pitches — birds do this and it reads
+     instantly as a living thing rather than a rigid model */
+  b.neck.rotation.x = -0.14 - w*0.22 - s*0.06;
+  b.neck.rotation.y = Math.sin(tt*1.05)*0.16;
+  b.neck.rotation.z = 0;
+  b.head.rotation.x = 0.05 - s*0.03;
+  b.head.rotation.y = Math.sin(tt*1.7)*0.14;
+  b.head.rotation.z = 0;
+  const gape = Math.max(0, Math.sin(tt*0.9))*0.22;
+  b.bkU.rotation.x = -gape*0.4;
+  b.bkL.rotation.x =  gape;
+  b.tlA.rotation.x = 0.12 + s*0.10 + w*0.16;
+  b.tlB.rotation.x = 0.08 + Math.sin(fl-0.7)*0.12;
+  b.tlA.rotation.y = Math.sin(tt*0.8)*0.12; b.tlB.rotation.y = 0;
+  b.tlA.rotation.z = 0; b.tlB.rotation.z = 0;
+  b.lgL.rotation.x = 1.05 + Math.sin(tt*1.4)*0.10;
+  b.lgR.rotation.x = 1.05 + Math.sin(tt*1.4+0.7)*0.10;
+  b.lgL.rotation.z = 0.10; b.lgR.rotation.z = -0.10;
+
+  if(an.atk>=0){
+    /* a stoop: wings fold back, body tips nose-down, talons come forward */
+    const a=an.atk;
+    const fold = a<0.32 ? a/0.32 : Math.max(0, 1-(a-0.32)/0.16);
+    const dive = a>=0.32 ? Math.min(1,(a-0.32)/0.10)*Math.max(0,1-(a-0.58)/0.42) : 0;
+    b.wiL.rotation.z =  0.18 - 0.70*fold + 0.95*dive;
+    b.wiR.rotation.z = -0.18 + 0.70*fold - 0.95*dive;
+    b.wiL.rotation.y = -1.05*fold;  b.wiR.rotation.y = 1.05*fold;
+    b.wmL.rotation.y = -1.20*fold;  b.wmR.rotation.y = 1.20*fold;
+    b.wtL.rotation.y = -0.90*fold;  b.wtR.rotation.y = 0.90*fold;
+    b.body.rotation.x = 0.10 - 0.34*fold + 0.66*dive;
+    b.neck.rotation.x = -0.14 + 0.30*fold - 0.50*dive;
+    b.bkU.rotation.x = -0.55*fold - 0.30*dive;
+    b.bkL.rotation.x =  0.80*fold + 0.45*dive;
+    b.lgL.rotation.x = 1.05 - 1.55*dive; b.lgR.rotation.x = 1.05 - 1.55*dive;
+    b.tlA.rotation.x = 0.12 + 0.46*fold - 0.30*dive;
+  }
+  if(an.hurt>0){
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.body.position.y -= 0.14*h;
+    b.body.rotation.x += 0.36*hf*h;
+    b.body.rotation.z += -0.34*hr*h;
+    b.neck.rotation.x += 0.30*hf*h;
+    b.head.rotation.x += 0.24*hf*h;
+    b.bkL.rotation.x  += 0.70*h;
+    b.wiL.rotation.z  += 0.55*h; b.wiR.rotation.z -= 0.55*h;
+    b.wmL.rotation.z  += 0.40*h; b.wmR.rotation.z -= 0.40*h;
+    b.tlA.rotation.x  += 0.40*h;
+    b.lgL.rotation.x  += 0.40*h; b.lgR.rotation.x += 0.40*h;
+  }
+}
+
+function flyerAnatomy(V){
+  const BEAK = V.beak||'out';
+  const p = [
+    /* a teardrop body: widest at the shoulders, tapering to the tail */
+    {b:'body', shape:'sphere', w:0.72, det:1, sy:0.88, y:0.00, z:0.04, c:'mid'},
+    {b:'body', shape:'sphere', w:0.62, det:1, sy:0.82, y:0.04, z:0.22, c:'mid'},
+    {b:'body', shape:'sphere', w:0.54, det:1, sy:0.78, y:-0.02, z:-0.20, c:'dark'},
+    {b:'body', shape:'sphere', w:0.46, det:1, sy:0.70, y:-0.14, z:0.08, c:'lite'},  /* breast */
+    {b:'neck', shape:'cyl', w:0.30, w2:0.26, h:0.22, rot:[0.7,0,0], y:0.03, z:0.06, c:'mid'},
+    {b:'head', shape:'sphere', w:0.38, det:1, sy:0.92, y:0.02, c:'lite'},
+    {b:'head', shape:'sphere', w:0.30, det:1, sy:0.72, y:-0.02, z:0.10, c:'lite'},
+    /* eyes on the SIDES of the head, which is what makes it a bird */
+    {b:'head', shape:'sphere', w:0.125,det:1, x: 0.145,y:0.045,z:0.055, c:'out'},
+    {b:'head', shape:'sphere', w:0.125,det:1, x:-0.145,y:0.045,z:0.055, c:'out'},
+    {b:'head', shape:'sphere', w:0.085,det:1, x: 0.163,y:0.045,z:0.065, c:'glow'},
+    {b:'head', shape:'sphere', w:0.085,det:1, x:-0.163,y:0.045,z:0.065, c:'glow'},
+    {b:'head', shape:'sphere', w:0.030,det:0, x: 0.180,y:0.065,z:0.085, c:'#ffffff'},
+    {b:'head', shape:'sphere', w:0.030,det:0, x:-0.180,y:0.065,z:0.085, c:'#ffffff'},
+    {b:'bkU',  shape:'cone', w:0.17, h:0.34, rot:[1.42,0,0], y:0.01, z:0.16, c:BEAK},
+    {b:'bkU',  shape:'sphere', w:0.055,det:0, x: 0.045,y:0.045,z:0.06, c:'dark'},
+    {b:'bkU',  shape:'sphere', w:0.055,det:0, x:-0.045,y:0.045,z:0.06, c:'dark'},
+    {b:'bkL',  shape:'cone', w:0.145,h:0.28, rot:[1.50,0,0], y:0.01, z:0.13, c:BEAK},
+    {b:'tlA',  shape:'cyl', w:0.30, w2:0.26, h:0.26, rot:[1.5708,0,0], z:-0.12, c:'dark'},
+    {b:'tlB',  shape:'cyl', w:0.26, w2:0.16, h:0.26, rot:[1.5708,0,0], z:-0.12, c:'dark'},
+  ];
+  /* wings: three panels, each a flattened tapering slab, plus a leading-edge
+     bone so the wing has a spar rather than being a floating sheet */
+  for(const sd of ['L','R']){
+    const f = sd==='L'?1:-1;
+    p.push({b:'wi'+sd, shape:'sphere', w:0.30, det:1, sy:0.76, x:0.06*f, c:'lite'});
+    p.push({b:'wi'+sd, shape:'cyl', w:0.22, w2:0.18, h:0.42, rot:[0,0,1.5708], x:0.21*f, c:'mid'});
+    /* The panels have to be THIN and the chord has to taper and sweep back,
+       or the wing is three slabs on a stick. Thickness is the tell: at 0.05
+       you see the edge of every panel and it reads as plywood. */
+    p.push({b:'wi'+sd, shape:'box', w:0.44, h:0.022, d:0.56, x:0.22*f, y:-0.010, z:-0.11, c:'mid'});
+    p.push({b:'wi'+sd, shape:'box', w:0.40, h:0.020, d:0.26, x:0.24*f, y: 0.012, z: 0.10, c:'lite'});
+    p.push({b:'wm'+sd, shape:'cyl', w:0.17, w2:0.13, h:0.40, rot:[0,0,1.5708], x:0.20*f, c:'mid'});
+    p.push({b:'wm'+sd, shape:'box', w:0.42, h:0.020, d:0.46, x:0.21*f, y:-0.010, z:-0.17, c:'dark'});
+    p.push({b:'wm'+sd, shape:'box', w:0.38, h:0.018, d:0.20, x:0.22*f, y: 0.010, z: 0.07, c:'mid'});
+    p.push({b:'wt'+sd, shape:'cyl', w:0.12, w2:0.06, h:0.38, rot:[0,0,1.5708], x:0.19*f, c:'dark'});
+    p.push({b:'wt'+sd, shape:'box', w:0.40, h:0.018, d:0.32, x:0.20*f, y:-0.010, z:-0.24, c:'dark'});
+    p.push({b:'lg'+sd, shape:'cyl', w:0.08, w2:0.06, h:0.24, y:-0.12, c:BEAK});
+    p.push({b:'lg'+sd, shape:'sphere', w:0.09, det:0, y:-0.24, z:0.02, c:BEAK});
+    for(let i=0;i<3;i++)
+      p.push({b:'lg'+sd, shape:'cone', w:0.035, h:0.13, rot:[2.5,0,(i-1)*0.35],
+              x:(i-1)*0.035*f, y:-0.28, z:0.06, c:'out'});
+  }
+  return p;
+}
+
+const FLYER_COAT = {
+  /* A — CORVID: feathered. Primaries, coverts, a ruff, a fanned tail. */
+  corvid(){
+    const t=[];
+    for(const sd of ['L','R']){
+      const f = sd==='L'?1:-1;
+      /* primaries: separated quills off the wing tip, fanned */
+      for(let i=0;i<5;i++){
+        const a=(i/4-0.5)*0.9;
+        t.push({b:'wt'+sd, shape:'box', w:0.40, h:0.035, d:0.10,
+                rot:[0,a,0], x:0.30*f, y:-0.02, z:-0.06-i*0.10, c:'dark'});
+        t.push({b:'wt'+sd, shape:'cone', w:0.09, h:0.26, rot:[0,0,1.5708*f],
+                x:0.50*f, y:-0.02, z:-0.06-i*0.10, c:'out'});
+      }
+      /* secondaries and coverts */
+      for(let i=0;i<4;i++)
+        t.push({b:'wm'+sd, shape:'box', w:0.38, h:0.035, d:0.11,
+                x:0.22*f, y:-0.025, z:-0.06-i*0.11, c:'dark'});
+      t.push({b:'wi'+sd, shape:'sphere', w:0.34, det:1, sy:0.44, x:0.16*f, y:0.04, z:-0.02, c:'lite'});
+      for(let i=0;i<3;i++)
+        t.push({b:'wi'+sd, shape:'cone', w:0.13, h:0.24, rot:[-1.5708,0,1.3*f],
+                x:0.12*f+i*0.12*f, y:0.06, z:-0.04, c:'lite'});
+    }
+    /* neck ruff: the raven's hackles */
+    for(let i=0;i<9;i++){
+      const a=i/9*6.283;
+      t.push({b:'neck', shape:'cone', w:0.12, h:0.26, rot:[-2.2,0,a*0.5],
+              x:Math.sin(a)*0.20, y:0.02, z:0.02+Math.cos(a)*0.14, c:'lite'});
+    }
+    /* crown feathers and a fanned tail */
+    for(let i=0;i<4;i++)
+      t.push({b:'head', shape:'cone', w:0.10, h:0.22, rot:[-2.5,0,(i-1.5)*0.3],
+              x:(i-1.5)*0.06, y:0.14, z:-0.04, c:'lite'});
+    for(let i=0;i<7;i++){
+      const a=(i-3)*0.19;
+      t.push({b:'tlB', shape:'box', w:0.10, h:0.035, d:0.46, rot:[0,a,0],
+              x:Math.sin(a)*0.18, y:-0.01, z:-0.30, c:'dark'});
+      t.push({b:'tlB', shape:'cone', w:0.08, h:0.18, rot:[-1.5708,a,0],
+              x:Math.sin(a)*0.30, y:-0.01, z:-0.52, c:'out'});
+    }
+    t.push({b:'body', shape:'sphere', w:0.60, det:1, sy:0.34, y:0.22, z:-0.02, c:'lite'});
+    return t;
+  },
+
+  /* B — SWARM: not one creature. A knot of bodies flying in formation, with
+     blurred membrane wings. Same skeleton; the parts just stop being a bird. */
+  swarm(){
+    const t=[];
+    /* strip the bird silhouette back to a dense cluster of motes */
+    const mote=(bn,x,y,z,w,c)=>{
+      t.push({b:bn, shape:'sphere', w:w, det:1, sy:0.80, x,y,z, c});
+      t.push({b:bn, shape:'sphere', w:w*0.42, det:0, x:x+w*0.20, y:y+w*0.10, z:z+w*0.22, c:'glow'});
+    };
+    mote('body', 0.00, 0.06, 0.10, 0.44,'mid');
+    mote('body', 0.26,-0.10,-0.12, 0.30,'dark');
+    mote('body',-0.24,-0.06,-0.16, 0.28,'dark');
+    mote('body', 0.10, 0.22,-0.20, 0.24,'lite');
+    mote('body',-0.14, 0.18, 0.18, 0.22,'lite');
+    mote('neck', 0.00, 0.06, 0.06, 0.26,'mid');
+    mote('head', 0.14, 0.04,-0.02, 0.22,'mid');
+    mote('head',-0.12, 0.08, 0.04, 0.20,'lite');
+    mote('tlA',  0.08,-0.04,-0.16, 0.22,'dark');
+    mote('tlB', -0.08, 0.02,-0.18, 0.18,'dark');
+    for(const sd of ['L','R']){
+      const f = sd==='L'?1:-1;
+      mote('wi'+sd, 0.26*f, 0.02, 0.02, 0.24,'mid');
+      mote('wm'+sd, 0.24*f,-0.02,-0.04, 0.20,'dark');
+      mote('wt'+sd, 0.22*f, 0.02, 0.02, 0.16,'lite');
+      /* membrane wings: two thin panels per segment, offset, to fake the blur */
+      for(const [bn,w2,d,o] of [['wi'+sd,0.44,0.36,0.03],['wm'+sd,0.40,0.34,0.03],['wt'+sd,0.34,0.28,0.02]]){
+        t.push({b:bn, shape:'box', w:w2, h:0.015, d:d, x:0.21*f, y: o, z:-0.06, c:'lite'});
+        t.push({b:bn, shape:'box', w:w2*0.9, h:0.015, d:d*0.9, x:0.21*f, y:-o, z:-0.04, c:'glow'});
+      }
+      /* trailing stragglers */
+      mote('wt'+sd, 0.40*f,-0.10,-0.22, 0.12,'glow');
+    }
+    /* a few loose motes breaking formation */
+    for(let i=0;i<5;i++){
+      const a=i/5*6.283;
+      t.push({b:'body', shape:'sphere', w:0.11, det:0,
+              x:Math.sin(a)*0.62, y:0.10+Math.cos(a)*0.30, z:Math.cos(a*1.7)*0.44, c:'glow'});
+    }
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- OOZE */
+/* The old blob was one sphere with lumps stuck on. This one has a mantle that
+   squashes, PSEUDOPODS on their own bones so they can stretch and slap, and a
+   payload of debris suspended inside that does NOT move with the surface —
+   which is what makes it read as translucent instead of solid. */
+const OOZE_BONES = [
+  ['root',null,[0,0,0]],
+  ['mass','root',[0,0.54,0]],
+  ['crown','mass',[0,0.34,0]],
+  ['core','mass',[0,0.04,0]],
+  ['pdA','mass',[ 0.42,-0.14, 0.20]], ['pdA2','pdA',[0,-0.18,0.14]],
+  ['pdB','mass',[-0.44,-0.12, 0.04]], ['pdB2','pdB',[0,-0.18,0.10]],
+  ['pdC','mass',[ 0.06,-0.16,-0.42]], ['pdC2','pdC',[0,-0.18,-0.12]],
+  ['drA','mass',[ 0.24,-0.34, 0.26]], ['drB','mass',[-0.28,-0.34, 0.08]],
+];
+
+function oozePose(b, an, st){
+  const tt=st.t, w=an.walk;
+  const p = Math.sin(tt*3.0 + an.ph);
+  /* the mantle squashes and stretches; volume roughly conserved so it looks
+     like a fluid and not a balloon being inflated */
+  const sx = 1 + p*0.11 + w*0.05, sy = 1 - p*0.13 - w*0.04;
+  b.mass.scale.set(sx, sy, sx);
+  b.mass.position.y = 0.54 + Math.max(0,p)*0.11*(0.45+w);
+  b.mass.rotation.x = 0; b.mass.rotation.z = 0;
+  b.mass.rotation.y = Math.sin(tt*0.5)*0.16;
+  /* the crown lags the mass — a wave travelling up through the body */
+  const q = Math.sin(tt*3.0 + an.ph - 1.0);
+  b.crown.scale.set(1 - q*0.10, 1 + q*0.14, 1 - q*0.10);
+  b.crown.position.y = 0.34 + q*0.07;
+  b.crown.rotation.y = -Math.sin(tt*0.7)*0.22;
+  b.crown.rotation.x = 0; b.crown.rotation.z = 0;
+  /* the suspended payload stays PUT while the surface moves around it */
+  b.core.rotation.y = Math.sin(tt*0.33)*0.30;
+  b.core.rotation.x = Math.sin(tt*0.27)*0.12;
+  b.core.rotation.z = 0;
+  b.core.position.y = 0.04 + Math.sin(tt*1.1)*0.03;
+  b.core.scale.set(1/Math.max(0.2,sx), 1/Math.max(0.2,sy), 1/Math.max(0.2,sx));
+  /* pseudopods reach, plant and drag: each one on its own phase */
+  const pods=[['pdA','pdA2',0],['pdB','pdB2',2.1],['pdC','pdC2',4.2]];
+  pods.forEach(([a1,a2,off])=>{
+    const s=Math.sin(tt*2.4 + an.ph + off), lift=Math.max(0,s);
+    b[a1].rotation.x = 0.20 + s*0.34*(0.4+w);
+    b[a1].rotation.z = Math.sin(tt*1.7+off)*0.22;
+    b[a1].rotation.y = 0;
+    b[a1].scale.set(1, 1 + lift*0.34*w, 1);
+    b[a2].rotation.x = 0.26 + Math.sin(tt*2.4+an.ph+off-0.9)*0.42*(0.4+w);
+    b[a2].rotation.z = Math.sin(tt*1.7+off-0.8)*0.26;
+    b[a2].rotation.y = 0;
+  });
+  /* drips fall, snap back, fall again */
+  b.drA.rotation.x = Math.sin(tt*1.9)*0.18;
+  b.drA.rotation.z = Math.sin(tt*1.5)*0.16;
+  b.drA.scale.set(1, 1 + (Math.sin(tt*1.9)*0.5+0.5)*0.55, 1);
+  b.drB.rotation.x = Math.sin(tt*1.9+2.4)*0.18;
+  b.drB.rotation.z = Math.sin(tt*1.5+1.8)*0.16;
+  b.drB.scale.set(1, 1 + (Math.sin(tt*1.9+2.4)*0.5+0.5)*0.55, 1);
+
+  if(an.atk>=0){
+    /* gather down into a puddle, then surge up and over the target */
+    const a=an.atk;
+    const gather = a<0.32 ? a/0.32 : Math.max(0, 1-(a-0.32)/0.12);
+    const surge  = a>=0.32 ? Math.min(1,(a-0.32)/0.10)*Math.max(0,1-(a-0.60)/0.40) : 0;
+    b.mass.scale.set(1 + 0.42*gather - 0.28*surge,
+                     1 - 0.40*gather + 0.55*surge,
+                     1 + 0.42*gather - 0.28*surge);
+    b.mass.position.y = 0.54 - 0.20*gather + 0.26*surge;
+    b.mass.rotation.x = 0.30*surge;
+    b.crown.scale.set(1 - 0.30*gather + 0.20*surge,
+                      1 - 0.26*gather + 0.60*surge,
+                      1 - 0.30*gather + 0.20*surge);
+    b.crown.position.y = 0.34 - 0.14*gather + 0.22*surge;
+    pods.forEach(([a1,a2])=>{
+      b[a1].rotation.x = 0.20 + 0.70*gather - 1.10*surge;
+      b[a2].rotation.x = 0.26 + 0.80*gather - 1.20*surge;
+      b[a1].scale.set(1, 1 - 0.30*gather + 0.70*surge, 1);
+    });
+  }
+  if(an.hurt>0){
+    /* it has nothing to recoil with, so it takes the blow as a splash: it
+       bulges along the hit axis and slumps */
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.mass.scale.x += (0.20 + 0.16*Math.abs(hr))*h;
+    b.mass.scale.z += (0.20 + 0.16*Math.abs(hf))*h;
+    b.mass.scale.y -= 0.26*h;
+    b.mass.rotation.x += 0.24*hf*h;
+    b.mass.rotation.z += -0.24*hr*h;
+    b.mass.position.y -= 0.10*h;
+    b.crown.scale.y -= 0.20*h;
+    b.crown.rotation.x += 0.34*hf*h;
+    b.crown.rotation.z += -0.30*hr*h;
+    b.core.position.y += 0.06*h;
+    pods.forEach(([a1,a2])=>{
+      b[a1].rotation.x += 0.50*h; b[a2].rotation.x += 0.60*h;
+      b[a1].rotation.z += 0.30*hr*h;
+    });
+    b.drA.scale.y += 0.40*h; b.drB.scale.y += 0.40*h;
+  }
+}
+
+function oozeAnatomy(V){
+  const p = [
+    /* the mantle: a high-detail hull plus off-centre lobes. A single sphere is
+       a faceted ball however many nodules you stick on it. */
+    {b:'mass', shape:'sphere', w:1.12, det:2, sy:0.86, c:'mid'},
+    {b:'mass', shape:'sphere', w:0.72, det:2, x: 0.36, y: 0.04, z: 0.26, c:'mid'},
+    {b:'mass', shape:'sphere', w:0.64, det:2, x:-0.40, y:-0.04, z: 0.10, c:'mid'},
+    {b:'mass', shape:'sphere', w:0.56, det:2, x: 0.06, y:-0.08, z:-0.44, c:'dark'},
+    {b:'mass', shape:'sphere', w:0.44, det:1, x:-0.26, y: 0.22, z:-0.32, c:'dark'},
+    {b:'mass', shape:'sphere', w:0.36, det:1, x: 0.34, y: 0.26, z:-0.14, c:'lite'},
+    /* the surface film: a thin bright skin at the top where light catches */
+    {b:'crown',shape:'sphere', w:0.80, det:2, sy:0.72, c:'lite'},
+    {b:'crown',shape:'sphere', w:0.46, det:1, x: 0.22, y:0.06, z:0.20, c:'lite'},
+    {b:'crown',shape:'sphere', w:0.38, det:1, x:-0.24, y:0.02, z:0.08, c:'lite'},
+    /* eyes floating in the film */
+    {b:'crown',shape:'sphere', w:0.30, det:1, x: 0.21, y:0.06, z:0.38, c:'out'},
+    {b:'crown',shape:'sphere', w:0.30, det:1, x:-0.21, y:0.06, z:0.38, c:'out'},
+    {b:'crown',shape:'sphere', w:0.185,det:1, x: 0.215,y:0.06, z:0.46, c:'glow'},
+    {b:'crown',shape:'sphere', w:0.185,det:1, x:-0.215,y:0.06, z:0.46, c:'glow'},
+    {b:'crown',shape:'sphere', w:0.070,det:0, x: 0.235,y:0.10, z:0.52, c:'#ffffff'},
+    {b:'crown',shape:'sphere', w:0.070,det:0, x:-0.235,y:0.10, z:0.52, c:'#ffffff'},
+  ];
+  /* the payload: whatever it ate, still in there */
+  const DEB = V.debris || 'out';
+  p.push({b:'core', shape:'sphere', w:0.30, det:1, sy:0.90, x:0.10, y:0.06, z:0.08, c:DEB});
+  p.push({b:'core', shape:'sphere', w:0.22, det:1, sy:0.74, x:0.10, y:-0.02,z:0.22, c:DEB});
+  p.push({b:'core', shape:'sphere', w:0.07, det:0, x: 0.155,y:0.00,z:0.30, c:'#0a0c10'});
+  p.push({b:'core', shape:'sphere', w:0.07, det:0, x: 0.055,y:0.00,z:0.30, c:'#0a0c10'});
+  p.push({b:'core', shape:'box', w:0.30, h:0.05, d:0.06, rot:[0,0.5,0.4], x:-0.22, y:0.10, z:-0.08, c:DEB});
+  p.push({b:'core', shape:'box', w:0.26, h:0.05, d:0.06, rot:[0,-0.3,-0.5],x:-0.26, y:-0.06,z: 0.06, c:DEB});
+  p.push({b:'core', shape:'cyl', w:0.07, w2:0.05, h:0.34, rot:[0.9,0,0.4], x:0.06, y:-0.16, z:-0.24, c:DEB});
+  p.push({b:'core', shape:'sphere', w:0.16, det:1, x:-0.06, y:0.24, z:-0.22, c:DEB});
+  /* pseudopods and drips */
+  for(const [b1,b2,w1] of [['pdA','pdA2',0.46],['pdB','pdB2',0.44],['pdC','pdC2',0.40]]){
+    p.push({b:b1, shape:'sphere', w:w1, det:1, sy:0.96, y:-0.08, z:0.04, c:'mid'});
+    p.push({b:b1, shape:'cyl', w:w1*0.80, w2:w1*0.62, h:0.22, y:-0.13, c:'mid'});
+    p.push({b:b2, shape:'sphere', w:w1*0.74, det:1, sy:0.70, y:-0.08, z:0.06, c:'dark'});
+    p.push({b:b2, shape:'sphere', w:w1*0.40, det:1, y:-0.16, z:0.16, c:'dark'});
+  }
+  for(const bn of ['drA','drB']){
+    p.push({b:bn, shape:'cyl', w:0.18, w2:0.10, h:0.28, y:-0.14, c:'mid'});
+    p.push({b:bn, shape:'sphere', w:0.20, det:1, y:-0.30, c:'mid'});
+    p.push({b:bn, shape:'sphere', w:0.09, det:0, y:-0.42, c:'glow'});
+  }
+  return p;
+}
+
+const OOZE_COAT = {
+  /* A — SLIME: the wandering digester. Bubbles on the surface, bones inside. */
+  slime(){
+    const t=[];
+    /* bubbles rising through the mantle, largest near the bottom */
+    for(let i=0;i<14;i++){
+      const a=i/14*6.283*2.3, r=0.30+((i%4)*0.13), y=-0.30+i*0.055;
+      t.push({b: i<9?'mass':'crown', shape:'sphere', w:0.10+((i%3)*0.05), det:1,
+              x:Math.sin(a)*r, y:y, z:Math.cos(a)*r, c:'lite'});
+    }
+    /* a wet rim where it meets the ground */
+    t.push({b:'mass', shape:'sphere', w:1.22, det:2, sy:0.20, y:-0.36, c:'dark'});
+    t.push({b:'mass', shape:'sphere', w:1.34, det:1, sy:0.10, y:-0.44, c:'dark'});
+    /* dribbles over the shoulder of the mass */
+    for(let i=0;i<6;i++){
+      const a=i/6*6.283;
+      t.push({b:'mass', shape:'cyl', w:0.13,w2:0.07,h:0.30+((i%3)*0.12),
+              x:Math.sin(a)*0.50, y:0.02, z:Math.cos(a)*0.50, c:'mid'});
+      t.push({b:'mass', shape:'sphere', w:0.10, det:0,
+              x:Math.sin(a)*0.52, y:-0.18-((i%3)*0.10), z:Math.cos(a)*0.52, c:'mid'});
+    }
+    return t;
+  },
+
+  /* B — BULB: the bomber. Swollen, veined, visibly about to go off. */
+  bulb(){
+    const t=[];
+    /* a pressurised sac: tight, glossy, with a bright seam network */
+    t.push({b:'mass', shape:'sphere', w:1.26, det:2, sy:0.94, y:0.06, c:'mid'});
+    t.push({b:'crown',shape:'sphere', w:0.78, det:2, sy:0.86, y:0.02, z:-0.12, c:'lite'});
+    for(let i=0;i<10;i++){
+      const a=i/10*6.283;
+      /* veins running pole to pole */
+      for(let k=0;k<3;k++){
+        const t2=(k+1)/4, rr=Math.sin(t2*Math.PI)*0.60;
+        t.push({b:'mass', shape:'sphere', w:0.10-k*0.015, det:0,
+                x:Math.sin(a)*rr, y:-0.36+t2*0.80, z:Math.cos(a)*rr, c:'glow'});
+      }
+    }
+    /* the pustule on top, and blisters around the equator */
+    t.push({b:'crown', shape:'sphere', w:0.46, det:1, sy:1.10, y:0.24, c:'glow'});
+    t.push({b:'crown', shape:'sphere', w:0.22, det:1, y:0.44, c:'#ffffff'});
+    for(let i=0;i<7;i++){
+      const a=i/7*6.283;
+      t.push({b:'mass', shape:'sphere', w:0.26+((i%3)*0.07), det:1,
+              x:Math.sin(a)*0.56, y:0.02+((i%2)*0.12), z:Math.cos(a)*0.56, c:'lite'});
+      t.push({b:'mass', shape:'sphere', w:0.11, det:0,
+              x:Math.sin(a)*0.66, y:0.06+((i%2)*0.12), z:Math.cos(a)*0.66, c:'glow'});
+    }
+    /* stubby feet instead of reaching pods */
+    for(const [b1,b2] of [['pdA','pdA2'],['pdB','pdB2'],['pdC','pdC2']]){
+      t.push({b:b1, shape:'sphere', w:0.40, det:1, sy:0.70, y:-0.06, c:'mid'});
+      t.push({b:b2, shape:'sphere', w:0.30, det:1, sy:0.56, y:-0.06, c:'dark'});
+    }
+    return t;
+  },
+
+  /* C — NEST: the splitter. It is already several things wearing one body. */
+  nest(){
+    const t=[];
+    /* eggs riding on the mass, each one a small version of the parent */
+    const egg=(bn,x,y,z,w)=>{
+      t.push({b:bn, shape:'sphere', w:w, det:1, sy:1.12, x,y,z, c:'lite'});
+      t.push({b:bn, shape:'sphere', w:w*0.56, det:1, x, y:y+w*0.04, z:z+w*0.30, c:'glow'});
+      t.push({b:bn, shape:'sphere', w:w*0.22, det:0, x, y:y+w*0.10, z:z+w*0.44, c:'#08060a'});
+    };
+    egg('crown', 0.00, 0.20, 0.06, 0.46);
+    egg('mass',  0.46, 0.12, 0.24, 0.40);
+    egg('mass', -0.48, 0.06, 0.06, 0.38);
+    egg('mass',  0.10, 0.06,-0.50, 0.36);
+    egg('mass', -0.20, 0.30,-0.28, 0.30);
+    egg('pdA',   0.00,-0.10, 0.06, 0.26);
+    egg('pdB',   0.00,-0.10, 0.04, 0.24);
+    /* a webbing of strands holding the clutch together */
+    for(let i=0;i<9;i++){
+      const a=i/9*6.283;
+      t.push({b:'mass', shape:'cyl', w:0.055,w2:0.035,h:0.52, rot:[0.5,a,0.35],
+              x:Math.sin(a)*0.42, y:0.10, z:Math.cos(a)*0.42, c:'out'});
+    }
+    t.push({b:'mass', shape:'sphere', w:1.16, det:2, sy:0.34, y:-0.28, c:'dark'});
+    return t;
+  },
+};
+
+/* ---------------------------------------------------------------- COLLAPSES
+   Each body plan dies its own way. A spider curls its legs up, a serpent goes
+   limp along its whole length, an ooze splats, a golem crumbles straight down
+   instead of toppling. Sharing one humanoid fall across all of them was what
+   made every corpse read the same. `c` carries the shared timing:
+   c.buckle (knees go), c.e (accelerating topple), c.bounce (the landing). */
+const RIG_COLLAPSE = {
+  humanoid(b,c){
+    const {buckle:k1, e, bounce} = c;
+    b.root.rotation.x = -(1.44*e) + bounce;
+    b.root.position.y = e*0.20;
+    b.hips.position.y = 0.99 - k1*0.32 + e*0.16;
+    b.hips.rotation.x = 0; b.hips.rotation.y = 0; b.hips.rotation.z = 0;
+    b.spineA.rotation.set(0.20*k1 - e*0.16, 0, 0);
+    b.spineB.rotation.set(0.18*k1 - e*0.14, 0, 0);
+    b.chest.rotation.set(0.34*k1 - e*0.28, 0, 0);
+    b.neck.rotation.set(0.10*k1 + e*0.30, 0, 0);
+    b.head.rotation.set(-0.22*k1 + e*0.50, 0, 0);
+    b.jaw.rotation.x = 0.16*k1 + 0.20*e;
+    for(const sd of ['L','R']){
+      const f = sd==='L' ? 1 : -1;
+      b['clav'+sd].rotation.set(-0.20*e, 0, 0);
+      b['arm'+sd].rotation.set(-0.50 - e*1.30, 0, (0.44*e + 0.13)*f);
+      b['fore'+sd].rotation.set(-0.30 + e*0.16, 0, 0);
+      b['hand'+sd].rotation.set(0.30 - e*0.20, 0, 0);
+      b['thigh'+sd].rotation.set((sd==='L'?0.84:0.60)*k1 - e*0.50, 0, 0.10*e*f);
+      b['shin'+sd].rotation.set((sd==='L'?1.22:1.02)*k1, 0, 0);
+      b['foot'+sd].rotation.set(-0.35*k1 + 0.30*e, 0, 0);
+      b['toe'+sd].rotation.set(0.20*e, 0, 0);
+    }
+    b.cloakA.rotation.set(0.10 + e*0.45, 0, 0);
+    b.cloakB.rotation.set(0.06 + e*0.30, 0, 0);
+  },
+
+  golem(b,c){
+    /* it does not topple, it fails: the legs go straight down under it, the
+       mass settles, the head drops last and the plates fall out of the field */
+    const {buckle:k1, e, bounce} = c;
+    b.root.rotation.x = -0.34*e + bounce*0.6;
+    b.root.rotation.z =  0.30*e;
+    b.base.position.y = 0.70 - k1*0.34 - e*0.22;
+    b.base.rotation.set(0.10*k1, 0, -0.12*e);
+    b.coreA.rotation.set(0.22*k1 + e*0.20, 0, 0.10*e);
+    b.coreB.rotation.set(0.26*k1 + e*0.30, 0, 0.14*e);
+    b.hood.rotation.set(0.30*k1 + e*0.66, 0.18*e, 0.20*e);
+    b.jaw.rotation.x = 0.20*k1 + 0.45*e;
+    for(const sd of ['L','R']){
+      const f = sd==='L' ? 1 : -1;
+      b['shld'+sd].rotation.set(0.30*k1 + e*0.40, 0, (0.20 + 0.50*e)*f);
+      b['arm'+sd].rotation.set(-0.34 + 0.50*e, 0, 0.18*e*f);
+      b['fist'+sd].rotation.set(0.16 + 0.30*e, 0, 0);
+      b['leg'+sd].rotation.set(0.62*k1 - 0.20*e, 0, 0.22*e*f);
+      b['knee'+sd].rotation.set(1.05*k1, 0, 0);
+      b['foot'+sd].rotation.set(-0.40*k1, 0, 0);
+    }
+    /* the loose plates lose the field holding them and drop */
+    b.plA.position.y = 0.14 - e*0.90; b.plA.rotation.set(e*1.4, 0, e*0.8);
+    b.plB.position.set(0.36 + e*0.30, 0.06 - e*0.85, -0.20); b.plB.rotation.set(e*1.1,0,-e*1.2);
+    b.plC.position.set(-0.36 - e*0.30, 0.06 - e*0.85, -0.20); b.plC.rotation.set(e*1.1,0, e*1.2);
+  },
+
+  arach(b,c){
+    /* the dead-spider curl: every leg pulls in and UP under the body, which
+       then drops onto the knot of them */
+    const {buckle:k1, e, bounce} = c;
+    const curl = Math.min(1, k1*0.5 + e);
+    b.root.rotation.x = -0.10*e + bounce*0.5;
+    b.root.rotation.z =  0.26*e;
+    b.ceph.position.y = 0.62 - 0.30*k1 - 0.16*e;
+    b.ceph.rotation.set(0.20*k1 + 0.16*e, 0, -0.14*e);
+    b.abdo.rotation.set(-0.16 + 0.44*e, 0.12*e, 0.10*e);
+    b.abTip.rotation.set(-0.10 + 0.30*e, 0, 0);
+    b.head.rotation.set(0.30*e, 0, 0);
+    b.cheL.rotation.set(0.70*curl, 0, 0.30); b.cheR.rotation.set(0.70*curl, 0, -0.30);
+    b.palpL.rotation.set(0.95*curl, 0, 0.55); b.palpR.rotation.set(0.95*curl, 0, -0.55);
+    for(const sd of ['L','R']){
+      const f = sd==='L' ? 1 : -1;
+      for(let i=0;i<4;i++){
+        b['fm'+sd+i].rotation.set(0, ARACH_YAW[i]*f*(1-curl*0.4),
+                                  (ARACH_SPLAY[i] - 1.30*curl)*f);
+        b['tb'+sd+i].rotation.set(0, 0, (-1.36 - 1.05*curl)*f);
+        b['ts'+sd+i].rotation.set(0, 0, (-0.39 - 0.95*curl)*f);
+      }
+    }
+  },
+
+  serpent(b,c){
+    /* limp: the wave dies out from the head backwards and the whole length
+       settles flat. Nothing about a snake topples. */
+    const {buckle:k1, e} = c;
+    const slack = Math.min(1, k1*0.4 + e);
+    SERP_CHAIN.forEach((n,i)=>{
+      const lag = Math.max(0, Math.min(1, (slack - i*0.05)/0.7));
+      b[n].rotation.y = (i%2 ? 0.20 : -0.20) * lag;
+      b[n].rotation.x = (i<5 ? 0.02 : 0.05) * (1-lag) - 0.10*lag;
+      b[n].rotation.z = 0.14*lag*(i%2?1:-1);
+    });
+    b.neck.rotation.set(0.30*slack, 0.20*slack, 0.22*slack);
+    b.head.rotation.set(0.24*slack, 0.14*slack, 0.40*slack);
+    b.jawU.rotation.x = -0.40*slack;
+    b.jawL.rotation.x =  0.62*slack;
+    b.mandL.rotation.set(0, -0.70*slack, 0);
+    b.mandR.rotation.set(0,  0.70*slack, 0);
+    b.finL.rotation.set(0.30*slack, 0, 0.30 - 0.60*slack);
+    b.finR.rotation.set(0.30*slack, 0, -0.30 + 0.60*slack);
+    b.c0.position.y = 0.34 - 0.22*slack;
+  },
+
+  wraith(b,c){
+    /* it was never standing: it unravels. The shroud goes first, then the
+       body sinks into it and the light goes out. */
+    const {buckle:k1, e} = c;
+    b.root.rotation.set(0.30*e, 0, 0.24*e);
+    b.core.position.y = 1.16 - e*0.78;
+    b.core.rotation.set(0.24*k1 + 0.40*e, 0, 0.20*e);
+    b.core.scale.set(1 + e*0.26, 1 - e*0.50, 1 + e*0.26);
+    b.chest.rotation.set(0.30*e, 0, 0.16*e);
+    b.hood.rotation.set(0.20*k1 + 0.62*e, 0.20*e, 0.26*e);
+    b.jaw.rotation.x = 0.10 + 0.70*e;
+    for(const sd of ['L','R']){
+      const f = sd==='L' ? 1 : -1;
+      b['arm'+sd].rotation.set(-0.20 + 0.90*e, 0, (0.42 + 0.60*e)*f);
+      b['fore'+sd].rotation.set(-0.45 + 0.70*e, 0, 0);
+      b['hand'+sd].rotation.set(0.22 + 0.45*e, 0, 0);
+    }
+    b.shrA.rotation.set(0.08 + 0.50*e, 0, 0.20*e);
+    b.shrB.rotation.set(0.06 + 0.62*e, 0, 0.26*e);
+    b.shrC.rotation.set(0.04 + 0.74*e, 0, 0.32*e);
+    b.shrA.scale.set(1+e*0.30, 1-e*0.35, 1+e*0.30);
+    b.shrB.scale.set(1+e*0.35, 1-e*0.45, 1+e*0.35);
+    b.shrC.scale.set(1+e*0.40, 1-e*0.55, 1+e*0.40);
+    b.wspL.position.y = -0.06 - e*0.60; b.wspR.position.y = -0.06 - e*0.60;
+    b.wspL.rotation.set(0,0,0); b.wspR.rotation.set(0,0,0);
+  },
+
+  eye(b,c){
+    /* the lid slams shut first — that is the moment it dies — then the globe
+       drops and rolls, and the tentacles go slack under it */
+    const {buckle:k1, e, bounce} = c;
+    const shut = Math.min(1, k1*1.2);
+    b.orb.position.y = 1.24 - e*0.72 + bounce;
+    b.orb.rotation.set(0.02 + 0.50*e, 0.30*e, 0.70*e);
+    b.orb.scale.set(1 + e*0.12, 1 - e*0.16, 1 + e*0.12);
+    b.lidU.rotation.x =  0.16 + 1.32*shut;
+    b.lidD.rotation.x = -0.14 - 1.26*shut;
+    b.iris.rotation.set(0,0,0);
+    b.iris.scale.setScalar(Math.max(0.28, 1 - 0.62*shut));
+    for(let i=0;i<4;i++){
+      const f = i%2 ? -1 : 1;
+      b['tn'+i].rotation.set(0.30 + 0.50*e, 0, (0.34 + 0.85*e)*f);
+      b['tm'+i].rotation.set(0.34 + 0.40*e, 0, (0.22 + 0.55*e)*f);
+      b['tt'+i].rotation.set(0.30 + 0.30*e, 0, (0.18 + 0.40*e)*f);
+    }
+    b.ringA.rotation.set(0.42, 0, 0); b.ringB.rotation.set(-0.30, 0, 0);
+  },
+
+  flyer(b,c){
+    /* it falls out of the air: wings go wide and limp, body tumbles nose-down,
+       then it lands on one wing */
+    const {buckle:k1, e, bounce} = c;
+    b.root.rotation.x = -0.30*e + bounce;
+    b.root.rotation.z =  0.85*e;
+    b.body.position.y = 1.22 - e*0.98;
+    b.body.rotation.set(0.10 + 0.60*e, 0.20*e, 0.26*e);
+    b.neck.rotation.set(-0.14 + 0.70*e, 0.24*e, 0);
+    b.head.rotation.set(0.05 + 0.40*e, 0.18*e, 0);
+    b.bkU.rotation.x = -0.30*k1; b.bkL.rotation.x = 0.52*k1 + 0.20*e;
+    for(const sd of ['L','R']){
+      const f = sd==='L' ? 1 : -1;
+      b['wi'+sd].rotation.set(0, -0.30*e*f, (0.18 + 0.90*e)*f);
+      b['wm'+sd].rotation.set(0, -0.45*e*f, (0.10 + 0.70*e)*f);
+      b['wt'+sd].rotation.set(0, -0.35*e*f, (0.06 + 0.55*e)*f);
+      b['lg'+sd].rotation.set(1.05 + 0.60*e, 0, 0.10*f);
+    }
+    b.tlA.rotation.set(0.12 + 0.44*e, 0.16*e, 0);
+    b.tlB.rotation.set(0.08 + 0.34*e, 0, 0);
+  },
+
+  ooze(b,c){
+    /* it loses surface tension and spreads. Nothing folds; it just stops
+       holding itself up. */
+    const {e} = c;
+    b.mass.scale.set(1 + e*0.62, 1 - e*0.74, 1 + e*0.62);
+    b.mass.position.y = 0.54*(1 - e*0.82);
+    b.mass.rotation.set(0,0,0);
+    b.crown.scale.set(1 - e*0.40, 1 - e*0.82, 1 - e*0.40);
+    b.crown.position.y = 0.34*(1 - e*0.92);
+    b.crown.rotation.set(0,0,0);
+    b.core.position.y = 0.04 - e*0.20;
+    b.core.rotation.set(e*0.8, e*0.5, 0);
+    b.core.scale.setScalar(1);
+    for(const [b1,b2] of [['pdA','pdA2'],['pdB','pdB2'],['pdC','pdC2']]){
+      b[b1].rotation.set(1.05*e, 0, 0);
+      b[b1].scale.set(1 + e*0.40, 1 - e*0.55, 1 + e*0.40);
+      b[b2].rotation.set(1.20*e, 0, 0);
+    }
+    for(const bn of ['drA','drB']){
+      b[bn].rotation.set(0.50*e, 0, 0);
+      b[bn].scale.set(1 + e*0.5, 1 - e*0.6, 1 + e*0.5);
+    }
+  },
+};
+
+/* ---------------------------------------------------------------- SPECS
+   One cache, one shape. `fam` picks the skeleton, `coat` picks the dressing. */
+const RIG_FAMILY = {
+  humanoid:{h:2.2, hs:2.60, bones:HUMANOID_BONES, pose:humanoidPose,
+            anat:humanoidAnatomy, coats:HUMANOID_COAT, die:RIG_COLLAPSE.humanoid},
+  golem:   {h:2.2, hs:2.96, bones:GOLEM_BONES,    pose:golemPose,
+            anat:golemAnatomy,   coats:GOLEM_COAT, die:RIG_COLLAPSE.golem},
+  arach:   {h:1.25,hs:1.62, bones:ARACH_BONES,    pose:arachPose,
+            anat:arachAnatomy,   coats:ARACH_COAT, die:RIG_COLLAPSE.arach},
+  serp:    {h:1.25,hs:1.44, bones:SERPENT_BONES,  pose:serpentPose,
+            anat:serpentAnatomy, coats:SERPENT_COAT, die:RIG_COLLAPSE.serpent},
+  wraith:  {h:2.2, hs:2.72, bones:WRAITH_BONES,   pose:wraithPose,
+            anat:wraithAnatomy,  coats:WRAITH_COAT, die:RIG_COLLAPSE.wraith},
+  eye:     {h:2.0, hs:2.50, bones:EYE_BONES,      pose:eyePose,
+            anat:eyeAnatomy,     coats:EYE_COAT,   die:RIG_COLLAPSE.eye},
+  flyer:   {h:1.7, hs:2.20, bones:FLYER_BONES,    pose:flyerPose,
+            anat:flyerAnatomy,   coats:FLYER_COAT, die:RIG_COLLAPSE.flyer},
+  ooze:    {h:1.3, hs:1.66, bones:OOZE_BONES,     pose:oozePose,
+            anat:oozeAnatomy,    coats:OOZE_COAT,  die:RIG_COLLAPSE.ooze},
+};
+const _famCache = new Map();
+function famSpec(fam, coat){
+  const ck = fam+'|'+coat;
+  let sp = _famCache.get(ck);
+  if(sp) return sp;
+  const F = RIG_FAMILY[fam];
+  const dress = F.coats[coat] || F.coats[Object.keys(F.coats)[0]];
+  sp = {h:F.h, hs:F.hs, bones:F.bones, pose:F.pose,
+        parts: F.anat({}).concat(dress()), collapse:F.die};
+  _famCache.set(ck, sp);
+  return sp;
+}
+
 /* Rigs are authored roughly 2 units tall and scaled by the entity radius. */
 const RIG3D = {
   /* The hero is composed, not fixed. Armour style follows the weapon CLASS and
@@ -5748,11 +8004,12 @@ const RIG3D = {
     }
   },
 };
-/* milestone 1 covers humanoid, quadruped, blob and floater; the remaining
-   silhouettes (worm, arachnid, golem plate work) map onto the closest of
-   these until they get purpose-built forms */
-/* the three wolf dressings, selectable by rig key */
-RIG3D.wolfDire      = null;   /* filled below once wolfSpec exists */
+/* ---------- rig registry ----------
+   RIG3D_FOR is the CHEAP map, used on the Battery graphics tier: four shared
+   rigs covering nine body plans, which is exactly the compromise that made
+   everything look related. Sharp and Balanced get a purpose-built rig and a
+   coat chosen per enemy, so a Spriggan and a Bramble Spider no longer come
+   off the same production line. */
 const RIG3D_FOR = {
   knight:'human', golem:'human',
   beast:'quad',
@@ -5763,15 +8020,76 @@ const RIG3D_FOR = {
 RIG3D.wolfDire      = wolfSpec('dire');
 RIG3D.wolfRevenant  = wolfSpec('revenant');
 RIG3D.wolfThornback = wolfSpec('thornback');
-/* The wolf is 3.5x the triangles of the old quad per foe (4,966 vs 1,424) at
+RIG3D.humanPlate    = famSpec('humanoid','plate');
+RIG3D.humanDrowned  = famSpec('humanoid','drowned');
+RIG3D.humanSeer     = famSpec('humanoid','seer');
+RIG3D.golemStone    = famSpec('golem','stone');
+RIG3D.golemSlag     = famSpec('golem','slag');
+RIG3D.golemRime     = famSpec('golem','rime');
+RIG3D.arachSpider   = famSpec('arach','spider');
+RIG3D.arachThorn    = famSpec('arach','thorn');
+RIG3D.arachShard    = famSpec('arach','shard');
+RIG3D.serpGrub      = famSpec('serp','grub');
+RIG3D.serpWyrm      = famSpec('serp','wyrm');
+RIG3D.wraithShade   = famSpec('wraith','shade');
+RIG3D.wraithWitch   = famSpec('wraith','witch');
+RIG3D.eyeWatcher    = famSpec('eye','watcher');
+RIG3D.eyeFen        = famSpec('eye','fen');
+RIG3D.flyerCorvid   = famSpec('flyer','corvid');
+RIG3D.flyerSwarm    = famSpec('flyer','swarm');
+RIG3D.oozeSlime     = famSpec('ooze','slime');
+RIG3D.oozeBulb      = famSpec('ooze','bulb');
+RIG3D.oozeNest      = famSpec('ooze','nest');
+
+/* the coat every shape falls back to, so a new enemy is never rig-less */
+const RIG_HI_SHAPE = {
+  beast:'wolfDire', knight:'humanPlate', golem:'golemStone',
+  spike:'arachSpider', worm:'serpGrub', ghost:'wraithShade',
+  eye:'eyeWatcher', flyer:'flyerSwarm', blob:'oozeSlime',
+};
+/* ...and the per-enemy casting. This is the whole point of coats: the roster
+   is 50 monsters built from 11 skeletons, and no two neighbours in a zone
+   should share a dressing. */
+const RIG_HI_ID = {
+  /* Verdant Hollow */
+  vh_rat:'wolfDire',        vh_wolf:'wolfDire',      vh_boar:'wolfThornback',
+  vh_sprig:'arachThorn',    vh_wisp:'wraithShade',   vh_spider:'arachSpider',
+  vh_husk:'oozeSlime',      vh_crow:'flyerCorvid',   vh_sap:'oozeBulb',
+  vh_stag:'wolfThornback',  vh_e1:'golemStone',      vh_e2:'arachSpider',
+  vh_b:'wolfRevenant',
+  /* Ashen Waste */
+  aw_imp:'arachShard',      aw_hound:'wolfDire',     aw_ashen:'wraithShade',
+  aw_slag:'golemSlag',      aw_ember:'flyerSwarm',   aw_char:'oozeSlime',
+  aw_salam:'serpGrub',      aw_bomb:'oozeBulb',      aw_knight:'humanPlate',
+  aw_vent:'arachSpider',    aw_e1:'golemSlag',       aw_e2:'wraithWitch',
+  aw_b:'serpWyrm',
+  /* Frostbite Rift */
+  fr_wraith:'wraithShade',  fr_golem:'golemRime',    fr_hound:'wolfDire',
+  fr_shard:'arachShard',    fr_yeti:'wolfDire',      fr_seer:'humanSeer',
+  fr_swarm:'flyerSwarm',    fr_berg:'oozeNest',      fr_bomb:'oozeBulb',
+  fr_eye:'eyeWatcher',      fr_e1:'golemRime',       fr_e2:'wraithWitch',
+  fr_b:'humanPlate',
+  /* Rotmire Swamp */
+  rm_toad:'oozeSlime',      rm_leech:'serpGrub',     rm_horror:'oozeSlime',
+  rm_spore:'arachThorn',    rm_drown:'humanDrowned', rm_fly:'flyerSwarm',
+  rm_witch:'wraithWitch',   rm_croc:'wolfThornback', rm_nest:'oozeNest',
+  rm_eye:'eyeFen',          rm_e1:'oozeSlime',       rm_e2:'arachThorn',
+  rm_b:'serpWyrm',
+  /* Voidspire */
+  vs_stalk:'wraithShade',   vs_shard:'arachShard',   vs_golem:'golemStone',
+  vs_eye:'eyeWatcher',      vs_swarm:'flyerSwarm',   vs_knight:'humanPlate',
+  vs_blob:'oozeNest',       vs_worm:'serpWyrm',      vs_bomb:'oozeBulb',
+  vs_seer:'wraithWitch',    vs_e1:'humanPlate',      vs_e2:'eyeWatcher',
+  vs_b:'eyeWatcher',
+};
+/* The purpose-built rigs cost roughly 3-4x the triangles of the shared ones at
    the SAME draw call, since each foe is one SkinnedMesh either way. Draw calls
-   are what actually hurt on integrated graphics, so it ships on Sharp and
-   Balanced and falls back to the cheap rig on Battery. */
-const BEAST_RIG = 'wolfDire';
+   are what actually hurt on integrated graphics, so they ship on Sharp and
+   Balanced and Battery falls back to the cheap set. */
 function rigKeyFor(def){
-  const k = RIG3D_FOR[def.shape] || 'blob';
-  if(k==='quad' && S && S.opts && S.opts.gfx!=='low') return BEAST_RIG;
-  return k;
+  const lo = RIG3D_FOR[def.shape] || 'blob';
+  if(!(S && S.opts && S.opts.gfx!=='low')) return lo;
+  return RIG_HI_ID[def.id] || RIG_HI_SHAPE[def.shape] || lo;
 }
 
 /* ---------- death collapse ----------
@@ -5781,7 +8099,7 @@ function rigKeyFor(def){
    killing blow, then it lands with one damped bounce. A blob has nothing to
    topple and a floater was never standing, so those two slump and drop
    instead of falling over. */
-function collapsePose(b, k, key){
+function collapsePose(b, k, key, spec){
   const buckle = Math.min(1, k/0.18);
   const fall   = k<0.14 ? 0 : Math.min(1, (k-0.14)/0.40);
   /* ACCELERATING, not easing out - a body tips slowly past its balance point
@@ -5789,6 +8107,10 @@ function collapsePose(b, k, key){
   const e      = fall*fall;
   const land   = fall>=1 ? Math.max(0, 1-(k-0.54)*3.4) : 0;
   const bounce = land>0 ? Math.sin((k-0.54)*22)*land*0.07 : 0;
+
+  /* purpose-built rigs die their own way; the shared branches below are
+     the fallback set the Battery tier still uses */
+  if(spec && spec.collapse){ spec.collapse(b, {buckle, fall, e, land, bounce, k}); return; }
 
   if(key==='blob'){
     b.body.scale.set(1+e*0.55, 1-e*0.72, 1+e*0.55);
@@ -6465,7 +8787,7 @@ function render(){
     a.mesh.position.set(c.x, -sink*sc*0.55, c.y);
     a.mesh.rotation.y = c.ry;
     a.spec.pose(a.bones, c.an, {t:c.time, wk:null, sprint:0});
-    collapsePose(a.bones, k, a.key);
+    collapsePose(a.bones, k, a.key, a.spec);
     /* depthWrite stays on: a body is solid right up until it is nearly gone,
        and turning it off makes the limbs show through each other */
     if(!a.mat.transparent) a.mat.transparent = true;
