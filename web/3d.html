@@ -1089,7 +1089,7 @@ const E = (id,n,shape,col,col2,size,hp,dmg,spd,ai,extra)=>Object.assign(
 
 const ZONES = [
 {
-  id:'verdant', n:'Verdant Hollow', tier:1, lo:1, hi:9, terrain:1,
+  id:'verdant', n:'Verdant Hollow', tier:1, lo:1, hi:9,
   desc:'Sun-starved woodland where the first rift tore open. The beasts here have not yet learned fear.',
   sky:'#16301f', sky2:'#0a1610', ground:'#1d3b27', accent:'#4ade80',
   mats:['hide','heart'], cat:'fang',
@@ -1795,7 +1795,9 @@ let packs = [], props = [], chests = [], nearChest = null;
    is a choice (wade slowly, or spend the walk to a bridge) rather than
    a wall.
    ================================================================ */
-let terrain = {solid:[], water:[], bridges:[], grid:null, cell:256};
+let terrain = {solid:[], water:[], bridges:[], scree:[], shore:[], grid:null, cell:256,
+               style:{rock:'#9ba49b', liquid:'#2f6f8a', spray:'#8fd6e8',
+                      wade:0.58, dps:0, cross:'wood', glow:0, gloss:0}};
 
 /* Uniform grid over the discs. ~200 discs against ~80 moving entities is
    16k distance tests a frame brute-force; the grid makes it a handful. */
@@ -1913,87 +1915,104 @@ function inWater(x, y){
   }
   return false;
 }
-const WADE = 0.58;                       /* speed multiplier while in water */
+/* Wade speed is per zone now: a river slows you, a bog nearly stops you, and
+   lava is quick to cross precisely because standing in it is the problem. */
+function wadeMul(){ return (terrain.style && terrain.style.wade) || 0.58; }
+
+
+/* Each zone gets a terrain SIGNATURE, not just a recolour of the same
+   ridge-and-river. Shared primitives below build the pieces; the per-zone
+   functions decide which pieces, where, and how aggressive. */
+/* spray is the splash colour, kept separate from the surface: a bog reads as
+   near-black pools, but near-black particles are invisible, so the wake is the
+   algae it throws up rather than the water itself. */
+const TERRAIN_STYLE = {
+  verdant:  {rock:'#9ba49b', liquid:'#2f6f8a', spray:'#8fd6e8', wade:0.58, dps:0,     cross:'wood',  glow:0, gloss:0},
+  ashen:    {rock:'#6e6560', liquid:'#ff6a22', spray:'#ffc46a', wade:0.74, dps:0.055, cross:'stone', glow:1, gloss:0},
+  frost:    {rock:'#c6dcec', liquid:'#8fd0e8', spray:'#e8f6ff', wade:0.44, dps:0,     cross:'ice',   glow:0, gloss:1},
+  rotmire:  {rock:'#6d6a46', liquid:'#16200d', spray:'#9ab84f', wade:0.38, dps:0,     cross:'plank', glow:0, gloss:1},
+  voidspire:{rock:'#7061a0', liquid:'#8b5cf6', spray:'#d8c2ff', wade:0.62, dps:0.030, cross:'stone', glow:1, gloss:0},
+};
+function terrStyle(){ return TERRAIN_STYLE[S.zone] || TERRAIN_STYLE.verdant; }
+
+/* ---------- shared terrain primitives ---------- */
+function tRock(x,y,r,h,kind){
+  terrain.solid.push({x,y,r,h,kind:kind||'cliff', a:rnd(0,6.283), s:rnd(0.82,1.20)});
+}
+/* A band of masses running across the zone, with gaps left for the passes.
+   ranks>1 stacks extra rows behind the first so a barrier has depth. */
+function tBand(o){
+  const {y, passes, passW, step, r, h, kind, ranks, wob, jit} = o;
+  for(let x=-70; x<WORLD.w+70; x+=step){
+    if(passes.some(px=>Math.abs(x-px) < passW)) continue;
+    const w = Math.sin(x*wob)*(jit||70);
+    tRock(x+rnd(-16,16), y+w, rnd(r[0],r[1]), rnd(h[0],h[1]), kind);
+    for(let k=1;k<(ranks||1);k++){
+      if(Math.random()>0.7) continue;
+      const side = k%2 ? -1 : 1;
+      tRock(x+rnd(-46,46), y+w+side*rnd(80,175),
+            rnd(r[0]*0.66,r[1]*0.78), rnd(h[0]*0.62,h[1]*0.74), kind);
+    }
+  }
+}
+/* A band of liquid. amp widens the wobble so a bog sprawls where a river runs. */
+function tLiquid(o){
+  const {y, step, r, wob, amp, spread} = o;
+  for(let x=-50; x<WORLD.w+50; x+=step){
+    const w = Math.sin(x*wob)*amp;
+    terrain.water.push({x:x+rnd(-12,12), y:y+w+rnd(-spread*0.35,spread*0.35), r:rnd(r[0],r[1])});
+    if(Math.random()<0.62)
+      terrain.water.push({x:x+rnd(-30,30), y:y+w+rnd(-spread,spread), r:rnd(r[0]*0.55,r[1]*0.72)});
+  }
+}
+function tCross(xs, y, wob, amp, w, h){
+  for(const fx of xs)
+    terrain.bridges.push({x:WORLD.w*fx, y:y+Math.sin(WORLD.w*fx*wob)*amp, w, h});
+}
+function tLand(spots, kind, rR, hR, talusN){
+  for(const [fx,fy] of spots){
+    const mx=WORLD.w*fx, my=WORLD.h*fy, R=rnd(rR[0],rR[1]), Hh=rnd(hR[0],hR[1]);
+    tRock(mx, my, R, Hh, kind);
+    for(let i=0;i<(talusN||0);i++){
+      const a=rnd(0,6.283), d=R*rnd(0.74,1.08);
+      tRock(mx+Math.cos(a)*d, my+Math.sin(a)*d, rnd(46,82), Hh*rnd(0.22,0.46), 'boulder');
+    }
+  }
+}
+function tBoulders(n, rR, hR){
+  for(let i=0;i<n;i++){
+    const cx=rnd(220,WORLD.w-220), cy=rnd(220,WORLD.h-220);
+    if(Math.hypot(cx-WORLD.w*0.5, cy-(WORLD.h-190)) < 520) continue;
+    const k=2+(Math.random()*3|0);
+    for(let j=0;j<k;j++)
+      tRock(cx+rnd(-90,90), cy+rnd(-90,90), rnd(rR[0],rR[1]), rnd(hR[0],hR[1]), 'boulder');
+  }
+}
 
 function buildTerrain(){
   const z = ZONE_BY_ID[S.zone];
-  terrain = {solid:[], water:[], bridges:[], grid:null, cell:256};
-  if(!z.terrain){ buildTerrainGrid(); return; }
+  terrain = {solid:[], water:[], bridges:[], scree:[], shore:[], grid:null, cell:256,
+             style:TERRAIN_STYLE[S.zone]||TERRAIN_STYLE.verdant};
+  const gen = TERRAIN_GEN[S.zone];
+  if(!gen){ buildTerrainGrid(); return; }
   const W_ = WORLD.w, H_ = WORLD.h;
-  const rock = (x,y,r,h,kind)=>terrain.solid.push({x,y,r,h,kind:kind||'cliff',
-    a:rnd(0,6.283), s:rnd(0.82,1.20)});
-
-  /* ---- mountain ridge across the waist of the zone ----
-     Two passes cut through it. The ridge is what turns "one big room" into
-     a near half and a far half, and finding a pass is the first bit of
-     navigation the zone asks for. */
-  const ridgeY = H_*0.42;
-  const passes = [W_*0.25, W_*0.72], PASS = 250;
-  for(let x=-70; x<W_+70; x+=86){
-    if(passes.some(px=>Math.abs(x-px) < PASS)) continue;
-    const wob = Math.sin(x*0.0041)*74;
-    rock(x+rnd(-16,16), ridgeY+wob, rnd(86,130), rnd(165,270));
-    /* second and third ranks give the ridge depth instead of a single wall */
-    if(Math.random()<0.75) rock(x+rnd(-44,44), ridgeY+wob+rnd(-165,-80), rnd(62,104), rnd(120,205));
-    if(Math.random()<0.62) rock(x+rnd(-44,44), ridgeY+wob+rnd(80,168),   rnd(56,96),  rnd(105,180));
-  }
-  /* buttresses framing each pass, so a gap reads as a gateway */
-  for(const px of passes){
-    const wob = Math.sin(px*0.0041)*74;
-    rock(px-PASS+34, ridgeY+wob+rnd(-30,30), rnd(74,96), rnd(200,265));
-    rock(px+PASS-34, ridgeY+wob+rnd(-30,30), rnd(74,96), rnd(200,265));
-  }
-
-  /* ---- river and swamp, crossed by two bridges ----
-     Laid between the entrance and the ridge so the first thing you meet on
-     the way north is a choice of route. */
-  const riverY = H_*0.71;
-  const riverWob = x => Math.sin(x*0.0030)*62;
-  for(let x=-50; x<W_+50; x+=58){
-    const wob = riverWob(x);
-    terrain.water.push({x:x+rnd(-12,12), y:riverY+wob+rnd(-22,22), r:rnd(72,106)});
-    if(Math.random()<0.6)
-      terrain.water.push({x:x+rnd(-28,28), y:riverY+wob+rnd(-74,74), r:rnd(42,74)});
-  }
-  for(const bx of [W_*0.31, W_*0.69])
-    terrain.bridges.push({x:bx, y:riverY+riverWob(bx), w:132, h:360});
-
-  /* ---- plateaus: flat-topped landmarks to steer by and fight around ---- */
-  const mesas = [[0.17,0.60],[0.82,0.55],[0.44,0.19],[0.62,0.86]];
-  for(const [fx,fy] of mesas){
-    const mx=W_*fx, my=H_*fy, R=rnd(132,186), Hh=rnd(215,300);
-    rock(mx, my, R, Hh, 'mesa');
-    /* talus at the foot: rubble, not more cylinders, or the plateau reads as
-       a stack of drums rather than a weathered rock formation */
-    const n = 3+(Math.random()*3|0);
-    for(let i=0;i<n;i++){
-      const a=rnd(0,6.283), d=R*rnd(0.74,1.06);
-      rock(mx+Math.cos(a)*d, my+Math.sin(a)*d, rnd(50,84), Hh*rnd(0.26,0.50), 'boulder');
-    }
-  }
-
-  /* ---- loose boulder clusters for cover in the open ---- */
-  for(let i=0;i<7;i++){
-    const cx=rnd(220,W_-220), cy=rnd(220,H_-220);
-    if(Math.hypot(cx-W_*0.5, cy-(H_-190)) < 520) continue;   /* keep the entrance clear */
-    const n=2+(Math.random()*3|0);
-    for(let k=0;k<n;k++)
-      rock(cx+rnd(-90,90), cy+rnd(-90,90), rnd(38,62), rnd(52,92), 'boulder');
-  }
+  const passes = gen();
 
   /* ---- carve the passes LAST ----
-     A mesa or boulder cluster rolled on top of a pass silently seals the only
-     route north, and nothing downstream would notice. Cutting the lanes after
-     everything else is generated makes them open by construction rather than
-     by luck. */
-  const LANE = 132, laneY0 = H_*0.24, laneY1 = H_*0.62;
-  terrain.solid = terrain.solid.filter(c=>{
-    for(const px of passes){
-      const dx = Math.abs(c.x-px);
-      if(dx < LANE + c.r && c.y > laneY0 - c.r && c.y < laneY1 + c.r) return false;
-    }
-    return true;
-  });
+     A landmark or boulder cluster rolled on top of a pass silently seals the
+     only route through, and nothing downstream would notice. Cutting the lanes
+     after everything else is generated makes them open by construction rather
+     than by luck. */
+  if(passes && passes.lanes){
+    const LANE = passes.laneHalf||132, y0 = H_*passes.y0, y1 = H_*passes.y1;
+    terrain.solid = terrain.solid.filter(c=>{
+      for(const px of passes.lanes){
+        const dx = Math.abs(c.x-px);
+        if(dx < LANE + c.r && c.y > y0 - c.r && c.y < y1 + c.r) return false;
+      }
+      return true;
+    });
+  }
 
   /* A disc swallowed whole by a bigger one adds collision passes and draw work
      for geometry nobody can see - and it is the one shape the push-out cannot
@@ -2004,8 +2023,124 @@ function buildTerrain(){
   /* the spawn apron must never be walled in */
   const sx=W_*0.5, sy=H_-190;
   terrain.solid = terrain.solid.filter(c=>Math.hypot(c.x-sx, c.y-sy) > c.r+210);
+
+  /* Scree at the foot of every mass. Rock meeting ground on a hard line is
+     the clearest tell that terrain was dropped on top of a plane; a handful
+     of fragments at the base makes it look weathered into place. Generated
+     last so it follows whatever survived the carving above. */
+  terrain.scree = [];
+  for(const c of terrain.solid){
+    const n = c.r > 100 ? 3 : c.r > 60 ? 2 : 1;
+    for(let i=0;i<n;i++){
+      const a2 = rnd(0,6.283), d = c.r*rnd(0.94,1.16);
+      terrain.scree.push({x:c.x+Math.cos(a2)*d, y:c.y+Math.sin(a2)*d,
+        r:rnd(5,13)*(c.r>100?1.35:1), a:rnd(0,6.283), s:rnd(0.7,1.3)});
+    }
+  }
+  /* A shore ring under each pool: overlapping discs otherwise end in hard
+     circular arcs at the waterline. */
+  terrain.shore = terrain.water.map(w=>({x:w.x, y:w.y, r:w.r*1.16}));
   buildTerrainGrid();
 }
+
+/* ---------- per-zone signatures ----------
+   Each returns the pass lanes it needs kept open. */
+const TERRAIN_GEN = {
+  /* Woodland: one honest mountain ridge, a river you can wade or bridge,
+     and stepped plateaus to steer by. The gentle one. */
+  verdant(){
+    const W_=WORLD.w, H_=WORLD.h;
+    const ridgeY=H_*0.42, lanes=[W_*0.25, W_*0.72], PASS=250;
+    tBand({y:ridgeY, passes:lanes, passW:PASS, step:86, r:[86,130], h:[165,270],
+           kind:'cliff', ranks:3, wob:0.0041, jit:74});
+    for(const px of lanes){
+      const w=Math.sin(px*0.0041)*74;
+      tRock(px-PASS+34, ridgeY+w+rnd(-30,30), rnd(74,96), rnd(200,265));
+      tRock(px+PASS-34, ridgeY+w+rnd(-30,30), rnd(74,96), rnd(200,265));
+    }
+    const riverY=H_*0.71;
+    tLiquid({y:riverY, step:58, r:[72,106], wob:0.0030, amp:62, spread:74});
+    tCross([0.31,0.69], riverY, 0.0030, 62, 132, 360);
+    tLand([[0.17,0.60],[0.82,0.55],[0.44,0.19],[0.62,0.86]], 'mesa', [132,186], [215,300], 4);
+    tBoulders(7, [38,62], [52,92]);
+    return {lanes, y0:0.24, y1:0.62, laneHalf:132};
+  },
+
+  /* Scorched basin: no water, LAVA - fast to cross but it cooks you, so the
+     stone causeways are worth walking to. Obsidian shard fields instead of a
+     rounded ridge, and squat cinder cones for landmarks. */
+  ashen(){
+    const W_=WORLD.w, H_=WORLD.h;
+    const shardY=H_*0.40, lanes=[W_*0.20, W_*0.55, W_*0.85], PASS=190;
+    tBand({y:shardY, passes:lanes, passW:PASS, step:72, r:[52,84], h:[230,380],
+           kind:'shard', ranks:3, wob:0.0052, jit:96});
+    /* two braided lava channels rather than one river */
+    for(const [fy,amp,wob] of [[0.70,52,0.0034],[0.55,70,0.0026]])
+      tLiquid({y:H_*fy, step:54, r:[52,86], wob, amp, spread:52});
+    tCross([0.20,0.55,0.85], H_*0.70, 0.0034, 52, 118, 300);
+    tCross([0.34,0.74],      H_*0.55, 0.0026, 70, 118, 300);
+    tLand([[0.14,0.63],[0.86,0.60],[0.50,0.14],[0.30,0.86]], 'cone', [150,210], [150,215], 5);
+    tBoulders(9, [34,58], [44,86]);
+    return {lanes, y0:0.22, y1:0.60, laneHalf:118};
+  },
+
+  /* Frozen rift: a serac wall of blocky ice, meltwater channels that are the
+     slowest wade in the game, and tall frozen spires. */
+  frost(){
+    const W_=WORLD.w, H_=WORLD.h;
+    const wallY=H_*0.44, lanes=[W_*0.33, W_*0.78], PASS=225;
+    tBand({y:wallY, passes:lanes, passW:PASS, step:78, r:[74,118], h:[250,400],
+           kind:'serac', ranks:3, wob:0.0026, jit:52});
+    const meltY=H_*0.72;
+    tLiquid({y:meltY, step:50, r:[58,92], wob:0.0042, amp:84, spread:66});
+    tCross([0.26,0.62], meltY, 0.0042, 84, 126, 330);
+    tLand([[0.16,0.58],[0.84,0.62],[0.55,0.18],[0.38,0.87]], 'spire', [96,140], [330,470], 5);
+    tBoulders(8, [40,66], [60,120]);
+    return {lanes, y0:0.26, y1:0.64, laneHalf:126};
+  },
+
+  /* Swamp: the inversion. Here the LIQUID is the terrain - broad sprawling bog
+     with islands in it - and the solid parts are low peat banks you weave
+     through rather than one wall. Lots of short boardwalks, no single ridge. */
+  rotmire(){
+    const W_=WORLD.w, H_=WORLD.h;
+    /* three wide bog belts instead of one channel */
+    for(const [fy,amp,wob,sp] of [[0.74,96,0.0022,130],[0.52,118,0.0030,150],[0.28,88,0.0037,120]])
+      tLiquid({y:H_*fy, step:62, r:[86,140], wob, amp, spread:sp});
+    tCross([0.22,0.58,0.86], H_*0.74, 0.0022, 96, 104, 320);
+    tCross([0.34,0.70],      H_*0.52, 0.0030, 118, 104, 340);
+    tCross([0.26,0.64],      H_*0.28, 0.0037, 88, 104, 300);
+    /* peat banks: scattered low walls, a maze rather than a barrier */
+    for(let i=0;i<26;i++){
+      const cx=rnd(180,W_-180), cy=rnd(180,H_-180);
+      if(Math.hypot(cx-W_*0.5, cy-(H_-190)) < 460) continue;
+      const a=rnd(0,6.283), n=3+(Math.random()*4|0);
+      for(let k=0;k<n;k++)
+        tRock(cx+Math.cos(a)*k*74+rnd(-24,24), cy+Math.sin(a)*k*74+rnd(-24,24),
+              rnd(54,86), rnd(70,130), 'bank');
+    }
+    tLand([[0.20,0.64],[0.80,0.40],[0.52,0.15]], 'mound', [120,168], [110,165], 4);
+    return null;                       /* no ridge, so nothing to carve */
+  },
+
+  /* Origin wound: rows of floating monoliths, narrow void rifts, and needle
+     spires. Geometry is a suggestion, so the shapes are hard-edged. */
+  voidspire(){
+    const W_=WORLD.w, H_=WORLD.h;
+    const rowY=H_*0.46, lanes=[W_*0.30, W_*0.68], PASS=205;
+    tBand({y:rowY, passes:lanes, passW:PASS, step:92, r:[46,74], h:[300,470],
+           kind:'monolith', ranks:2, wob:0.0060, jit:110});
+    for(const [fy,amp,wob] of [[0.74,44,0.0040],[0.24,58,0.0031]])
+      tLiquid({y:H_*fy, step:48, r:[44,72], wob, amp, spread:44});
+    tCross([0.24,0.66], H_*0.74, 0.0040, 44, 112, 290);
+    tCross([0.40,0.80], H_*0.24, 0.0031, 58, 112, 290);
+    tLand([[0.15,0.62],[0.85,0.58],[0.50,0.10],[0.34,0.88],[0.70,0.86]],
+          'obelisk', [78,116], [380,540], 4);
+    tBoulders(8, [36,60], [70,150]);
+    return {lanes, y0:0.28, y1:0.66, laneHalf:112};
+  },
+};
+
 
 /* ---------- tiling ground ---------- */
 let bdTile=null, bdPattern=null, bdMotes=[];
@@ -2252,10 +2387,15 @@ function buildZoneWorld(){
   }
   packs.push(makePack('boss', best||{x:WORLD.w/2, y:190}));
 
-  /* Two per zone, far apart. A chest should be a find, not a fixture. */
-  for(let i=0;i<2;i++){
+  /* A chest is a FIND, not a fixture. Two guaranteed per zone made them
+     furniture - you knew there were two, so you swept for them. Rolled
+     instead: most runs turn up nothing, one is a good day, and two or three
+     is a story. Expected yield is 0.43 a zone. */
+  const chestRoll = Math.random();
+  const nChest = chestRoll < 0.65 ? 0 : chestRoll < 0.93 ? 1 : chestRoll < 0.99 ? 2 : 3;
+  for(let i=0;i<nChest;i++){
     const c=place(1100, 900);
-    chests.push({x:c.x, y:c.y, r:16, t:rnd(0,3), open:false, respawn:0});
+    chests.push({x:c.x, y:c.y, r:16, t:rnd(0,3), open:false, openT:0, respawn:0});
   }
 
   /* Roamers go in the GAPS. The generic `place` scores against every spot
@@ -2404,9 +2544,19 @@ function healPlayer(n, silent){
   const got = P.hp-before;
   if(!silent && got>0) fct(P.x,P.y-24,'+'+Math.round(got),'heal');
 }
-function hurtPlayer(raw, eLvl, src){
+/* tick = environmental damage applied every frame (lava, void). It shares the
+   mitigation and death path but not the presentation: a per-frame flash, shake,
+   sound and damage number would be unreadable noise. It also does NOT kill the
+   sprint, so you can still run for the far bank - which is the whole play. */
+function hurtPlayer(raw, eLvl, src, tick){
   if(P.inv>0 || P.dead) return;
   const dmg = mitigate(raw, eLvl||zoneLvl());
+  if(tick){
+    P.hp -= dmg;
+    const el=$('hitFlash'); el.style.opacity = 0.22;
+    if(P.hp<=0) playerDeath();
+    return;
+  }
   P.hp -= dmg; P.flash = 0.18; P.an.hurt = 1;
   /* the hero takes no positional knockback - losing control of your own
      character is a worse feeling than the flinch is a good one - but the
@@ -2534,7 +2684,7 @@ function genZoneItem(z, rank){
 function openChest(){
   const c = nearChest;
   if(!c || c.open) return;
-  c.open = true; c.respawn = 150;
+  c.open = true; c.openT = 0;
   S.meta.chests++;
   const z = ZONE_BY_ID[S.zone];
   const got = [];
@@ -2858,7 +3008,7 @@ function update(dt){
       P.dashT-=dt; P.x+=P.dvx*dt; P.y+=P.dvy*dt;
       if(parts.length<200) parts.push({x:P.x,y:P.y,vx:0,vy:0,life:0.22,max:0.22,col:'#9ec4ff',r:5});
     } else if(ix||iy){
-      const sp = D.moveSpeed * (1 + P.sprint*SPRINT_BONUS) * (inWater(P.x,P.y)?WADE:1);
+      const sp = D.moveSpeed * (1 + P.sprint*SPRINT_BONUS) * (inWater(P.x,P.y)?wadeMul():1);
       P.x += ix*sp*dt; P.y += iy*sp*dt;
       const m=Math.hypot(ix,iy)||1; P.fx=ix/m; P.fy=iy/m;
       /* speed trail, only once actually sprinting */
@@ -2882,10 +3032,15 @@ function update(dt){
        never leave you parked outside the playable box */
     terrainPush(P, P.r);
     P.x = clamp(P.x, 18, WORLD.w-18); P.y = clamp(P.y, 18, WORLD.h-18);
-    /* wake ripples while wading, so the water reads as water and not paint */
-    if(parts.length<200 && (ix||iy) && inWater(P.x,P.y) && Math.random()<dt*16)
+    /* wake while wading, tinted to whatever you are standing in */
+    const wading = inWater(P.x,P.y);
+    if(parts.length<200 && wading && (ix||iy||terrain.style.dps) && Math.random()<dt*16)
       parts.push({x:P.x+rnd(-7,7), y:P.y+rnd(-4,4), vx:rnd(-14,14), vy:rnd(-10,10),
-        life:0.42, max:0.42, col:'#8fd6e8', r:rnd(1.6,3.0)});
+        life:0.42, max:0.42, col:terrain.style.spray, r:rnd(1.6,3.0)});
+    /* Lava and void rifts cook anything standing in them. This is what makes
+       a causeway worth the walk instead of a decoration you ignore. */
+    if(wading && terrain.style.dps>0)
+      hurtPlayer(D.maxHp*terrain.style.dps*dt, zoneLvl(), null, true);
 
     P.atkCd  = Math.max(0,P.atkCd-dt);
     P.dashCd = Math.max(0,P.dashCd-dt);
@@ -2943,10 +3098,13 @@ function update(dt){
 
     const dx=P.x-f.x, dy=P.y-f.y, d=Math.hypot(dx,dy)||1;
     const nx=dx/d, ny=dy/d;
+    /* whatever burns the player burns them too - an enemy wading through lava
+       untouched would give the hazard away as scenery */
+    if(terrain.style.dps>0 && inWater(f.x,f.y)) f.hp -= f.max*terrain.style.dps*0.55*dt;
     /* a flinch DRAGS, it does not stop: stun already zeroes speed and blocks
        shooting, and reusing it here would let a fast weapon perma-lock a pack */
     const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1)*(f.hitT>0?0.45:1)
-             * (inWater(f.x,f.y)?WADE:1);
+             * (inWater(f.x,f.y)?wadeMul():1);
     const ai = f.def.ai;
     if(f.state!=='idle' && d < SPRINT_R) engagedNear = true;
 
@@ -3144,7 +3302,9 @@ function update(dt){
   nearChest = null;
   for(const c of chests){
     c.t += dt;
-    if(c.open){ c.respawn-=dt; if(c.respawn<=0 && Math.hypot(P.x-c.x,P.y-c.y)>800){ c.open=false; } continue; }
+    /* No respawn. A chest that comes back is a resource node, not a find -
+       and with the roll above, re-rolling happens when you re-enter the zone. */
+    if(c.open){ c.openT = Math.min(1, (c.openT||0) + dt*2.6); continue; }
     if(Math.hypot(P.x-c.x, P.y-c.y) < 56) nearChest = c;
   }
   $('prompt').style.display = nearChest ? 'block' : 'none';
@@ -3810,17 +3970,36 @@ const RIG3D = {
     ],
     parts: [
       {b:'hips', shape:'box', w:0.52,h:0.40,d:0.32, y:0.10, c:'dark'},
+      {b:'hips', shape:'box', w:0.58,h:0.10,d:0.36, y:0.25, c:'out'},      /* belt   */
+      {b:'hips', shape:'box', w:0.16,h:0.14,d:0.08, y:0.25, z:0.20, c:'glow'}, /* buckle */
       {b:'chest',shape:'box', w:0.66,h:0.52,d:0.38, y:0.18, c:'mid'},
       {b:'chest',shape:'box', w:0.86,h:0.18,d:0.42, y:0.36, c:'lite'},
+      {b:'chest',shape:'box', w:0.30,h:0.26,d:0.10, y:0.20, z:0.20, c:'lite'}, /* breastplate */
+      {b:'chest',shape:'cone',w:0.16,h:0.26, y:0.44, z:-0.17, c:'out'},    /* spine spike */
+      {b:'chest',shape:'cone',w:0.12,h:0.19, y:0.28, z:-0.19, c:'out'},
       {b:'head', shape:'box', w:0.40,h:0.38,d:0.40, y:0.19, c:'lite'},
+      {b:'head', shape:'box', w:0.44,h:0.09,d:0.18, y:0.30, z:0.02, c:'out'}, /* brow  */
+      {b:'head', shape:'box', w:0.26,h:0.11,d:0.13, y:0.06, z:0.19, c:'dark'},/* jaw   */
+      /* eyes do more for readability at this zoom than any other detail */
+      {b:'head', shape:'sphere', w:0.10, x: 0.10, y:0.20, z:0.19, c:'glow'},
+      {b:'head', shape:'sphere', w:0.10, x:-0.10, y:0.20, z:0.19, c:'glow'},
+      {b:'armL', shape:'sphere', w:0.30, y:-0.01, c:'lite'},                /* pauldron */
       {b:'armL', shape:'box', w:0.19,h:0.40,d:0.19, y:-0.18, c:'mid'},
       {b:'foreL',shape:'box', w:0.16,h:0.38,d:0.16, y:-0.18, c:'dark'},
+      {b:'foreL',shape:'box', w:0.19,h:0.15,d:0.19, y:-0.38, c:'out'},      /* fist  */
+      {b:'armR', shape:'sphere', w:0.30, y:-0.01, c:'lite'},
       {b:'armR', shape:'box', w:0.19,h:0.40,d:0.19, y:-0.18, c:'mid'},
       {b:'foreR',shape:'box', w:0.16,h:0.38,d:0.16, y:-0.18, c:'dark'},
+      {b:'foreR',shape:'box', w:0.19,h:0.15,d:0.19, y:-0.38, c:'out'},
+      /* a crude cleaver: an empty-handed humanoid reads as unfinished */
+      {b:'foreR',shape:'cyl', w:0.07,h:0.22, rot:[0.42,0,0], y:-0.46, z:0.06, c:'out'},
+      {b:'foreR',shape:'box', w:0.09,h:0.52,d:0.20, rot:[0.42,0,0], y:-0.70, z:0.16, c:'lite'},
       {b:'legL', shape:'box', w:0.22,h:0.46,d:0.22, y:-0.22, c:'dark'},
       {b:'shinL',shape:'box', w:0.19,h:0.44,d:0.24, y:-0.22, c:'dark'},
+      {b:'shinL',shape:'box', w:0.21,h:0.12,d:0.32, y:-0.44, z:0.05, c:'out'}, /* foot */
       {b:'legR', shape:'box', w:0.22,h:0.46,d:0.22, y:-0.22, c:'dark'},
       {b:'shinR',shape:'box', w:0.19,h:0.44,d:0.24, y:-0.22, c:'dark'},
+      {b:'shinR',shape:'box', w:0.21,h:0.12,d:0.32, y:-0.44, z:0.05, c:'out'},
     ],
     pose(b, an, st){
       const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.2)*0.5+0.5;
@@ -3866,16 +4045,32 @@ const RIG3D = {
     ],
     parts: [
       {b:'body', shape:'box', w:0.50,h:0.42,d:1.00, c:'mid'},
+      {b:'body', shape:'box', w:0.54,h:0.20,d:0.56, y:0.16, z:0.14, c:'lite'}, /* shoulders */
+      /* a dorsal ridge: the single cheapest way to make a beast read as a
+         predator rather than a crate on legs */
+      {b:'body', shape:'cone',w:0.16,h:0.26, y:0.26, z: 0.24, c:'out'},
+      {b:'body', shape:'cone',w:0.15,h:0.23, y:0.26, z: 0.02, c:'out'},
+      {b:'body', shape:'cone',w:0.13,h:0.19, y:0.24, z:-0.20, c:'out'},
+      {b:'body', shape:'box', w:0.46,h:0.26,d:0.40, y:-0.10, z:-0.32, c:'dark'}, /* haunch */
       {b:'neck', shape:'box', w:0.28,h:0.28,d:0.32, z:0.08, c:'mid'},
+      {b:'neck', shape:'sphere', w:0.46, sy:0.7, z:0.02, c:'lite'},            /* ruff */
       {b:'head', shape:'box', w:0.34,h:0.32,d:0.44, z:0.16, c:'lite'},
-      {b:'head', shape:'box', w:0.16,h:0.14,d:0.22, z:0.44, y:-0.06, c:'dark'},
+      {b:'head', shape:'box', w:0.16,h:0.14,d:0.22, z:0.44, y:-0.06, c:'dark'},/* snout */
+      {b:'head', shape:'box', w:0.13,h:0.05,d:0.12, z:0.50, y:-0.12, c:'out'}, /* teeth */
       {b:'head', shape:'cone',w:0.16,h:0.20, x:0.12, y:0.22, c:'dark'},
       {b:'head', shape:'cone',w:0.16,h:0.20, x:-0.12,y:0.22, c:'dark'},
+      {b:'head', shape:'sphere', w:0.10, x: 0.11, y:0.06, z:0.34, c:'glow'},
+      {b:'head', shape:'sphere', w:0.10, x:-0.11, y:0.06, z:0.34, c:'glow'},
       {b:'tail', shape:'box', w:0.12,h:0.12,d:0.44, z:-0.20, c:'dark'},
+      {b:'tail', shape:'sphere', w:0.22, z:-0.44, c:'out'},                    /* tuft */
       {b:'lFL',  shape:'box', w:0.16,h:0.56,d:0.16, y:-0.28, c:'dark'},
+      {b:'lFL',  shape:'box', w:0.18,h:0.09,d:0.26, y:-0.56, z:0.05, c:'out'}, /* paw */
       {b:'lFR',  shape:'box', w:0.16,h:0.56,d:0.16, y:-0.28, c:'dark'},
+      {b:'lFR',  shape:'box', w:0.18,h:0.09,d:0.26, y:-0.56, z:0.05, c:'out'},
       {b:'lBL',  shape:'box', w:0.17,h:0.58,d:0.17, y:-0.29, c:'dark'},
+      {b:'lBL',  shape:'box', w:0.19,h:0.09,d:0.26, y:-0.58, z:0.05, c:'out'},
       {b:'lBR',  shape:'box', w:0.17,h:0.58,d:0.17, y:-0.29, c:'dark'},
+      {b:'lBR',  shape:'box', w:0.19,h:0.09,d:0.26, y:-0.58, z:0.05, c:'out'},
     ],
     pose(b, an, st){
       const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.6)*0.5+0.5;
@@ -3911,6 +4106,18 @@ const RIG3D = {
     parts: [
       {b:'body', shape:'sphere', w:1.05, sy:0.86, c:'mid'},
       {b:'top',  shape:'sphere', w:0.55, sy:0.80, c:'lite'},
+      /* nodules break the perfect sphere - without them it is a ball, and a
+         ball reads as a placeholder */
+      {b:'body', shape:'sphere', w:0.38, det:0, x: 0.40, y: 0.10, z: 0.26, c:'lite'},
+      {b:'body', shape:'sphere', w:0.30, det:0, x:-0.44, y:-0.04, z: 0.14, c:'lite'},
+      {b:'body', shape:'sphere', w:0.26, det:0, x: 0.10, y:-0.06, z:-0.44, c:'dark'},
+      {b:'body', shape:'sphere', w:0.22, det:0, x:-0.22, y: 0.22, z:-0.34, c:'dark'},
+      {b:'body', shape:'sphere', w:0.16, det:0, x: 0.30, y: 0.30, z:-0.16, c:'out'},
+      /* eyes floating in the mass */
+      {b:'top',  shape:'sphere', w:0.20, x: 0.17, y:0.02, z:0.26, c:'glow'},
+      {b:'top',  shape:'sphere', w:0.20, x:-0.17, y:0.02, z:0.26, c:'glow'},
+      {b:'top',  shape:'sphere', w:0.11, x: 0.17, y:0.02, z:0.33, c:'out'},
+      {b:'top',  shape:'sphere', w:0.11, x:-0.17, y:0.02, z:0.33, c:'out'},
     ],
     pose(b, an, st){
       const p=Math.sin(st.t*3.2), w=an.walk;
@@ -3940,8 +4147,17 @@ const RIG3D = {
     bones: [ ['root',null,[0,0,0]], ['body','root',[0,1.00,0]], ['eye','body',[0,0,0.20]] ],
     parts: [
       {b:'body', shape:'sphere', w:0.90, sy:1.05, c:'mid'},
-      {b:'eye',  shape:'sphere', w:0.34, sy:1.0, c:'lite'},
-      {b:'body', shape:'cone',   w:0.30, h:0.55, y:-0.52, c:'dark'},
+      {b:'body', shape:'sphere', w:1.02, sy:0.55, y:0.16, c:'lite'},        /* cowl   */
+      {b:'eye',  shape:'sphere', w:0.34, sy:1.0, c:'glow'},                 /* pupil  */
+      {b:'eye',  shape:'sphere', w:0.50, sy:1.0, z:-0.06, c:'lite'},        /* sclera */
+      /* tattered shroud: three ragged tails instead of one cone, so it
+         drifts like cloth rather than hanging like a traffic pylon */
+      {b:'body', shape:'cone',   w:0.34, h:0.62, x: 0.00, y:-0.56, z:0.00, c:'dark'},
+      {b:'body', shape:'cone',   w:0.22, h:0.46, x: 0.26, y:-0.48, z:0.10, c:'dark'},
+      {b:'body', shape:'cone',   w:0.20, h:0.40, x:-0.24, y:-0.45, z:-0.10, c:'dark'},
+      {b:'body', shape:'sphere', w:0.16, x: 0.44, y: 0.06, z:0.10, c:'glow'}, /* wisps */
+      {b:'body', shape:'sphere', w:0.14, x:-0.46, y: 0.00, z:0.04, c:'glow'},
+      {b:'body', shape:'sphere', w:0.12, x: 0.10, y: 0.46, z:-0.20, c:'glow'},
     ],
     pose(b, an, st){
       b.body.position.y = 1.00 + Math.sin(st.t*1.9)*0.10;
@@ -4155,12 +4371,21 @@ function buildZoneScene(){
      base never shows a seam; mesas are tapered cylinders with a flat top so a
      plateau reads as a plateau and not as another rock. All instanced: the
      whole ridge costs three draw calls. */
-  const cliffs = terrain.solid.filter(c=>c.kind!=='mesa');
-  const mesas  = terrain.solid.filter(c=>c.kind==='mesa');
+  /* Kinds map onto a handful of silhouettes. Grouping by silhouette rather
+     than by name keeps this at one instanced draw per shape however many
+     zone-specific names the generators invent. */
+  const byShape = {chunk:[], tier:[], cone:[], spire:[], slab:[], dome:[]};
+  const SHAPE_OF = {cliff:'chunk', boulder:'chunk', bank:'chunk',
+                    mesa:'tier',  cone:'cone',  spire:'spire',
+                    shard:'spire', serac:'slab', monolith:'slab',
+                    obelisk:'slab', mound:'dome'};
+  for(const c of terrain.solid) (byShape[SHAPE_OF[c.kind]||'chunk']).push(c);
+  const cliffs = byShape.chunk;
+  const mesas  = byShape.tier;
   /* Rock has to sit clearly OFF the ground palette. Shading the ground colour
      alone left the whole ridge the same green as the grass, so it read as a
      lumpy lawn; mixing toward neutral stone is what makes it read as rock. */
-  const STONE = mix(shade(z.ground, 0.55), '#9ba49b', 0.56);
+  const STONE = mix(shade(z.ground, 0.55), terrain.style.rock, 0.62);
   const cliffMat = new THREE.MeshStandardMaterial({
     color:STONE, roughness:1, flatShading:true});
   addInst(new THREE.DodecahedronGeometry(1,0), cliffMat, cliffs, (c,m,q,v,sc)=>{
@@ -4199,13 +4424,79 @@ function buildZoneScene(){
     m.compose(v,q,sc);
   });
 
+  /* ---- the other zones' silhouettes ---- */
+  const coneMat = new THREE.MeshStandardMaterial({
+    color:shade(STONE,-0.12), roughness:1, flatShading:true});
+  addInst(new THREE.ConeGeometry(1, 1, 8), coneMat, byShape.cone, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    v.set(c.x, c.h*0.5-12, c.y); sc.set(c.r*1.15, c.h, c.r*1.15);
+    m.compose(v,q,sc);
+  });
+  /* a darker throat so a cinder cone reads as a vent and not a party hat */
+  const ventMat = new THREE.MeshStandardMaterial({
+    color:shade(z.accent,-0.55), roughness:1, flatShading:true,
+    emissive:new THREE.Color(shade(z.accent,-0.70))});
+  addInst(new THREE.ConeGeometry(1, 1, 8), ventMat, byShape.cone, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    v.set(c.x, c.h*0.62-12, c.y); sc.set(c.r*0.42, c.h*0.30, c.r*0.42);
+    m.compose(v,q,sc);
+  });
+  const spireMat = new THREE.MeshStandardMaterial({
+    color:shade(STONE, 0.10), roughness:0.7, flatShading:true});
+  addInst(new THREE.ConeGeometry(1, 1, 6), spireMat, byShape.spire, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    /* leaned a little off vertical so a shard field is jagged, not a picket fence */
+    const lean = (c.s-1)*0.55;
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), lean));
+    v.set(c.x, c.h*0.48-14, c.y); sc.set(c.r*1.1, c.h, c.r*1.1);
+    m.compose(v,q,sc);
+  });
+  const slabMat = new THREE.MeshStandardMaterial({
+    color:shade(STONE,-0.05), roughness:0.85, flatShading:true});
+  addInst(new THREE.BoxGeometry(1,1,1), slabMat, byShape.slab, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    v.set(c.x, c.h*0.5-16, c.y); sc.set(c.r*1.45, c.h, c.r*1.1);
+    m.compose(v,q,sc);
+  });
+  const domeMat = new THREE.MeshStandardMaterial({
+    color:mix(STONE, z.accent, 0.30), roughness:1, flatShading:true});
+  addInst(new THREE.IcosahedronGeometry(1,1), domeMat, byShape.dome, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    v.set(c.x, c.h*0.30-18, c.y); sc.set(c.r*1.1, c.h*0.80, c.r*1.1);
+    m.compose(v,q,sc);
+  });
+
+  const screeMat = new THREE.MeshStandardMaterial({
+    color:shade(STONE,-0.18), roughness:1, flatShading:true});
+  /* tetrahedra, not dodecahedra: 4 triangles against 36 for a chip of gravel
+     nobody looks at twice. As dodecahedra the scree alone cost 14k triangles. */
+  addInst(new THREE.TetrahedronGeometry(1,0), screeMat, terrain.scree||[], (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
+    v.set(c.x, c.r*0.30, c.y); sc.set(c.r*1.25, c.r*0.9*c.s, c.r*1.25);
+    m.compose(v,q,sc);
+  });
+
   /* water sits just above the ground plane to dodge z-fighting, and does not
      write depth so overlapping discs read as one sheet rather than a pile */
+  const lit = terrain.style.glow, gloss = terrain.style.gloss;
+  /* Mixed only lightly toward the ground colour. At 0.72 the bog came out the
+     same green as the bank and the whole swamp vanished. */
   const waterMat = new THREE.MeshStandardMaterial({
-    color:mix(z.ground,'#2f6f8a',0.72), roughness:0.22, metalness:0.15,
-    transparent:true, opacity:0.86, depthWrite:false, flatShading:true});
+    color:mix(z.ground, terrain.style.liquid, lit?0.96:0.90),
+    roughness:lit?0.5 : gloss?0.12 : 0.22,
+    metalness:lit?0 : gloss?0.60 : 0.15,
+    emissive:new THREE.Color(lit ? shade(terrain.style.liquid,-0.25) : '#000000'),
+    transparent:true, opacity:lit?0.95:0.90, depthWrite:false, flatShading:true});
   const waterGeo = new THREE.CircleGeometry(1, 14);
   waterGeo.rotateX(-Math.PI/2);
+  /* damp shore under the waterline, drawn first and slightly lower */
+  const shoreMat = new THREE.MeshStandardMaterial({
+    color:mix(z.ground, terrain.style.liquid, 0.42), roughness:1, flatShading:true,
+    transparent:true, opacity:0.85, depthWrite:false});
+  addInst(waterGeo, shoreMat, terrain.shore||[], (c,m,q,v,sc)=>{
+    q.identity(); v.set(c.x, 0.7, c.y); sc.set(c.r, 1, c.r);
+    m.compose(v,q,sc);
+  });
   addInst(waterGeo, waterMat, terrain.water, (c,m,q,v,sc)=>{
     q.setFromAxisAngle(new THREE.Vector3(0,1,0), 0);
     v.set(c.x, 1.6, c.y); sc.set(c.r, 1, c.r);
@@ -4226,8 +4517,16 @@ function buildZoneScene(){
       }
     }
     const unit = new THREE.BoxGeometry(1,1,1);
-    const deckMat = new THREE.MeshStandardMaterial({color:'#6b4a26', roughness:1, flatShading:true});
-    const postMat = new THREE.MeshStandardMaterial({color:'#4a3018', roughness:1, flatShading:true});
+    /* a rope bridge over lava would have burned; each zone crosses its own
+       hazard in a material that could survive it */
+    const CROSS = {
+      wood: ['#6b4a26','#4a3018'],
+      stone:[shade(STONE,0.10), shade(STONE,-0.30)],
+      ice:  [mix(STONE,'#dff2ff',0.55), mix(STONE,'#7fb6d8',0.35)],
+      plank:['#5d5233','#39301c'],
+    }[terrain.style.cross] || ['#6b4a26','#4a3018'];
+    const deckMat = new THREE.MeshStandardMaterial({color:CROSS[0], roughness:1, flatShading:true});
+    const postMat = new THREE.MeshStandardMaterial({color:CROSS[1], roughness:1, flatShading:true});
     const put=(d,m,q,v,sc)=>{ q.identity(); v.set(d.x,d.y,d.z); sc.set(d.sx,d.sy,d.sz);
       m.compose(v,q,sc); };
     addInst(unit, deckMat, decks, put);
@@ -4235,15 +4534,65 @@ function buildZoneScene(){
     addInst(unit, postMat, posts, put);
   }
 
-  /* chests are few — plain meshes */
-  const chestGeo = new THREE.BoxGeometry(26,18,20);
-  const chestMat = new THREE.MeshStandardMaterial({color:'#a8762c', roughness:0.6,
-    metalness:0.2, emissive:new THREE.Color('#3a2708')});
+  /* ---- chests ----
+     A single emissive box was the whole model, which is why they looked worse
+     than everything around them. Now that a chest is a rare find it has to
+     earn the moment: banded casket, hinged lid that actually swings open, and
+     a beacon so a rare thing is findable rather than missable. There are at
+     most three, so plain meshes cost nothing. */
+  const woodMat  = new THREE.MeshStandardMaterial({color:'#7a5326', roughness:0.72, flatShading:true});
+  const wood2Mat = new THREE.MeshStandardMaterial({color:'#4f3417', roughness:0.8,  flatShading:true});
+  const ironMat  = new THREE.MeshStandardMaterial({color:'#4e5461', roughness:0.45, metalness:0.55, flatShading:true});
+  const goldMat  = new THREE.MeshStandardMaterial({color:'#e8b44a', roughness:0.32, metalness:0.7,
+    emissive:new THREE.Color('#4a3208'), flatShading:true});
+  const glowMat  = new THREE.MeshBasicMaterial({color:'#ffd98a', transparent:true,
+    opacity:0.20, depthWrite:false, blending:THREE.AdditiveBlending});
+
   for(const c of chests){
-    const m = new THREE.Mesh(chestGeo, chestMat);
-    m.castShadow = true; m.position.set(c.x, 9, c.y);
-    m.userData.chest = c;
-    t.scene.add(m); t.chests.push(m);
+    const g = new THREE.Group();
+    g.position.set(c.x, 0, c.y);
+    const add=(geo,mat,x,y,z,parent)=>{ const m=new THREE.Mesh(geo,mat);
+      m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true;
+      (parent||g).add(m); return m; };
+
+    add(new THREE.BoxGeometry(30,15,21), woodMat, 0, 10, 0);            /* casket   */
+    add(new THREE.BoxGeometry(32,3.5,23), wood2Mat, 0, 17.4, 0);        /* rim      */
+    for(const bx of [-9.5, 9.5])                                        /* bands    */
+      add(new THREE.BoxGeometry(3.4,17,23.4), ironMat, bx, 10.5, 0);
+    for(const fx of [-12,12]) for(const fz of [-7.5,7.5])               /* feet     */
+      add(new THREE.BoxGeometry(4.5,5,4.5), wood2Mat, fx, 2.5, fz);
+
+    /* the lid hangs off a pivot on the BACK edge, so opening is a hinge
+       rather than the lid sliding off into the air */
+    const hinge = new THREE.Group();
+    hinge.position.set(0, 18.4, -10.5);
+    g.add(hinge);
+    const lid = add(new THREE.CylinderGeometry(11,11,30,9,1,false,0,Math.PI),
+                    woodMat, 0, 0, 10.5, hinge);
+    lid.rotation.z = Math.PI/2;
+    /* straps are half-cylinders matching the lid's own curve. As boxes they
+       stood off the dome and flew away from it the moment the hinge turned. */
+    for(const bx of [-9.5, 9.5]){
+      const st2 = add(new THREE.CylinderGeometry(11.35,11.35,3.6,9,1,false,0,Math.PI),
+                      ironMat, bx, 0, 10.5, hinge);
+      st2.rotation.z = Math.PI/2;
+    }
+    /* lockplate belongs on the CASKET, not the hinge - hung off the hinge it
+       swung away with the lid, and at y=-1.5 it was underground either way */
+    add(new THREE.BoxGeometry(8,8,2.5), goldMat, 0, 12.5, 11.0);
+    add(new THREE.SphereGeometry(2.1,7,5), goldMat, 0, 12.5, 12.4);
+
+    /* beacon: a soft column so a rare chest reads across the field.
+       Its own material clone - sharing one would make opening a chest dim
+       every other chest's beacon with it. */
+    const gm = glowMat.clone();
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 13, 150, 9, 1, true), gm);
+    beam.position.set(0, 80, 0); g.add(beam);
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(5.5,9,7), gm);
+    spark.position.set(0, 24, 0); g.add(spark);
+
+    g.userData = {chest:c, hinge, beam, spark};
+    t.scene.add(g); t.chests.push(g);
   }
   initFx();
   sceneReady = true;
@@ -4492,11 +4841,21 @@ function render(){
     if(!seen.has(ent)){ releaseActor(a); t.actors.delete(ent); }
   }
 
-  /* ---- chest visibility ---- */
-  for(const m of t.chests){
-    const c = m.userData.chest;
-    m.visible = !c.open;
-    if(m.visible) m.position.y = 9 + Math.sin(c.t*3)*2;
+  /* ---- chests ----
+     An opened chest STAYS, lid swung back and beacon dead. Popping it out of
+     existence threw away the one bit of evidence that you found something. */
+  for(const g of t.chests){
+    const {chest:c, hinge, beam, spark} = g.userData;
+    const k = c.open ? (c.openT||0) : 0;
+    hinge.rotation.x = -k*2.05;
+    const lit = 1-k;
+    beam.visible = spark.visible = lit > 0.02;
+    if(beam.visible){
+      const pulse = 0.5 + Math.sin(c.t*2.4)*0.5;
+      beam.material.opacity = (0.09 + pulse*0.10) * lit;
+      spark.scale.setScalar(0.85 + pulse*0.25);
+      spark.position.y = 24 + Math.sin(c.t*3)*2.6;
+    }
   }
 
   syncFx();
@@ -4513,6 +4872,12 @@ let hudH = 104;
    per zone and blitted. Stroking it live would put 200+ arcs on the 2D canvas
    every single frame for a picture that is identical each time. */
 let mmTerrain=null, mmTerrainKey='';
+/* #rrggbb -> rgba(), so the minimap can tint from the same style table the
+   world does instead of hard-coding blue for everything */
+function hexA(h, a){
+  const n = parseInt(h.slice(1),16);
+  return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+}
 function mmTerrainLayer(s, mw, mh){
   const key = S.zone+'|'+Math.round(mw)+'x'+Math.round(mh)+'|'+terrain.solid.length;
   if(mmTerrain && mmTerrainKey===key) return mmTerrain;
@@ -4520,7 +4885,7 @@ function mmTerrainLayer(s, mw, mh){
   c.width = Math.max(1,Math.ceil(mw*DPR)); c.height = Math.max(1,Math.ceil(mh*DPR));
   const g = c.getContext('2d');
   g.setTransform(DPR,0,0,DPR,0,0);
-  g.fillStyle='rgba(74,140,170,.55)';
+  g.fillStyle = hexA(terrain.style.liquid, terrain.style.glow?0.85:0.62);
   for(const w of terrain.water){
     g.beginPath(); g.arc(w.x*s, w.y*s, Math.max(0.7,w.r*s), 0, 6.283); g.fill(); }
   g.fillStyle='rgba(150,120,70,.85)';
