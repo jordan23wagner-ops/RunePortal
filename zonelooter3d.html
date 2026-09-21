@@ -342,6 +342,17 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .sectionLbl::after{content:'';flex:1;height:1px;background:var(--line);}
 .sectionLbl:first-child{margin-top:0;}
 
+/* Drawn gear icons. One class, sized by whatever container it lands in, so
+   the same artwork serves a 20px feed row and a 60px detail header. */
+.ico{display:block;width:76%;height:76%;object-fit:contain;
+  image-rendering:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55));}
+.ico.big{width:82%;height:82%;}
+.ico.dim{opacity:.30;filter:grayscale(1);}
+.cIcon .ico,.slotIc .ico,.detIc .ico,.lIc .ico{width:80%;height:80%;}
+.gcell .ico{width:78%;height:78%;}
+.lootRow .fi .ico{width:19px;height:19px;}
+.lootRow.big .fi .ico{width:23px;height:23px;}
+
 /* ============================================================
    ITEM CARDS — the heart of the card-game look
    ============================================================ */
@@ -708,6 +719,68 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   .actBtn.big{width:64px;height:64px;font-size:23px;}
   #stick{width:96px;height:96px;} #stickNub{width:44px;height:44px;left:26px;top:26px;}
 }
+
+/* ============================================================
+   LANDSCAPE
+   Portrait caps the app at 560px and stacks the tab bar underneath, which
+   on a wide screen wastes most of the display and leaves the playfield
+   letterboxed. Held sideways the bar becomes a rail on the left, the stage
+   takes everything else, and panels slide in as a SIDE SHEET so the game
+   stays visible behind them instead of being replaced by a menu.
+   ============================================================ */
+@media (min-aspect-ratio: 1/1){
+  #app{max-width:none;flex-direction:row;}
+
+  #tabbar{
+    /* order flips it ahead of the stage: the bar follows #stage in the DOM,
+       so row layout would otherwise put the rail on the right, directly under
+       the thumb that works the action buttons */
+    order:-1;
+    flex-direction:column;width:76px;flex:0 0 76px;
+    border-top:none;border-right:1px solid var(--line);
+    padding-bottom:0;padding-left:env(safe-area-inset-left,0px);
+    justify-content:center;gap:2px;
+  }
+  .tab{flex:0 0 auto;padding:11px 2px;gap:3px;}
+  .tab .ic{font-size:21px;}
+  /* the selected marker moves to the inner edge, since "top" is now "left" */
+  .tab.sel::before{top:18%;bottom:18%;left:auto;right:0;width:2px;height:auto;
+    border-radius:2px 0 0 2px;}
+  .tab .dot{top:7px;right:12px;}
+
+  #stage{flex:1;min-width:0;}
+
+  /* panels: a sheet on the right, not a full takeover */
+  #panels{left:auto;width:min(480px, 52%);}
+  .panel{transform:translateX(105%);border-left:1px solid var(--line2);
+    box-shadow:-14px 0 40px rgba(0,0,0,.55);}
+  .panel.open{transform:none;}
+  .pHead{padding-top:calc(8px + var(--safe-t));}
+  .pFoot{padding-bottom:10px;}
+
+  /* controls tuck into the corners of the wider field */
+  #actions{right:16px;bottom:16px;}
+  #prompt{bottom:84px;}
+  #lootFeed{top:calc(var(--safe-t) + 96px);right:12px;max-width:40%;}
+
+  /* the modal becomes a centred card - a bottom sheet on a short screen
+     covers the entire playfield */
+  #modalWrap{align-items:center;}
+  #modal{max-width:520px;border-radius:16px;max-height:86%;
+    border:1px solid var(--line2);padding-bottom:16px;}
+  #lootInner{max-width:420px;}
+}
+/* short AND wide: phones held sideways, where vertical room is the constraint */
+@media (min-aspect-ratio: 1/1) and (max-height:520px){
+  #tabbar{width:62px;flex:0 0 62px;}
+  .tab{padding:8px 2px;font-size:8px;}
+  .tab .ic{font-size:18px;}
+  #hud{padding-top:calc(3px + var(--safe-t));}
+  .actBtn{width:50px;height:50px;font-size:18px;}
+  .actBtn.big{width:62px;height:62px;font-size:22px;}
+  #actions{gap:8px;}
+  #lootFeed{top:calc(var(--safe-t) + 78px);}
+}
 </style>
 </head>
 <body>
@@ -1047,9 +1120,346 @@ const ARMOR_SLOTS = {
 };
 const TRINKETS = {amulet:{n:'Amulet',ic:'📿'},ring:{n:'Ring',ic:'💍'}};
 
+/* ================================================================
+   GEAR ICONS
+   Every item was an emoji, which meant the inventory rendered in a
+   different art style from the game - and in whatever style the player's
+   OS happened to ship. These are drawn on a canvas at load, cached as data
+   URLs, and tinted by rarity, so a legendary axe reads as a legendary axe
+   at a glance and the whole UI belongs to one game.
+   ================================================================ */
+const ICO_CACHE = new Map();
+const ICO_SZ = 64;
+const IC = {
+  line:'#10141f', steel:'#c2ccdd', steelD:'#7a8496', steelL:'#e6ecf6',
+  wood:'#7d5527', woodD:'#4a3116', leather:'#8d6238', leatherD:'#553920',
+  gold:'#e8b44a', goldD:'#9a7320', bone:'#e0d9c4', cloth:'#6b5bb0',
+  clothD:'#3d3370', cord:'#b9a77e',
+};
+const RARCOL = ['#9aa4b2','#4ade80','#38bdf8','#a78bfa','#fb923c','#f43f5e'];
+
+function _p(g, pts, fill, stroke){
+  g.beginPath();
+  g.moveTo(pts[0], pts[1]);
+  for(let i=2;i<pts.length;i+=2) g.lineTo(pts[i], pts[i+1]);
+  g.closePath();
+  if(fill){ g.fillStyle=fill; g.fill(); }
+  if(stroke!==null){ g.strokeStyle=stroke||IC.line; g.lineWidth=3; g.lineJoin='round'; g.stroke(); }
+}
+function _c(g, x, y, r, fill, stroke){
+  g.beginPath(); g.arc(x,y,r,0,6.283);
+  if(fill){ g.fillStyle=fill; g.fill(); }
+  if(stroke!==null){ g.strokeStyle=stroke||IC.line; g.lineWidth=3; g.stroke(); }
+}
+function _bar(g, x, y, w, h, fill, stroke){
+  _p(g,[x,y, x+w,y, x+w,y+h, x,y+h], fill, stroke);
+}
+/* the rarity gem every piece carries, so tier reads before the shape does */
+function _gem(g, x, y, r, rc){
+  _p(g,[x,y-r, x+r,y, x,y+r, x-r,y], rc);
+  _p(g,[x,y-r, x+r*0.45,y-r*0.1, x,y+r*0.2, x-r*0.45,y-r*0.1], 'rgba(255,255,255,.45)', null);
+}
+
+const ICO_DRAW = {
+  /* ---------------- melee ---------------- */
+  sword(g,rc){
+    _p(g,[32,4, 39,16, 39,40, 25,40, 25,16], IC.steel);
+    _p(g,[32,4, 35,16, 35,40, 32,40], IC.steelL, null);
+    _bar(g,17,40,30,6, IC.goldD);
+    _bar(g,29,46,6,12, IC.leatherD);
+    _c(g,32,60,4.5, IC.gold);
+    _gem(g,32,43,4.5,rc);
+  },
+  greatsword(g,rc){
+    _p(g,[32,2, 42,14, 42,38, 22,38, 22,14], IC.steel);
+    _p(g,[32,2, 37,14, 37,38, 32,38], IC.steelL, null);
+    _bar(g,11,38,42,7, IC.goldD);
+    _bar(g,28,45,8,14, IC.leatherD);
+    _gem(g,32,41.5,5,rc);
+  },
+  dagger(g,rc){
+    _p(g,[32,8, 38,20, 36,38, 28,38, 26,20], IC.steelL);
+    _bar(g,22,38,20,5, IC.steelD);
+    _bar(g,29,43,6,14, IC.leatherD);
+    _gem(g,32,40.5,4,rc);
+  },
+  axe(g,rc){
+    /* one big asymmetric crescent, not two facing blades - mirrored heads
+       merged into a shapeless lump at icon size */
+    /* haft hard left, one broad wedge right with a concave back. At 20px a
+       silhouette has to differ from "sword" by its OUTLINE, not its detail. */
+    _bar(g,16,6,8,54, IC.wood);
+    _bar(g,13,50,14,6, IC.leatherD);
+    _p(g,[22,8, 44,6, 58,22, 44,40, 22,38, 32,23], IC.steel);
+    _p(g,[26,12, 42,11, 51,22, 42,35, 26,34, 34,23], IC.steelL, null);
+    _gem(g,40,23,5.5,rc);
+  },
+  mace(g,rc){
+    /* flanged head: four chunky blades, which reads at 20px where a ring of
+       thin spikes just turned into a cog */
+    _bar(g,29,30,6,30, IC.wood);
+    _bar(g,25,54,14,6, IC.leatherD);
+    _p(g,[32,2, 46,10, 46,28, 32,38, 18,28, 18,10], IC.steelD);
+    _p(g,[32,6, 42,12, 42,26, 32,33, 22,26, 22,12], IC.steel, null);
+    _p(g,[18,10, 8,16, 18,28], IC.steelD);
+    _p(g,[46,10, 56,16, 46,28], IC.steelD);
+    _gem(g,32,19,5.5,rc);
+  },
+  spear(g,rc){
+    _bar(g,30,18,4,42, IC.wood);
+    _p(g,[32,2, 40,20, 32,26, 24,20], IC.steel);
+    _p(g,[32,4, 36,19, 32,24], IC.steelL, null);
+    _bar(g,26,26,12,5, IC.goldD);
+    _gem(g,32,17,4,rc);
+  },
+  /* ---------------- ranged ---------------- */
+  shortbow(g,rc){
+    g.strokeStyle=IC.line; g.lineWidth=8; g.lineCap='round';
+    g.beginPath(); g.arc(44,32,26,2.3,4.0); g.stroke();
+    g.strokeStyle=IC.wood; g.lineWidth=5;
+    g.beginPath(); g.arc(44,32,26,2.3,4.0); g.stroke();
+    g.strokeStyle=IC.line; g.lineWidth=4;
+    g.beginPath(); g.moveTo(26,10); g.lineTo(26,54); g.stroke();
+    g.strokeStyle=IC.bone; g.lineWidth=2;
+    g.beginPath(); g.moveTo(26,10); g.lineTo(26,54); g.stroke();
+    _gem(g,20,32,4.5,rc);
+  },
+  longbow(g,rc){
+    g.strokeStyle=IC.line; g.lineWidth=8; g.lineCap='round';
+    g.beginPath(); g.arc(46,32,30,2.25,4.03); g.stroke();
+    g.strokeStyle=IC.woodD; g.lineWidth=5;
+    g.beginPath(); g.arc(46,32,30,2.25,4.03); g.stroke();
+    g.strokeStyle=IC.line; g.lineWidth=4;
+    g.beginPath(); g.moveTo(22,4); g.lineTo(22,60); g.stroke();
+    g.strokeStyle=IC.bone; g.lineWidth=2;
+    g.beginPath(); g.moveTo(22,4); g.lineTo(22,60); g.stroke();
+    _gem(g,16,32,4.5,rc);
+  },
+  crossbow(g,rc){
+    /* thick stock and swept prod - the old thin cross read as a plus sign */
+    _p(g,[27,12, 37,12, 37,44, 32,60, 24,58, 24,42], IC.wood);
+    _p(g,[4,18, 24,24, 40,24, 60,18, 60,26, 40,32, 24,32, 4,26], IC.woodD);
+    _p(g,[4,18, 10,14, 12,28, 4,26], IC.steelD);
+    _p(g,[60,18, 54,14, 52,28, 60,26], IC.steelD);
+    g.strokeStyle=IC.bone; g.lineWidth=2.5;
+    g.beginPath(); g.moveTo(9,17); g.lineTo(32,27); g.lineTo(55,17); g.stroke();
+    _bar(g,24,44,16,7, IC.steelD);
+    _gem(g,32,22,5,rc);
+  },
+  knives(g,rc){
+    for(const [x,r] of [[16,-0.3],[32,0],[48,0.3]]){
+      g.save(); g.translate(x,32); g.rotate(r);
+      _p(g,[0,-22, 5,-8, 3,10, -3,10, -5,-8], IC.steelL);
+      _bar(g,-3,10,6,12, IC.leatherD);
+      g.restore();
+    }
+    _gem(g,32,44,4.5,rc);
+  },
+  handcannon(g,rc){
+    _p(g,[8,24, 46,24, 46,36, 8,36], IC.steelD);
+    _c(g,10,30,7, IC.steel);
+    _p(g,[44,22, 58,26, 58,34, 44,38], IC.steel);
+    _p(g,[30,36, 40,36, 34,58, 24,58], IC.woodD);
+    _gem(g,24,30,4.5,rc);
+  },
+  /* ---------------- magic ---------------- */
+  firestaff(g,rc){
+    _bar(g,29,20,6,42, IC.wood);
+    _c(g,32,16,13, IC.goldD);
+    _c(g,32,16,9, rc);
+    _c(g,32,16,4.5, '#fff6dc', null);
+    _bar(g,26,28,12,5, IC.gold);
+  },
+  arcaneorb(g,rc){
+    _c(g,32,28,18, IC.goldD);
+    _c(g,32,28,14, rc);
+    _c(g,27,23,5, 'rgba(255,255,255,.5)', null);
+    _p(g,[20,44, 44,44, 40,58, 24,58], IC.goldD);
+  },
+  icewand(g,rc){
+    _bar(g,28,26,8,34, IC.woodD);
+    _p(g,[32,2, 42,18, 36,26, 28,26, 22,18], rc);
+    _p(g,[32,6, 37,18, 32,23, 27,18], 'rgba(255,255,255,.45)', null);
+    _bar(g,25,26,14,5, IC.steel);
+  },
+  stormrod(g,rc){
+    _bar(g,29,36,6,24, IC.steelD);
+    _bar(g,25,56,14,5, IC.leatherD);
+    /* the bolt IS the icon, so it gets the whole upper two thirds */
+    _p(g,[40,2, 18,30, 30,30, 22,58, 48,24, 34,24], rc);
+    _c(g,32,36,6, IC.gold);
+  },
+  voidtome(g,rc){
+    _p(g,[10,10, 54,10, 54,54, 10,54], IC.clothD);
+    _p(g,[14,14, 50,14, 50,50, 14,50], IC.cloth, null);
+    _bar(g,10,10,7,44, IC.goldD);
+    _c(g,34,32,9, rc);
+    _c(g,34,32,4, '#0c0a1a', null);
+  },
+  /* ---------------- offhands ---------------- */
+  shield(g,rc){
+    _p(g,[32,4, 56,14, 52,42, 32,60, 12,42, 8,14], IC.steel);
+    _p(g,[32,10, 49,18, 46,40, 32,52, 18,40, 15,18], IC.steelD, null);
+    _gem(g,32,30,8,rc);
+  },
+  quiver(g,rc){
+    _p(g,[18,20, 46,20, 42,60, 22,60], IC.leather);
+    _p(g,[18,20, 46,20, 45,28, 19,28], IC.leatherD, null);
+    for(const x of [25,32,39]){
+      _bar(g,x-2,6,4,16, IC.wood);
+      _p(g,[x,2, x+5,10, x-5,10], IC.bone);
+    }
+    _gem(g,32,44,5,rc);
+  },
+  tome(g,rc){
+    _p(g,[8,14, 32,20, 32,56, 8,50], IC.clothD);
+    _p(g,[56,14, 32,20, 32,56, 56,50], IC.cloth);
+    _p(g,[30,18, 34,18, 34,58, 30,58], IC.goldD);
+    _gem(g,32,32,5,rc);
+  },
+  focus(g,rc){
+    _p(g,[32,6, 50,24, 32,58, 14,24], rc);
+    _p(g,[32,6, 41,24, 32,34, 23,24], 'rgba(255,255,255,.4)', null);
+    _c(g,32,24,4, '#ffffff', null);
+  },
+  /* ---------------- trinkets ---------------- */
+  amulet(g,rc){
+    g.strokeStyle=IC.line; g.lineWidth=7;
+    g.beginPath(); g.arc(32,26,19,3.5,6.0); g.stroke();
+    g.strokeStyle=IC.cord; g.lineWidth=4;
+    g.beginPath(); g.arc(32,26,19,3.5,6.0); g.stroke();
+    _c(g,32,44,12, IC.goldD);
+    _gem(g,32,44,8,rc);
+  },
+  ring(g,rc){
+    _c(g,32,38,17, IC.goldD);
+    _c(g,32,38,11, null, IC.goldD);
+    g.save(); g.globalCompositeOperation='destination-out';
+    _c(g,32,38,10, '#000', null); g.restore();
+    _c(g,32,38,17, null);
+    _gem(g,32,17,9,rc);
+  },
+  /* ---------------- armour (shape by slot, palette by line) --------- */
+  a_head(g,rc,pal){
+    _p(g,[32,6, 52,18, 52,36, 42,36, 42,26, 22,26, 22,36, 12,36, 12,18], pal[0]);
+    _p(g,[32,10, 47,20, 47,24, 17,24, 17,20], pal[1], null);
+    _gem(g,32,17,5,rc);
+  },
+  a_chest(g,rc,pal){
+    _p(g,[20,10, 44,10, 54,20, 50,54, 14,54, 10,20], pal[0]);
+    _p(g,[24,10, 32,22, 40,10], pal[1], null);
+    _bar(g,12,36,40,6, pal[1]);
+    _gem(g,32,28,6,rc);
+  },
+  a_hands(g,rc,pal){
+    /* cuff, fist, thumb - a recognisable gauntlet instead of a mitten blob */
+    _p(g,[16,34, 48,34, 46,56, 18,56], pal[0]);
+    _p(g,[14,20, 50,20, 50,34, 14,34], pal[1]);
+    for(const x of [22,30,38])
+      _p(g,[x,10, x+7,10, x+7,21, x,21], pal[0]);
+    _p(g,[48,36, 58,40, 56,50, 47,48], pal[0]);
+    _gem(g,32,45,5.5,rc);
+  },
+  a_legs(g,rc,pal){
+    _p(g,[16,8, 48,8, 46,22, 36,58, 28,58, 18,22], pal[0]);
+    _p(g,[32,22, 36,58, 28,58], pal[1], null);
+    _bar(g,16,8,32,7, pal[1]);
+    _gem(g,32,18,5,rc);
+  },
+  a_feet(g,rc,pal){
+    _p(g,[18,10, 38,10, 40,36, 56,44, 56,56, 14,56, 14,36], pal[0]);
+    _bar(g,14,44,42,6, pal[1]);
+    _gem(g,27,24,5,rc);
+  },
+  /* ---------------- charms ---------------- */
+  c_orb(g,rc){ _c(g,32,32,20, IC.goldD); _c(g,32,32,15, rc);
+               _c(g,26,26,5,'rgba(255,255,255,.5)',null); },
+  c_stone(g,rc){ _p(g,[32,8, 52,22, 46,50, 18,50, 12,22], IC.steelD);
+                 _gem(g,32,32,10,rc); },
+  c_knot(g,rc){ _c(g,32,32,19, null); _c(g,32,32,19, IC.cord);
+                _c(g,32,32,10, '#1a1420'); _gem(g,32,32,7,rc); },
+  c_lens(g,rc){ _c(g,32,32,18, IC.goldD); _c(g,32,32,13, rc);
+                _p(g,[22,24, 42,40, 40,44, 20,28],'rgba(255,255,255,.35)',null); },
+  c_feather(g,rc){ _p(g,[32,4, 44,26, 38,54, 32,60, 26,54, 20,26], rc);
+                   g.strokeStyle=IC.line; g.lineWidth=2.5;
+                   g.beginPath(); g.moveTo(32,8); g.lineTo(32,58); g.stroke(); },
+  c_eye(g,rc){ _p(g,[6,32, 32,12, 58,32, 32,52], IC.bone);
+               _c(g,32,32,11, rc); _c(g,32,32,5, '#0d0b14', null); },
+  c_blood(g,rc){ _p(g,[32,4, 50,34, 44,54, 20,54, 14,34], rc);
+                 _c(g,26,40,5,'rgba(255,255,255,.35)',null); },
+  c_glass(g,rc){ _p(g,[32,4, 56,32, 32,60, 8,32], rc);
+                 _p(g,[32,4, 44,32, 32,60, 20,32], 'rgba(255,255,255,.3)', null);
+                 g.strokeStyle=IC.line; g.lineWidth=2.5;
+                 g.beginPath(); g.moveTo(8,32); g.lineTo(56,32); g.stroke(); },
+  c_brand(g,rc){ _c(g,32,32,20, IC.clothD);
+                 g.strokeStyle=rc; g.lineWidth=6; g.lineCap='round';
+                 g.beginPath();
+                 for(let i=0;i<40;i++){ const t=i/40*6.5, r=3+t*2.6;
+                   const x=32+Math.cos(t)*r, y=32+Math.sin(t)*r;
+                   i?g.lineTo(x,y):g.moveTo(x,y); }
+                 g.stroke(); },
+  /* ---------------- fallbacks ---------------- */
+  potion(g,rc){ _bar(g,27,6,10,8, IC.steelD); _p(g,[24,14, 40,14, 46,40, 40,58, 24,58, 18,40], '#cfe6f2');
+                _p(g,[22,34, 42,34, 40,56, 24,56], rc, null); },
+  misc(g,rc){ _c(g,32,32,18, IC.steelD); _gem(g,32,32,9,rc); },
+};
+const ARM_PAL = {
+  plate:  [IC.steel, IC.steelD],
+  leather:[IC.leather, IC.leatherD],
+  cloth:  [IC.cloth, IC.clothD],
+};
+const CHARM_ICO = {ember:'c_orb', ward:'c_stone', vigor:'c_knot', focus:'c_lens',
+  swift:'c_feather', greed:'c_eye', bloodpact:'c_blood', glasscore:'c_glass',
+  riftbrand:'c_brand'};
+
+function drawIcon(g, key, rar){
+  const rc = RARCOL[clamp(rar,0,5)];
+  g.clearRect(0,0,ICO_SZ,ICO_SZ);
+  const parts = key.split(':');
+  if(parts[0]==='armor'){
+    const fn = ICO_DRAW['a_'+parts[1]] || ICO_DRAW.misc;
+    fn(g, rc, ARM_PAL[parts[2]] || ARM_PAL.plate);
+    return;
+  }
+  if(parts[0]==='charm'){ (ICO_DRAW[CHARM_ICO[parts[1]]]||ICO_DRAW.misc)(g, rc); return; }
+  (ICO_DRAW[parts[parts.length-1]] || ICO_DRAW.misc)(g, rc);
+}
+function icoURL(key, rar){
+  const ck = key+'|'+(rar||0);
+  let u = ICO_CACHE.get(ck);
+  if(u) return u;
+  const c = document.createElement('canvas');
+  c.width = c.height = ICO_SZ;
+  drawIcon(c.getContext('2d'), key, rar||0);
+  u = c.toDataURL();
+  ICO_CACHE.set(ck, u);
+  return u;
+}
+/* what an item's icon is keyed on: armour splits by slot AND line so a plate
+   helm and a cloth cowl are not the same picture in two colours */
+function iconKey(it){
+  if(!it) return 'misc';
+  if(it.kind==='charm')   return 'charm:'+it.ck;
+  if(it.kind==='armor')   return 'armor:'+it.slot+':'+(it.line||it.arch||'plate');
+  if(it.kind==='trinket') return (it.arch==='amulet') ? 'amulet' : 'ring';
+  if(it.kind==='potion')  return 'potion';
+  return it.arch || 'misc';
+}
+function icoHTML(it, extra){
+  return '<img class="ico'+(extra?' '+extra:'')+'" src="'+icoURL(iconKey(it), it&&it.rar)+'" alt="">';
+}
+function icoKeyHTML(key, rar, extra){
+  return '<img class="ico'+(extra?' '+extra:'')+'" src="'+icoURL(key, rar)+'" alt="">';
+}
+
 const SLOT_ORDER = ['weapon','offhand','head','chest','hands','legs','feet','amulet','ring1','ring2'];
 const SLOT_LABEL = {weapon:'Weapon',offhand:'Offhand',head:'Head',chest:'Chest',hands:'Hands',
   legs:'Legs',feet:'Feet',amulet:'Amulet',ring1:'Ring I',ring2:'Ring II'};
+/* empty-slot and pool-tile artwork, keyed the same way real items are */
+const SLOT_ICO_KEY = {weapon:'sword', offhand:'shield', head:'armor:head:plate',
+  chest:'armor:chest:plate', hands:'armor:hands:plate', legs:'armor:legs:plate',
+  feet:'armor:feet:plate', amulet:'amulet', ring1:'ring', ring2:'ring'};
+const POOL_ICO = {weapon:'sword', armor:'armor:chest:plate', offhand:'shield', trinket:'amulet'};
 const SLOT_ICON  = {weapon:'⚔️',offhand:'🛡️',head:'🪖',chest:'🛡',hands:'🧤',legs:'👖',
   feet:'🥾',amulet:'📿',ring1:'💍',ring2:'💍'};
 
@@ -3091,7 +3501,7 @@ function feedMat(k,q){
   const rar = k===z.cat ? 4 : k===z.mats[1] ? 2 : 0;
   feedLoot('mat:'+k, M.n, M.ic, rar, q);
 }
-function feedItem(it){ feedLoot(null, it.name, it.ic, it.rar, 1); }
+function feedItem(it){ feedLoot(null, it.name, icoHTML(it), it.rar, 1); }
 
 function rollDrops(f){
   const z = ZONE_BY_ID[S.zone], rank = f.rank;
@@ -3179,7 +3589,7 @@ function openChest(){
 function openCharmModal(it){
   const R = RARITY[it.rar], pct = Math.round(charmRollPct(it)*100);
   let h = '<div class="detHead rar'+it.rar+'">'+
-    '<div class="detIc">'+it.ic+'</div><div>'+
+    '<div class="detIc">'+icoHTML(it)+'</div><div>'+
     '<div class="detName">'+it.name+'</div>'+
     '<div class="detSub">'+R.name+' Charm · '+(it.curse?'Cursed':'Tier '+it.tier)+'</div>'+
     '</div></div>';
@@ -5384,8 +5794,12 @@ const _v3 = new THREE.Vector3(), _v3b = new THREE.Vector3();
    overhead — just enough angle to keep the 3D forms legible. CAM_BACK/CAM_H is
    the tilt: 0.55 is ~29 degrees off vertical. */
 const CAM_H = 975, CAM_BACK = 536;
-/* the ground footprint this framing covers, reused by the minimap window */
-const VIEW_W = 700, VIEW_H = 845;
+/* The ground footprint this framing covers, reused by the minimap window.
+   The camera's tilt fixes the DEPTH it sees, but the width it sees grows with
+   the viewport's aspect - so in landscape a fixed VIEW_W drew a window far
+   narrower than what is actually on screen. */
+const VIEW_H = 845, VIEW_W_REF = 700, ASPECT_REF = 430/760;
+function viewW(){ return VIEW_W_REF * ((SW/SH) / ASPECT_REF); }
 
 function render(){
   const t = init3D();
@@ -5679,7 +6093,7 @@ function drawMinimap(){
   }
   hctx.globalAlpha=0.9;
   hctx.strokeStyle='rgba(255,255,255,.35)'; hctx.lineWidth=1;
-  const vw = VIEW_W, vh = VIEW_H;
+  const vw = viewW(), vh = VIEW_H;
   hctx.strokeRect(ox+(P.x-vw/2)*s, oy+(P.y-vh/2)*s, vw*s, vh*s);
   hctx.fillStyle='#ffffff';
   hctx.beginPath(); hctx.arc(ox+P.x*s, oy+P.y*s, 2.6, 0, 6.283); hctx.fill();
@@ -5810,7 +6224,7 @@ function itemCard(it, opts){
   const more = it.affixes.length>2 ? '<span class="aff" style="color:var(--dim2)">+'+(it.affixes.length-2)+' more</span>':'';
   const uni = it.uniq ? '<span class="aff uni">◆ '+it.uniq.n+'</span>' : '';
   return '<div class="card rar'+it.rar+glow+'" data-uid="'+it.uid+'">'+
-    '<div class="cIcon">'+it.ic+'</div>'+
+    '<div class="cIcon">'+icoHTML(it)+'</div>'+
     '<div class="cMid">'+
       '<div class="cName">'+it.name+(it.plus?' <span class="plus">+'+it.plus+'</span>':'')+'</div>'+
       '<div class="cMeta">'+itemSub(it)+'</div>'+
@@ -5930,7 +6344,7 @@ function openItemModal(uid){
   const pb = 1+it.plus*0.06;
 
   let h = '<div class="detHead rar'+it.rar+'">'+
-    '<div class="detIc">'+it.ic+'</div>'+
+    '<div class="detIc">'+icoHTML(it)+'</div>'+
     '<div><div class="detName">'+it.name+(it.plus?' +'+it.plus:'')+'</div>'+
     '<div class="detSub">'+R.name+' · '+itemSub(it)+' · iLvl '+it.ilvl+'</div>'+
     '<div style="margin-top:5px;">'+compareHtml(it)+'</div></div></div>';
@@ -6026,7 +6440,7 @@ let bagFilter='all';
 function bagCell(it){
   const glow = it.rar>=3 ? ' g'+it.rar : '';
   return '<div class="gcell rar'+it.rar+glow+'" data-uid="'+it.uid+'">'+
-    it.ic+
+    icoHTML(it,'big')+
     '<span class="gl">'+it.ilvl+'</span>'+
     (it.plus?'<span class="gp">+'+it.plus+'</span>':'')+
     (it.new?'<span class="gn"></span>':'')+
@@ -6115,10 +6529,10 @@ function renderGear(){
     const it = S.equip[k];
     const wide = (twoH && k==='weapon') ? ' wide' : '';
     if(!it) return '<div class="slot empty'+wide+'" data-slot="'+k+'">'+
-      '<div class="slotIc">'+SLOT_ICON[k]+'</div><div class="slotTxt">'+
+      '<div class="slotIc">'+icoKeyHTML(SLOT_ICO_KEY[k],0,'dim')+'</div><div class="slotTxt">'+
       '<div class="slotLbl">'+SLOT_LABEL[k]+'</div><div class="slotName">empty</div></div></div>';
     return '<div class="slot filled rar'+it.rar+wide+'" data-uid="'+it.uid+'">'+
-      '<div class="slotIc">'+it.ic+'</div><div class="slotTxt">'+
+      '<div class="slotIc">'+icoHTML(it)+'</div><div class="slotTxt">'+
       '<div class="slotLbl">'+SLOT_LABEL[k]+(it.plus?' +'+it.plus:'')+
         (twoH&&k==='weapon'?' <span style="color:var(--dim2)">· two-handed</span>':'')+'</div>'+
       '<div class="slotName">'+it.name+'</div></div></div>';
@@ -6284,7 +6698,7 @@ function charmCard(c, mode, slot){
   const pct = Math.round(charmRollPct(c)*100);
   return '<div class="recipe rar'+c.rar+'" data-charm="'+(mode==='bag'?c.uid:'')+'"'+
     (mode==='slot'?' data-unattune="'+slot+'"':'')+'>'+
-    '<div class="rHead"><div class="cIcon">'+c.ic+'</div>'+
+    '<div class="rHead"><div class="cIcon">'+icoHTML(c)+'</div>'+
       '<div class="rName">'+c.name+'</div>'+
       '<span class="ilvl">'+pct+'% roll</span></div>'+
     '<div class="rDesc">'+c.desc+'</div>'+
@@ -6326,7 +6740,7 @@ function renderCraft(){
     h += '<div class="sectionLbl">Draw</div><div class="slotGrid">';
     for(const k of POOL_KINDS)
       h += '<div class="slot'+(can?' filled':' empty')+'" data-pool="'+k.k+'">'+
-        '<div class="slotIc">'+k.ic+'</div><div class="slotTxt">'+
+        '<div class="slotIc">'+icoKeyHTML(POOL_ICO[k.k],0)+'</div><div class="slotTxt">'+
         '<div class="slotLbl">Draw</div><div class="slotName">'+k.n+'</div></div></div>';
     h += '</div>';
   }
@@ -6350,7 +6764,7 @@ function renderCraft(){
         const C = CHARMS[key]; if(C.tier!==tier) continue;
         const cost = charmCost(tier), can = hasMats(cost);
         h += '<div class="recipe rar'+(tier===3?5:tier)+(can?'':' locked')+'">'+
-          '<div class="rHead"><div class="cIcon">'+C.ic+'</div>'+
+          '<div class="rHead"><div class="cIcon">'+icoKeyHTML('charm:'+key, tier===3?5:tier)+'</div>'+
             '<div class="rName">'+C.n+'</div></div>'+
           '<div class="rDesc">'+C.d.replace('{v}', C.lo+'–'+C.hi)+'</div>'+
           '<div class="costRow">'+Object.keys(cost).map(k=>{
@@ -6407,7 +6821,7 @@ function upgradeCard(it){
   const can = hasMats(cost);
   return '<div class="card rar'+it.rar+'" style="display:block;">'+
     '<div style="display:flex;gap:10px;align-items:center;">'+
-      '<div class="cIcon">'+it.ic+'</div>'+
+      '<div class="cIcon">'+icoHTML(it)+'</div>'+
       '<div class="cMid"><div class="cName">'+it.name+(it.plus?' <span class="plus">+'+it.plus+'</span>':'')+'</div>'+
       '<div class="cMeta">'+itemSub(it)+'</div>'+
       '<div class="cStat">'+itemStatLine(it)+' → <b style="color:var(--xp)">'+
@@ -6530,7 +6944,7 @@ function renderMenu(){
     const can = hasMats(cost);
     h += '<div class="card rar1" style="display:block;">'+
       '<div style="display:flex;gap:10px;align-items:center;">'+
-        '<div class="cIcon">'+s.ic+'</div>'+
+        '<div class="cIcon">'+icoKeyHTML(s.ico||'potion', s.rar||0)+'</div>'+
         '<div class="cMid"><div class="cName" style="color:var(--txt)">'+s.n+'</div>'+
         '<div class="cMeta">'+s.d+'</div>'+
         '<div class="cStat">Held: <b>'+(S.pots[s.id]||0)+'</b></div></div>'+
@@ -6614,7 +7028,7 @@ function showLoot(items, gold, title){
       '<div class="lIc" style="font-size:30px;margin-bottom:2px;">💰</div>'+
       '<div class="lName" style="font-size:14px;">'+fmt(gold)+' gold</div></div>' : '')+
     items.map((it,i)=>'<div class="lootCard rar'+it.rar+'" style="animation-delay:'+(i*0.12)+'s">'+
-      '<div class="lIc">'+it.ic+'</div>'+
+      '<div class="lIc">'+icoHTML(it)+'</div>'+
       '<div class="lRar">'+RARITY[it.rar].name+'</div>'+
       '<div class="lName">'+it.name+'</div>'+
       '<div class="lStat">'+itemSub(it)+' · iLvl '+it.ilvl+'</div>'+
