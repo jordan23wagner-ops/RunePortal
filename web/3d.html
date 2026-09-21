@@ -145,6 +145,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .dmg.crit{font-size:21px;color:#ffd85e;text-shadow:0 0 10px rgba(255,180,0,.9),0 2px 3px #000;}
 .dmg.player{color:#ff6b7d;}
 .dmg.heal{color:#5ed39a;}
+.dmg.shield{color:#8ab4ff;}
 @keyframes dmgRise{
   0%{opacity:0;transform:translate(-50%,0) scale(.6);}
   18%{opacity:1;transform:translate(-50%,-14px) scale(1.12);}
@@ -2246,21 +2247,50 @@ function makePlayer(){
     calm:0, sprint:0, aimx:0, aimy:-1, aimT:0,
     an:newAnim(), t:0, px:0, py:0};
 }
+/* ================================================================
+   ELITE AFFIXES
+   Ten enemy types across four AI behaviours meant every elite camp played
+   the same. An affix changes HOW a fight is solved without needing a new
+   enemy, a new rig or a new AI: the same Grovewarden is a different problem
+   depending on what it rolled.
+   ================================================================ */
+const AFFIX = {
+  shielded:{n:'Shielded', ic:'🛡', col:'#8ab4ff', d:'Absorbs damage until the shield breaks'},
+  volatile:{n:'Volatile', ic:'💥', col:'#fb923c', d:'Detonates when killed'},
+  vampiric:{n:'Vampiric', ic:'🩸', col:'#f43f5e', d:'Heals from the damage it deals'},
+  frenzied:{n:'Frenzied', ic:'⚡', col:'#ffd85e', d:'Faster the more wounded it is'},
+  warded:  {n:'Warded',   ic:'✦', col:'#a78bfa', d:'Phases out and ignores damage'},
+};
+const AFFIX_KEYS = Object.keys(AFFIX);
+function rollAffixes(rank){
+  if(!rank) return [];
+  /* a boss always carries two; an elite usually one, sometimes two, and
+     occasionally none so "elite" does not become a fixed checklist */
+  const n = rank===2 ? 2 : (Math.random()<0.18 ? 0 : Math.random()<0.74 ? 1 : 2);
+  const pool = AFFIX_KEYS.slice(), out=[];
+  for(let i=0;i<n && pool.length;i++) out.push(pool.splice(Math.random()*pool.length|0,1)[0]);
+  return out;
+}
+function hasAffix(f, k){ return f.affix && f.affix.indexOf(k)>=0; }
+
 function makeFoe(def, rank, hx, hy){
   const z = ZONE_BY_ID[S.zone], L = zoneLvl();
   const hpN = TIER_HP_NORM[z.tier-1], dmgN = TIER_DMG_NORM[z.tier-1];
   let hp = TUNE.eHp(L)*(def.hp/hpN)*(1+(z.tier-1)*0.12);
   if(rank===1) hp *= TUNE.eliteHp;
   if(rank===2) hp *= TUNE.bossHp;
+  hp *= surgeHpMul();
   if(hx==null){ hx = P?P.x+rnd(-180,180):W/2; hy = P?P.y+rnd(-180,180):H/2; }
   const f = {
     def, rank:rank||0, x:hx, y:hy, r:def.size, hp, max:hp,
-    dmg: TUNE.eDmg(L)*(def.dmg/dmgN), spd: 42 + def.spd*30, lvl:L,
+    dmg: TUNE.eDmg(L)*(def.dmg/dmgN)*surgeDmgMul(), spd: 42 + def.spd*30, lvl:L,
     icd:0, st:0, t:rnd(0,3), vx:0,vy:0, flash:0, born:0,
     burn:0,burnD:0,pois:0,poisD:0,slow:0,slowA:0,stun:0,
     /* hit reaction: kx/ky is a decaying shove, hitT a brief flinch that drags
        on movement without stopping it the way stun does */
     kx:0, ky:0, hitT:0,
+    /* affixes: shield is a second health pool, wardT counts down the phase */
+    affix:[], shield:0, shieldMax:0, wardT:0, wardCd:rnd(3,7),
     ang:rnd(0,6.28), pat:0, patT:0, tele:0,
     an:newAnim(), px:0, py:0,
     /* camp behaviour */
@@ -2270,14 +2300,45 @@ function makeFoe(def, rank, hx, hy){
     pack:null,
   };
   if(def.ai==='boss') f.spd = 24+def.spd*22;
+  f.affix = rollAffixes(f.rank);
+  if(hasAffix(f,'shielded')){
+    /* a flat fraction of its own pool, so a shield is always the same
+       proportion of the fight rather than trivial on a boss */
+    f.shieldMax = f.max*(f.rank===2?0.30:0.45);
+    f.shield = f.shieldMax;
+  }
   return f;
 }
 
 /* ---------- camps ---------- */
 function makePack(kind,pos){ return {kind, x:pos.x, y:pos.y, cleared:false, respawn:0, members:[]}; }
+/* ================================================================
+   CAMP ARCHETYPES
+   Every camp was the same event: walk up, eight things run at you. The
+   enemies were varied but the ENCOUNTER never was. An archetype changes how
+   a camp has to be approached using the same roster - which is far cheaper
+   than new enemies and does much more for variety.
+   ================================================================ */
+const CAMP_ARCH = {
+  open:   {n:'',            ic:''},
+  ambush: {n:'Ambush',      ic:'👁'},
+  patrol: {n:'Patrol',      ic:'🚩'},
+  siege:  {n:'Siege line',  ic:'🏹'},
+  ritual: {n:'Ritual',      ic:'🕯'},
+  nest:   {n:'Nest',        ic:'🥚'},
+};
+function rollCampArch(kind){
+  if(kind==='roam') return 'open';
+  if(kind==='boss') return Math.random()<0.5 ? 'ritual' : 'open';
+  const r = Math.random();
+  if(kind==='elite') return r<0.30?'siege' : r<0.55?'ritual' : r<0.75?'ambush' : 'open';
+  return r<0.22?'ambush' : r<0.40?'patrol' : r<0.56?'siege' : r<0.70?'nest' : 'open';
+}
+
 function spawnPack(pk){
   const z = ZONE_BY_ID[S.zone];
   pk.members.length = 0;
+  if(!pk.arch) pk.arch = rollCampArch(pk.kind);
   const ringPos=(n,rad)=>{
     const out=[];
     for(let i=0;i<n;i++){ const a=i/n*6.283+rnd(0,0.9), d=rad*rnd(0.45,1);
@@ -2305,7 +2366,59 @@ function spawnPack(pk){
   } else {
     for(const [ox,oy] of ringPos(rint(3,5),74)) add(pick(z.enemies),0,ox,oy);
   }
+  applyCampArch(pk, z, add);
   pk.cleared = false; pk.respawn = 0;
+}
+
+function applyCampArch(pk, z, add){
+  const A = pk.arch;
+  if(A==='ambush'){
+    /* Hidden until you are inside the ring, then the whole camp erupts at
+       once. The pack-wide trigger radius is what makes it an ambush rather
+       than a camp with a big aggro range - you cannot pull one and back off. */
+    pk.trigger = 300;
+    for(const m of pk.members){ m.state='hidden'; m.hidden=1; }
+  } else if(A==='patrol'){
+    /* home points at the PACK, not at a fixed spot, so the whole camp walks
+       its beat and the fight comes to you somewhere other than its marker */
+    pk.px0 = pk.x; pk.py0 = pk.y;
+    pk.pa = rnd(0,6.283); pk.pr = rnd(260,430); pk.pt = rnd(0,6.283);
+    for(const m of pk.members){ m.home = pk; m.leashR = 760; }
+  } else if(A==='siege'){
+    /* a back line that holds its ground and a screen in front of it. You
+       have to break the screen or flank, instead of walking up the middle. */
+    const shooters = z.enemies.filter(e=>e.shoot);
+    const back = shooters.length ? shooters : z.enemies;
+    for(let i=0;i<3;i++){
+      const a2 = -1.57 + (i-1)*0.5;
+      add(pick(back),0, Math.cos(a2)*150, Math.sin(a2)*150);
+      const m = pk.members[pk.members.length-1];
+      m.aiOver = 'shooter'; m.hold = 1; m.aggroR = 420;
+    }
+  } else if(A==='ritual'){
+    /* a channeler buffing everything around it. Kill it first or fight the
+       whole camp at 35% more damage. */
+    add(pick(z.enemies),0,0,0);
+    const c = pk.members[pk.members.length-1];
+    c.ritual = 1; c.max *= 1.7; c.hp = c.max; c.spd *= 0.45; c.aggroR = 300;
+    pk.ritualist = c;
+  } else if(A==='nest'){
+    /* a spawner that keeps feeding the fight until it is destroyed, so the
+       camp punishes you for grinding the adds instead of the source */
+    add(pick(z.enemies),0,0,0);
+    const n = pk.members[pk.members.length-1];
+    n.nest = 1; n.spd = 0; n.max *= 2.2; n.hp = n.max; n.r *= 1.35;
+    /* first brood comes fast: a nest that sits quiet for three seconds after
+       you engage it reads as scenery rather than as the thing to kill */
+    n.spawnT = 1.4; n.aggroR = 340;
+    pk.nest = n;
+  }
+}
+/* "Vampiric Grovewarden" tells you how to fight it before it reaches you */
+function affixLabel(f){
+  const base = f.rareName || f.def.n;
+  if(!f.affix || !f.affix.length) return base;
+  return f.affix.map(k=>AFFIX[k].n).join(' ') + ' ' + base;
 }
 function aggroPack(f){
   if(f.state==='aggro') return;
@@ -2314,11 +2427,11 @@ function aggroPack(f){
     if(m.state==='idle' && Math.hypot(m.x-f.x, m.y-f.y) < 200) m.state='aggro';
   if(f.rank===2){
     bossRef = f;
-    $('bossName').textContent = f.def.n;
+    $('bossName').textContent = affixLabel(f);
     $('bossBar').classList.add('on');
-    toast('☠ '+f.def.n); sfx('boss'); shake=12; buzz(90);
+    toast('☠ '+affixLabel(f)); sfx('boss'); shake=12; buzz(90);
   } else if(f.rank===1 && !f.alerted){
-    f.alerted = 1; toast('⚠ '+f.def.n); sfx('boss'); shake=5;
+    f.alerted = 1; toast('⚠ '+affixLabel(f)); sfx('boss'); shake=5;
   }
 }
 
@@ -2452,11 +2565,121 @@ function buildZoneWorld(){
   for(let i=0;i<nRoam;i++) packs.push(makePack('roam', placeRoamer()));
 
   for(const pk of packs) spawnPack(pk);
+  objective = rollObjective();
+  surge = {lvl:0, t:0};
+  spawnObjective();
+  toast(objective.ic+' '+objective.n);
   sceneReady = false;            /* scenery, ground and chests rebuild next frame */
 }
 /* Roamers ride the pack machinery for leashing and respawn, but they are not
    camps: they must not count toward the ⚑ tally, draw a camp ring, show on the
    minimap, or steer the "nearest uncleared camp" arrow. */
+/* ================================================================
+   ZONE OBJECTIVES + RIFT SURGE
+   "Clear 12/12" was the only reason to go anywhere, and the zone never
+   changed while you were in it. An objective gives the map a shape; the
+   surge gives staying a cost and a payoff, so there is a reason to push
+   rather than farm the same camp forever.
+   ================================================================ */
+const RARE_PREFIX = ['Gravebound','Hollowed','Rift-Touched','Elder','Scarred','Thornclad'];
+let objective = null;
+const SURGE_EVERY = 105, SURGE_MAX = 5;
+let surge = {lvl:0, t:0};
+function surgeHpMul(){  return 1 + surge.lvl*0.18; }
+function surgeDmgMul(){ return 1 + surge.lvl*0.12; }
+
+function rollObjective(){
+  const z = ZONE_BY_ID[S.zone];
+  const r = Math.random();
+  if(r < 0.34) return {kind:'purge', need:Math.min(6, campTotal()), got:0,
+    n:'Purge the camps', ic:'⚑'};
+  if(r < 0.67) return {kind:'hunt', need:1, got:0, n:'Hunt the marked beast', ic:'☠'};
+  return {kind:'anchors', need:3, got:0, n:'Destroy the rift anchors', ic:'🔻'};
+}
+/* Both extra objective types are ROOTED FOES rather than a new entity kind:
+   they get health bars, nameplates, death collapse, targeting and minimap
+   handling for free instead of each needing its own path. */
+function spawnObjective(){
+  const z = ZONE_BY_ID[S.zone];
+  if(!objective) return;
+  if(objective.kind==='hunt'){
+    const pk = makePack('roam', {x:WORLD.w*0.5, y:WORLD.h*0.5});
+    pk.arch = 'open'; packs.push(pk);
+    let spot=null;
+    for(let t=0;t<200 && !spot;t++){
+      const x=rnd(240,WORLD.w-240), y=rnd(240,WORLD.h-240);
+      if(Math.hypot(x-P.x,y-P.y) > 900 && !terrainBlocked(x,y,150)) spot={x,y};
+    }
+    spot = spot || {x:WORLD.w*0.5, y:WORLD.h*0.35};
+    pk.x=spot.x; pk.y=spot.y;
+    const f = makeFoe(pick(z.elites), 1, spot.x, spot.y);
+    f.pack = pk; pk.members.push(f); foes.push(f);
+    f.isQuarry = 1; f.aggroR = 300; f.leashR = 1400;
+    f.max *= 1.9; f.hp = f.max;
+    f.rareName = pick(RARE_PREFIX)+' '+f.def.n;
+    objective.target = f;
+  } else if(objective.kind==='anchors'){
+    for(let i=0;i<objective.need;i++){
+      const pk = makePack('roam', {x:0,y:0}); pk.arch='open'; packs.push(pk);
+      let spot=null;
+      for(let t=0;t<200 && !spot;t++){
+        const x=rnd(240,WORLD.w-240), y=rnd(240,WORLD.h-240);
+        if(Math.hypot(x-P.x,y-P.y) > 700 && !terrainBlocked(x,y,150)) spot={x,y};
+      }
+      spot = spot || {x:rnd(300,WORLD.w-300), y:rnd(300,WORLD.h-300)};
+      pk.x=spot.x; pk.y=spot.y;
+      const f = makeFoe(pick(z.enemies), 1, spot.x, spot.y);
+      f.pack = pk; pk.members.push(f); foes.push(f);
+      f.isAnchor = 1; f.spd = 0; f.r *= 1.5;
+      f.max *= 2.6; f.hp = f.max; f.aggroR = 330; f.affix = ['warded'];
+      f.rareName = 'Rift Anchor';
+      /* a couple of wardens, so an anchor is a fight and not a door */
+      for(let k=0;k<2;k++){
+        const g = makeFoe(pick(z.enemies),0, spot.x+rnd(-70,70), spot.y+rnd(-70,70));
+        g.pack = pk; pk.members.push(g); foes.push(g);
+      }
+    }
+  }
+}
+function objectiveKill(f){
+  if(!objective || objective.done) return;
+  if(objective.kind==='hunt'   && f.isQuarry) objective.got++;
+  if(objective.kind==='anchors'&& f.isAnchor) objective.got++;
+  if(objective.kind==='purge') return;      /* counted on camp clear instead */
+  checkObjective();
+}
+function checkObjective(){
+  if(!objective || objective.done) return;
+  if(objective.got < objective.need) return;
+  objective.done = true;
+  toast('★ '+objective.n+' complete');
+  sfx('boss'); shake = Math.max(shake, 10); buzz(120);
+  /* paid in the currency the zone deals in, scaled by how deep the surge is */
+  const z = ZONE_BY_ID[S.zone];
+  const g = Math.round(rnd(160,320)*z.tier*(1+zoneLvl()*0.4)*(1+surge.lvl*0.35));
+  gainGold(g); feedGold(g);
+  const m = rint(3,6); addMat(z.mats[1], m); feedMat(z.mats[1], m);
+  const it = rollItem({kind:pick(['weapon','armor','trinket']),
+    ilvl:clamp(Math.round(zoneLvl()+2),1,99),
+    rar:Math.max(2, rollRarity(z.tier, 1.1, D.luck))});
+  if(bagAdd(it)){ feedItem(it); markAlert(); }
+  gainXp(TUNE.eXp(zoneLvl(),1)*6);
+}
+function stepSurge(dt){
+  if(!objective) return;
+  surge.t += dt;
+  if(surge.t < SURGE_EVERY || surge.lvl >= SURGE_MAX) return;
+  surge.t = 0; surge.lvl++;
+  /* living foes get it immediately, or a surge would only show up on the
+     next camp you happen to walk into */
+  for(const f of foes){
+    const frac = f.hp/f.max;
+    f.max *= 1.18; f.hp = f.max*Math.min(1, frac+0.12); f.dmg *= 1.12;
+  }
+  toast('⚡ Rift surge '+surge.lvl+'  ·  stronger foes, richer loot');
+  sfx('boss'); shake = Math.max(shake, 9); buzz(90);
+}
+
 function campsCleared(){ let n=0; for(const p of packs) if(p.kind!=='roam' && p.cleared) n++; return n; }
 function campTotal(){ let n=0; for(const p of packs) if(p.kind!=='roam') n++; return n; }
 /* particles */
@@ -2534,6 +2757,25 @@ function setFlinchDir(an, hx, hy, fx, fy){
 }
 function damageFoe(f, dmg, crit, opts){
   opts = opts||{};
+  /* WARDED: phased out, so the hit lands on nothing. Told with a ricochet
+     spark and a number, or it reads as the game dropping your input. */
+  if(f.wardT>0){
+    if(!opts.silent){ fct(f.x, f.y-f.r-6, 'warded', ''); sfx('no'); }
+    burst(f.x,f.y,'#a78bfa',5,120,0.26,2);
+    return;
+  }
+  /* SHIELDED: a second pool in front of the health bar */
+  if(f.shield>0){
+    const soak = Math.min(f.shield, dmg);
+    f.shield -= soak; dmg -= soak;
+    if(!opts.silent) fct(f.x, f.y-f.r-6, Math.round(soak).toString(), 'shield');
+    burst(f.x,f.y,'#8ab4ff',crit?7:3,140,0.26,2);
+    if(f.shield<=0){
+      ring(f.x,f.y,'#8ab4ff',6,74,0.32); sfx('crit');
+      fct(f.x, f.y-f.r-20, 'shield broken', '');
+    }
+    if(dmg<=0.01){ f.an.hurt = 0.7; f.flash = 0.10; return; }
+  }
   f.hp -= dmg; f.flash = 0.12; f.an.hurt = 1;
   if(!opts.noKnock){
     /* the shove runs along the hit direction when the caller knows it (a
@@ -2623,8 +2865,8 @@ function killFoe(f){
   if(D.uniq && D.uniq.poison && f.pois>0){
     for(const o of foes) if(Math.hypot(o.x-f.x,o.y-f.y)<95){ o.pois=4; o.poisD=Math.max(o.poisD,f.poisD); }
   }
-  /* bomber detonates */
-  if(f.def.ai==='bomber') detonate(f);
+  /* bomber detonates - and so does anything that rolled VOLATILE */
+  if(f.def.ai==='bomber' || hasAffix(f,'volatile')) detonate(f);
   /* splitter */
   if(f.def.ai==='splitter' && f.rank===0 && !f.isSplit){
     for(let k=0;k<2;k++){
@@ -2646,6 +2888,9 @@ function killFoe(f){
       if(f.pack.kind!=='roam'){
         const lbl = f.pack.kind==='boss' ? 'Boss camp cleared'
                   : f.pack.kind==='elite' ? 'Elite camp cleared' : 'Camp cleared';
+        if(objective && objective.kind==='purge' && !objective.done){
+          objective.got++; checkObjective();
+        }
         toast('✔ '+lbl+'  ('+(campsCleared())+'/'+campTotal()+')');
         ring(f.pack.x, f.pack.y, '#5ed39a', 20, 130, 0.6);
         sfx('chest');
@@ -2653,6 +2898,7 @@ function killFoe(f){
     }
   }
 
+  objectiveKill(f);
   kills++; S.meta.kills++;
   S.zoneKills[S.zone] = (S.zoneKills[S.zone]||0)+1;
   gainXp(TUNE.eXp(f.lvl, f.rank));
@@ -2731,7 +2977,7 @@ function rollDrops(f){
   const z = ZONE_BY_ID[S.zone], rank = f.rank;
   const gf = 1 + D.goldF/100;
   /* gold */
-  const g = Math.round(rnd(3,8)*(1+f.lvl*0.55)*(1+rank*2.4)*gf*z.tier*0.7);
+  const g = Math.round(rnd(3,8)*(1+f.lvl*0.55)*(1+rank*2.4)*gf*z.tier*0.7*(1+surge.lvl*0.25));
   gainGold(g); feedGold(g);
   drops.push({x:f.x,y:f.y,t:'gold',v:g,life:0,vx:rnd(-30,30),vy:rnd(-60,-20)});
 
@@ -3153,6 +3399,46 @@ function update(dt){
     if(atkHeld || S.opts.autoAim) doAttack();
   }
 
+  stepSurge(dt);
+
+  /* ---- camp archetypes: pack-level behaviour ---- */
+  for(const pk of packs){
+    if(pk.cleared) continue;
+    if(pk.arch==='ambush' && pk.trigger){
+      /* one pack-wide check, not per member: an ambush has to go off as a
+         unit or it is just a camp with a long leash */
+      if(Math.hypot(P.x-pk.x, P.y-pk.y) < pk.trigger){
+        pk.trigger = 0;
+        toast('👁 Ambush!'); sfx('boss'); shake = Math.max(shake, 8); buzz(70);
+        for(const m of pk.members){
+          m.hidden = 0; m.state = 'aggro'; m.born = 0; m.warp = 0.35;
+          burst(m.x, m.y, m.def.col, 10, 150, 0.45, 2.5);
+        }
+      }
+    } else if(pk.arch==='patrol'){
+      /* the camp walks a slow circuit; members home on the pack itself */
+      pk.pt += dt*0.16;
+      pk.x = pk.px0 + Math.cos(pk.pt + pk.pa)*pk.pr;
+      pk.y = pk.py0 + Math.sin(pk.pt + pk.pa)*pk.pr*0.7;
+      pk.x = clamp(pk.x, 160, WORLD.w-160); pk.y = clamp(pk.y, 160, WORLD.h-160);
+    } else if(pk.arch==='ritual'){
+      /* the buff lives and dies with the channeler */
+      const c = pk.ritualist;
+      const on = !!(c && c.hp>0 && foes.indexOf(c)>=0);
+      if(pk.ritualOn && !on){
+        pk.ritualOn = false;
+        toast('🕯 Ritual broken'); sfx('chest');
+        for(const m of pk.members) m.buffed = 0;
+        ring(pk.x, pk.y, '#a78bfa', 14, 150, 0.5);
+      } else if(on){
+        pk.ritualOn = true;
+        for(const m of pk.members) if(m!==c) m.buffed = 1;
+        if(c.state==='aggro' && Math.random() < dt*9)
+          burst(c.x, c.y, '#c084fc', 1, 60, 0.5, 2);
+      }
+    }
+  }
+
   /* ---- foes ---- */
   engagedNear = false;
   for(let i=foes.length-1;i>=0;i--){
@@ -3162,12 +3448,24 @@ function update(dt){
     f.icd   = Math.max(0,f.icd-dt);
     f.stun  = Math.max(0,f.stun-dt);
     f.hitT  = Math.max(0,f.hitT-dt);
+    /* WARDED cycles: a window where it cannot be hurt, then a longer one
+       where it can. The gap is the fight - you burst it while it is open. */
+    if(f.affix.length){
+      if(f.wardT>0){ f.wardT-=dt; if(f.wardT<=0) f.wardCd = rnd(4.5,7.5); }
+      else if(hasAffix(f,'warded') && f.state==='aggro'){
+        f.wardCd-=dt;
+        if(f.wardCd<=0){ f.wardT = 1.9; ring(f.x,f.y,'#a78bfa',8,80,0.35); }
+      }
+    }
     if(f.slow>0){ f.slow-=dt; if(f.slow<=0) f.slowA=0; }
     if(f.burn>0){ f.burn-=dt; f.hp-=f.burnD*dt;
       if(Math.random()<dt*7) burst(f.x,f.y,'#ff9a4c',1,40,0.3,2); }
     if(f.pois>0){ f.pois-=dt; f.hp-=f.poisD*dt;
       if(Math.random()<dt*6) burst(f.x,f.y,'#a3e635',1,34,0.35,2); }
     if(f.hp<=0){ killFoe(f); continue; }
+
+    /* an ambusher is not in the world yet: no AI, no collision, no plate */
+    if(f.hidden) continue;
 
     /* materialising: visible and damageable, but inert */
     const warpT = f.warp||0.42;
@@ -3190,14 +3488,21 @@ function update(dt){
 
     const dx=P.x-f.x, dy=P.y-f.y, d=Math.hypot(dx,dy)||1;
     const nx=dx/d, ny=dy/d;
+    /* FRENZIED: the closer it is to death the faster it comes, so a wounded
+       elite is the dangerous one rather than a formality */
+    if(hasAffix(f,'frenzied')) f.frenzy = 1 + (1-clamp(f.hp/f.max,0,1))*0.85;
     /* whatever burns the player burns them too - an enemy wading through lava
        untouched would give the hazard away as scenery */
     if(terrain.style.dps>0 && inWater(f.x,f.y)) f.hp -= f.max*terrain.style.dps*0.55*dt;
     /* a flinch DRAGS, it does not stop: stun already zeroes speed and blocks
        shooting, and reusing it here would let a fast weapon perma-lock a pack */
+    /* a ritual buff is a flat multiplier the pack carries while it channels.
+       Declared with sp, not with ai below, or sp reads it in its own TDZ. */
+    const buff = f.buffed ? 1.22 : 1;
     const sp = f.spd*(1-(f.slowA||0))*(f.stun>0?0:1)*(f.hitT>0?0.45:1)
-             * (inWater(f.x,f.y)?wadeMul():1);
-    const ai = f.def.ai;
+             * (inWater(f.x,f.y)?wadeMul():1) * (f.frenzy||1) * buff;
+    /* a siege back line is told to behave as a shooter whatever it is */
+    const ai = f.nest ? 'nest' : (f.aiOver || f.def.ai);
     if(f.state!=='idle' && d < SPRINT_R) engagedNear = true;
 
     /* --- camp states --- */
@@ -3263,11 +3568,34 @@ function update(dt){
     else if(ai==='boss'){
       bossAI(f,dt,nx,ny,d);
     }
+    else if(ai==='nest'){
+      /* rooted. It feeds the fight instead of joining it, and it stops the
+         moment the pack is at its cap so a nest cannot runaway-spawn. */
+      f.spawnT -= dt;
+      const live = f.pack ? f.pack.members.length : 99;
+      if(f.spawnT<=0 && live < 9 && f.state==='aggro'){
+        f.spawnT = rnd(3.4, 5.2);
+        const c = makeFoe(pick(ZONE_BY_ID[S.zone].enemies), 0);
+        c.x = f.x + rnd(-46,46); c.y = f.y + rnd(-46,46);
+        c.max *= 0.55; c.hp = c.max; c.warp = 0.4; c.state='aggro';
+        c.pack = f.pack; if(f.pack) f.pack.members.push(c);
+        foes.push(c);
+        burst(f.x, f.y, f.def.col, 10, 140, 0.4, 2.4);
+      }
+    }
 
     /* contact damage */
     if(ai!=='shooter' && d < f.r+P.r+2 && f.icd<=0 && !P.dead){
       f.icd = 0.85; f.an.atk = 0;
-      hurtPlayer(f.dmg*(f.rank===2?1.35:1), f.lvl, f);
+      const bite = f.dmg*(f.rank===2?1.35:1)*(f.buffed?1.35:1);
+      hurtPlayer(bite, f.lvl, f);
+      /* VAMPIRIC: every landed hit claws health back, so ignoring it and
+         burning something else down is a losing plan */
+      if(hasAffix(f,'vampiric') && f.hp>0){
+        const heal = Math.min(f.max - f.hp, bite*2.2);
+        if(heal>0){ f.hp += heal; fct(f.x, f.y-f.r-6, '+'+Math.round(heal), 'heal');
+          burst(f.x,f.y,'#f43f5e',4,90,0.3,2); }
+      }
       if(D.thorns>0) damageFoe(f, D.thorns, false, {silent:true,noProc:true});
     }
     terrainPush(f, f.r);
@@ -5016,7 +5344,21 @@ function drawPlates(){
       hctx.strokeRect(sp.x-w/2-1.5, sp.y-1.5, w+3, bh+3);
     }
 
-    const nm = f.rank ? (f.def.n + '  Lv' + f.lvl) : f.def.n;
+    /* SHIELD rides on top of the health bar as its own segment, so you can
+       see at a glance that the thing is not taking damage yet */
+    if(f.shield>0 && f.shieldMax>0){
+      hctx.fillStyle = '#8ab4ff';
+      hctx.fillRect(sp.x-w/2, sp.y, w*clamp(f.shield/f.shieldMax,0,1), bh);
+    }
+    /* a warded enemy is mid-phase: say so, or the misses look like a bug */
+    if(f.wardT>0){
+      hctx.fillStyle = 'rgba(167,139,250,.55)';
+      hctx.fillRect(sp.x-w/2, sp.y, w, bh);
+    }
+    const tag = (f.affix && f.affix.length)
+      ? f.affix.map(k=>AFFIX[k].ic).join('') + ' ' : '';
+    const base = f.rareName || f.def.n;
+    const nm = tag + (f.rank ? (base + '  Lv' + f.lvl) : base);
     hctx.font = (f.rank ? '700 10px ' : '600 9px ') + 'system-ui,-apple-system,sans-serif';
     /* stroke first: over a dark ridge or a bright lava channel alike, plain
        fill text disappears into whatever happens to be behind it */
@@ -5079,6 +5421,16 @@ function drawMinimap(){
   for(const c of chests){ if(c.open) continue;
     hctx.fillStyle='#e8b44a';
     hctx.fillRect(ox+c.x*s-1.5, oy+c.y*s-1.5, 3.5, 3.5); }
+  /* objective targets get their own marker: a hunt you cannot locate is a
+     sweep of the whole zone, which is exactly the tedium this replaces */
+  hctx.globalAlpha = 1;
+  for(const f of foes){
+    if(!f.isQuarry && !f.isAnchor) continue;
+    hctx.fillStyle = f.isQuarry ? '#ffd85e' : '#a78bfa';
+    hctx.beginPath();
+    hctx.arc(ox+f.x*s, oy+f.y*s, 3.4, 0, 6.283); hctx.fill();
+    hctx.strokeStyle = 'rgba(255,255,255,.7)'; hctx.lineWidth = 1; hctx.stroke();
+  }
   for(const pk of packs){
     if(pk.kind==='roam') continue;
     const col = pk.kind==='boss'?'#f43f5e':pk.kind==='elite'?'#fb923c':'#e0455a';
@@ -5127,7 +5479,13 @@ function syncHud(){
   setBar('xpBar', S.xp/TUNE.xpNeed(S.lvl));
   $('lvlPill').textContent = S.lvl;
   $('hudGold').textContent = '🪙 '+fmt(S.gold);
-  $('hudKills').textContent = '⚑ '+campsCleared()+'/'+campTotal()+' · '+kills+' kills';
+  /* the objective is what you are FOR; the camp tally is just progress */
+  let line = objective
+    ? objective.ic+' '+(objective.done ? objective.n+' ✓'
+        : objective.n+' '+objective.got+'/'+objective.need)
+    : '⚑ '+campsCleared()+'/'+campTotal();
+  if(surge.lvl>0) line = '⚡'+surge.lvl+'  '+line;
+  $('hudKills').textContent = line;
   $('hudZone').textContent = ZONE_BY_ID[S.zone].n;
   if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max); }
   /* cooldown wipes */
