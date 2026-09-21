@@ -273,9 +273,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim2);
   position:relative;transition:color .15s;
 }
-.tab .ic{font-size:19px;line-height:1;filter:grayscale(1) opacity(.55);transition:filter .15s;}
+.tab .ic{font-size:19px;line-height:1;opacity:.55;transition:opacity .15s;
+  display:flex;align-items:center;justify-content:center;}
+.tab.sel .ic{opacity:1;}
 .tab.sel{color:var(--gold);}
-.tab.sel .ic{filter:none;}
+
 .tab.sel::before{content:'';position:absolute;top:0;left:22%;right:22%;height:2px;
   background:var(--gold);border-radius:0 0 2px 2px;box-shadow:0 0 8px var(--gold);}
 .tab .dot{
@@ -351,6 +353,15 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .cIcon .ico,.slotIc .ico,.detIc .ico,.lIc .ico{width:80%;height:80%;}
 .gcell .ico{width:78%;height:78%;}
 .lootRow .fi .ico{width:19px;height:19px;}
+.tab .ic .ico{width:22px;height:22px;filter:none;}
+.tab.sel .ic .ico{filter:drop-shadow(0 0 5px rgba(232,180,74,.5));}
+.actBtn .ico{width:27px;height:27px;}
+.actBtn.big .ico{width:33px;height:33px;}
+.mIc .ico{width:23px;height:23px;}
+/* inline glyphs that sit in a line of text */
+.ico.inl{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:2px;}
+.cIc2 .ico{width:30px;height:30px;}
+.recipe .cIcon .ico{width:80%;height:80%;}
 .lootRow.big .fi .ico{width:23px;height:23px;}
 
 /* ============================================================
@@ -761,7 +772,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   /* controls tuck into the corners of the wider field */
   #actions{right:16px;bottom:16px;}
   #prompt{bottom:84px;}
-  #lootFeed{top:calc(var(--safe-t) + 96px);right:12px;max-width:40%;}
+  /* the feed sat under the minimap in the top-right corner; down here it
+     stacks upward beside the action pad and covers nothing */
+  /* Anchored by its BOTTOM edge, so the stack grows upward and the newest
+     row (appended last) stays lowest - next to where your eye already is. */
+  #lootFeed{top:auto;bottom:16px;right:172px;max-width:46%;}
 
   /* the modal becomes a centred card - a bottom sheet on a short screen
      covers the entire playfield */
@@ -779,7 +794,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   .actBtn{width:50px;height:50px;font-size:18px;}
   .actBtn.big{width:62px;height:62px;font-size:22px;}
   #actions{gap:8px;}
-  #lootFeed{top:calc(var(--safe-t) + 78px);}
+  #lootFeed{bottom:14px;right:140px;max-width:52%;}
 }
 </style>
 </head>
@@ -822,10 +837,10 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     <div id="prompt">OPEN CHEST</div>
 
     <div id="actions">
-      <button class="actBtn" id="btnPot"><span>🧪</span><span class="cd"></span><span class="qty" id="potQty">0</span></button>
-      <button class="actBtn" id="btnDash"><span>💨</span><span class="cd"></span></button>
-      <button class="actBtn" id="btnSkill"><span>✦</span><span class="cd"></span></button>
-      <button class="actBtn big" id="btnAtk"><span>⚔️</span></button>
+      <button class="actBtn" id="btnPot"><span data-ico="potion"></span><span class="cd"></span><span class="qty" id="potQty">0</span></button>
+      <button class="actBtn" id="btnDash"><span data-ico="ui:dash"></span><span class="cd"></span></button>
+      <button class="actBtn" id="btnSkill"><span data-ico="ui:skill"></span><span class="cd"></span></button>
+      <button class="actBtn big" id="btnAtk"><span data-ico="ui:atk"></span></button>
     </div>
 
     <div id="toasts"></div>
@@ -914,12 +929,12 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
   <!-- ===================== TABBAR ===================== -->
   <div id="tabbar">
-    <button class="tab sel" data-tab="arena"><span class="ic">⚔️</span>Hunt</button>
-    <button class="tab" data-tab="pBag"><span class="ic">🎒</span>Bag<span class="dot"></span></button>
-    <button class="tab" data-tab="pGear"><span class="ic">🛡️</span>Hero<span class="dot"></span></button>
-    <button class="tab" data-tab="pCraft"><span class="ic">🔨</span>Forge</button>
-    <button class="tab" data-tab="pZone"><span class="ic">🌀</span>Rifts</button>
-    <button class="tab" data-tab="pMenu"><span class="ic">⚙️</span>Camp</button>
+    <button class="tab sel" data-tab="arena"><span class="ic" data-ico="ui:hunt"></span>Hunt</button>
+    <button class="tab" data-tab="pBag"><span class="ic" data-ico="ui:bag"></span>Bag<span class="dot"></span></button>
+    <button class="tab" data-tab="pGear"><span class="ic" data-ico="ui:hero"></span>Hero<span class="dot"></span></button>
+    <button class="tab" data-tab="pCraft"><span class="ic" data-ico="ui:forge"></span>Forge</button>
+    <button class="tab" data-tab="pZone"><span class="ic" data-ico="ui:rift"></span>Rifts</button>
+    <button class="tab" data-tab="pMenu"><span class="ic" data-ico="ui:camp"></span>Camp</button>
   </div>
 
   <!-- ===================== OVERLAYS ===================== -->
@@ -954,7 +969,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     </div></noscript>
     <h1>RIFTFALL</h1>
     <div class="sub">Zone Looter</div>
-    <div class="classPick" id="classPick"><button class="classOpt" data-cls="melee" style="--cc:#f0955a"><span class="cIc2">⚔️</span><span class="cNm">Vanguard</span><span class="cDs">Sword · high HP</span></button><button class="classOpt" data-cls="range" style="--cc:#6ee7a8"><span class="cIc2">🏹</span><span class="cNm">Warden</span><span class="cDs">Bow · crit speed</span></button><button class="classOpt" data-cls="magic" style="--cc:#8ab4ff"><span class="cIc2">🔮</span><span class="cNm">Riftbinder</span><span class="cDs">Staff · burst AoE</span></button></div>
+    <div class="classPick" id="classPick"><button class="classOpt" data-cls="melee" style="--cc:#f0955a"><span class="cIc2" data-ico="sword"></span><span class="cNm">Vanguard</span><span class="cDs">Sword · high HP</span></button><button class="classOpt" data-cls="range" style="--cc:#6ee7a8"><span class="cIc2" data-ico="shortbow"></span><span class="cNm">Warden</span><span class="cDs">Bow · crit speed</span></button><button class="classOpt" data-cls="magic" style="--cc:#8ab4ff"><span class="cIc2" data-ico="firestaff"></span><span class="cNm">Riftbinder</span><span class="cDs">Staff · burst AoE</span></button></div>
     <div id="introDesc">Choose your discipline. You can equip any weapon later — this only sets your starting kit and stat leanings.</div>
     <button class="btn pri" style="width:100%;max-width:340px;margin-top:10px;" id="startBtn" disabled>Enter the Rift</button>
   </div>
@@ -1398,6 +1413,115 @@ const ICO_DRAW = {
                    const x=32+Math.cos(t)*r, y=32+Math.sin(t)*r;
                    i?g.lineTo(x,y):g.moveTo(x,y); }
                  g.stroke(); },
+  /* ---------------- UI chrome ---------------- */
+  u_hunt(g,rc){
+    _p(g,[10,52, 18,52, 50,14, 46,8, 40,8, 8,46], IC.steel);
+    _p(g,[54,52, 46,52, 14,14, 18,8, 24,8, 56,46], IC.steel);
+    _c(g,32,34,5, rc);
+  },
+  u_bag(g,rc){
+    _p(g,[14,22, 50,22, 55,58, 9,58], IC.leather);
+    _p(g,[14,22, 50,22, 50,32, 14,32], IC.leatherD, null);
+    g.strokeStyle=IC.line; g.lineWidth=5;
+    g.beginPath(); g.arc(32,22,11,3.34,6.08); g.stroke();
+    g.strokeStyle=IC.leatherD; g.lineWidth=3;
+    g.beginPath(); g.arc(32,22,11,3.34,6.08); g.stroke();
+    _bar(g,26,36,12,10, rc);
+  },
+  u_hero(g,rc){
+    _p(g,[32,6, 54,15, 50,40, 32,58, 14,40, 10,15], IC.steel);
+    _c(g,32,26,9, IC.steelD);
+    _p(g,[24,40, 40,40, 44,52, 20,52], IC.steelD, null);
+    _gem(g,32,26,5,rc);
+  },
+  u_forge(g,rc){
+    _bar(g,29,26,7,34, IC.wood);
+    _p(g,[10,10, 54,10, 54,26, 10,26], IC.steelD);
+    _p(g,[14,13, 50,13, 50,20, 14,20], IC.steel, null);
+    _gem(g,32,18,5,rc);
+  },
+  u_rift(g,rc){
+    _c(g,32,32,22, IC.clothD);
+    g.strokeStyle=rc; g.lineWidth=6; g.lineCap='round';
+    g.beginPath();
+    for(let i=0;i<46;i++){ const t=i/46*7.2, r=2.5+t*2.7;
+      const x=32+Math.cos(t)*r, y=32+Math.sin(t)*r; i?g.lineTo(x,y):g.moveTo(x,y); }
+    g.stroke();
+  },
+  u_camp(g,rc){
+    _c(g,32,32,20, IC.steelD);
+    for(let i=0;i<8;i++){ const a=i/8*6.283;
+      _bar(g,30+Math.cos(a)*22-3, 32+Math.sin(a)*22-3, 8, 8, IC.steelD); }
+    _c(g,32,32,20, IC.steel);
+    _c(g,32,32,9, '#151a26');
+    _c(g,32,32,6, rc, null);
+  },
+  u_dash(g,rc){
+    for(const [y,w2] of [[18,40],[32,52],[46,34]]){
+      _p(g,[6,y-5, w2,y-5, w2+8,y, w2,y+5, 6,y+5], IC.steelL);
+    }
+    _c(g,54,32,5, rc);
+  },
+  u_skill(g,rc){
+    _p(g,[32,2, 39,25, 62,32, 39,39, 32,62, 25,39, 2,32, 25,25], rc);
+    _c(g,32,32,6, '#ffffff', null);
+  },
+  u_atk(g,rc){
+    _p(g,[10,52, 18,52, 50,14, 46,8, 40,8, 8,46], IC.steelL);
+    _p(g,[54,52, 46,52, 14,14, 18,8, 24,8, 56,46], IC.steel);
+    _c(g,32,34,6, rc);
+  },
+  u_gold(g,rc){
+    _c(g,32,32,20, IC.goldD);
+    _c(g,32,32,15, IC.gold);
+    _p(g,[32,20, 39,32, 32,44, 25,32], IC.goldD, null);
+  },
+  /* objectives */
+  u_purge(g,rc){
+    _bar(g,16,6,5,52, IC.woodD);
+    _p(g,[21,8, 52,16, 21,28], rc);
+  },
+  u_quarry(g,rc){
+    _c(g,32,28,18, IC.bone);
+    _p(g,[20,42, 44,42, 40,56, 24,56], IC.bone);
+    _c(g,25,26,5, '#141824', null); _c(g,39,26,5, '#141824', null);
+    _p(g,[28,44, 36,44, 36,54, 28,54], '#141824', null);
+    _gem(g,32,14,4,rc);
+  },
+  u_anchor(g,rc){
+    _p(g,[32,4, 48,20, 40,48, 24,48, 16,20], rc);
+    _p(g,[32,10, 41,21, 36,44, 28,44, 23,21], 'rgba(255,255,255,.3)', null);
+    _bar(g,18,48,28,8, IC.steelD);
+  },
+  u_surge(g,rc){
+    _p(g,[40,2, 18,30, 30,30, 22,60, 48,24, 34,24], rc);
+  },
+  /* affixes */
+  u_shielded(g,rc){ _p(g,[32,6, 52,15, 48,40, 32,56, 16,40, 12,15], rc);
+                    _p(g,[32,14, 44,20, 41,38, 32,48, 23,38, 20,20],
+                       'rgba(255,255,255,.35)', null); },
+  u_volatile(g,rc){ _p(g,[32,2, 40,22, 60,18, 46,34, 60,50, 40,44, 32,62,
+                          24,44, 4,50, 18,34, 4,18, 24,22], rc);
+                    _c(g,32,32,7, '#fff3d6', null); },
+  u_vampiric(g,rc){ _p(g,[32,4, 50,34, 44,54, 20,54, 14,34], rc);
+                    _c(g,26,40,5,'rgba(255,255,255,.4)',null); },
+  u_frenzied(g,rc){ _p(g,[40,2, 18,30, 30,30, 22,60, 48,24, 34,24], rc); },
+  u_warded(g,rc){ _c(g,32,32,19, null, rc);
+                  _p(g,[32,10, 40,32, 32,54, 24,32], rc);
+                  _p(g,[10,32, 32,24, 54,32, 32,40], rc); },
+  /* materials: five shapes, tinted by the material's own colour */
+  m_shard(g,rc){ _p(g,[32,4, 48,26, 38,58, 26,58, 16,26], rc);
+                 _p(g,[32,10, 40,26, 32,50, 26,26], 'rgba(255,255,255,.3)', null); },
+  m_dust(g,rc){ for(const [x,y,r] of [[22,24,7],[42,20,5.5],[32,40,8],[46,44,5],[18,44,4.5]])
+                  _c(g,x,y,r, rc); },
+  m_core(g,rc){ _c(g,32,32,19, IC.steelD); _c(g,32,32,13, rc);
+                _c(g,27,27,4.5,'rgba(255,255,255,.45)',null); },
+  m_sigil(g,rc){ _p(g,[32,3, 40,24, 61,32, 40,40, 32,61, 24,40, 3,32, 24,24], rc);
+                 _c(g,32,32,5, '#fff6dc', null); },
+  m_hide(g,rc){ _p(g,[12,16, 30,10, 52,18, 56,40, 38,56, 16,50, 8,32], rc);
+                _p(g,[22,22, 44,24, 42,44, 24,42], 'rgba(0,0,0,.18)', null); },
+  m_organ(g,rc){ _p(g,[32,56, 8,32, 8,18, 20,10, 32,20, 44,10, 56,18, 56,32], rc);
+                 _c(g,22,24,5,'rgba(255,255,255,.3)',null); },
   /* ---------------- fallbacks ---------------- */
   potion(g,rc){ _bar(g,27,6,10,8, IC.steelD); _p(g,[24,14, 40,14, 46,40, 40,58, 24,58, 18,40], '#cfe6f2');
                 _p(g,[22,34, 42,34, 40,56, 24,56], rc, null); },
@@ -1407,6 +1531,14 @@ const ARM_PAL = {
   plate:  [IC.steel, IC.steelD],
   leather:[IC.leather, IC.leatherD],
   cloth:  [IC.cloth, IC.clothD],
+};
+const CLASS_ICO = {melee:'sword', range:'shortbow', magic:'firestaff'};
+const MAT_SHAPE = {
+  scrap:'m_shard', dust:'m_dust', core:'m_core', sigil:'m_sigil',
+  hide:'m_hide', heart:'m_organ', cinder:'m_shard', ember:'m_organ',
+  frost:'m_shard', glacier:'m_core', ichor:'m_dust', fungal:'m_organ',
+  void:'m_dust', rift:'m_sigil', fang:'m_shard', magma:'m_core',
+  crown:'m_sigil', bloom:'m_organ', eye:'m_core',
 };
 const CHARM_ICO = {ember:'c_orb', ward:'c_stone', vigor:'c_knot', focus:'c_lens',
   swift:'c_feather', greed:'c_eye', bloodpact:'c_blood', glasscore:'c_glass',
@@ -1422,6 +1554,14 @@ function drawIcon(g, key, rar){
     return;
   }
   if(parts[0]==='charm'){ (ICO_DRAW[CHARM_ICO[parts[1]]]||ICO_DRAW.misc)(g, rc); return; }
+  if(parts[0]==='ui'){ (ICO_DRAW['u_'+parts[1]]||ICO_DRAW.misc)(g, rc); return; }
+  if(parts[0]==='mat'){
+    /* five shapes cover nineteen materials; the colour is what tells them
+       apart, which is also how they read in the material grid */
+    const M = MATS[parts[1]];
+    (ICO_DRAW[MAT_SHAPE[parts[1]]||'m_shard'])(g, (M&&M.col)||rc);
+    return;
+  }
   (ICO_DRAW[parts[parts.length-1]] || ICO_DRAW.misc)(g, rc);
 }
 function icoURL(key, rar){
@@ -2740,6 +2880,24 @@ const AFFIX = {
   frenzied:{n:'Frenzied', ic:'⚡', col:'#ffd85e', d:'Faster the more wounded it is'},
   warded:  {n:'Warded',   ic:'✦', col:'#a78bfa', d:'Phases out and ignores damage'},
 };
+/* Nameplates are drawn on a 2D canvas, not the DOM, so they cannot use an
+   <img>. The affix badges are painted straight onto it instead. */
+function plateAffixBadge(g, k, x, y, r){
+  const col = AFFIX[k].col;
+  g.fillStyle = col;
+  g.beginPath();
+  if(k==='shielded'){ g.moveTo(x,y-r); g.lineTo(x+r,y-r*0.45); g.lineTo(x+r*0.8,y+r*0.6);
+    g.lineTo(x,y+r); g.lineTo(x-r*0.8,y+r*0.6); g.lineTo(x-r,y-r*0.45); }
+  else if(k==='volatile'){ for(let i=0;i<10;i++){ const a=i/10*6.283, rr=i%2?r*0.45:r;
+    const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr; i?g.lineTo(px,py):g.moveTo(px,py); } }
+  else if(k==='vampiric'){ g.moveTo(x,y-r); g.lineTo(x+r*0.85,y+r*0.35);
+    g.lineTo(x+r*0.45,y+r); g.lineTo(x-r*0.45,y+r); g.lineTo(x-r*0.85,y+r*0.35); }
+  else if(k==='frenzied'){ g.moveTo(x+r*0.5,y-r); g.lineTo(x-r*0.6,y+r*0.1);
+    g.lineTo(x-r*0.05,y+r*0.1); g.lineTo(x-r*0.4,y+r); g.lineTo(x+r*0.7,y-r*0.15);
+    g.lineTo(x+r*0.1,y-r*0.15); }
+  else { g.moveTo(x,y-r); g.lineTo(x+r*0.42,y); g.lineTo(x,y+r); g.lineTo(x-r*0.42,y); }
+  g.closePath(); g.fill();
+}
 const AFFIX_KEYS = Object.keys(AFFIX);
 function rollAffixes(rank){
   if(!rank) return [];
@@ -2902,8 +3060,16 @@ function affixLabel(f){
 function aggroPack(f){
   if(f.state==='aggro') return;
   f.state = 'aggro';
+  announceAggro(f);
+  /* Wake pack-mates THROUGH this function, not by assigning their state.
+     Setting m.state directly skipped the announcement, so pulling one of the
+     boss camp's trash adds first woke the boss without ever making it
+     bossRef - which is why the Alpha sometimes had the banner and sometimes
+     only a nameplate. The guard above makes the recursion terminate. */
   if(f.pack) for(const m of f.pack.members)
-    if(m.state==='idle' && Math.hypot(m.x-f.x, m.y-f.y) < 200) m.state='aggro';
+    if(m.state==='idle' && Math.hypot(m.x-f.x, m.y-f.y) < 200) aggroPack(m);
+}
+function announceAggro(f){
   if(f.rank===2){
     bossRef = f;
     $('bossName').textContent = affixLabel(f);
@@ -3055,7 +3221,7 @@ function buildZoneWorld(){
   }
   obelisk = {x:ox, y:oy, r:30, t:0, flare:0};
   spawnObjective();
-  toast(objective.ic+' '+objective.n);
+  toast(icoKeyHTML(objective.ico,0,'inl')+' '+objective.n);
   sceneReady = false;            /* scenery, ground and chests rebuild next frame */
 }
 /* Roamers ride the pack machinery for leashing and respawn, but they are not
@@ -3126,9 +3292,9 @@ function rollObjective(){
   const z = ZONE_BY_ID[S.zone];
   const r = Math.random();
   if(r < 0.34) return {kind:'purge', need:Math.min(6, campTotal()), got:0,
-    n:'Purge the camps', ic:'⚑'};
-  if(r < 0.67) return {kind:'hunt', need:1, got:0, n:'Hunt the marked beast', ic:'☠'};
-  return {kind:'anchors', need:3, got:0, n:'Destroy the rift anchors', ic:'🔻'};
+    n:'Purge the camps', ico:'ui:purge'};
+  if(r < 0.67) return {kind:'hunt', need:1, got:0, n:'Hunt the marked beast', ico:'ui:quarry'};
+  return {kind:'anchors', need:3, got:0, n:'Destroy the rift anchors', ico:'ui:anchor'};
 }
 /* Both extra objective types are ROOTED FOES rather than a new entity kind:
    they get health bars, nameplates, death collapse, targeting and minimap
@@ -3493,13 +3659,13 @@ function clearFeed(){
   for(const r of feedRows.values()) clearTimeout(r.timer);
   feedRows.clear();
 }
-function feedGold(g){ feedLoot('gold','Gold','🪙',0,g,{gold:1}); }
+function feedGold(g){ feedLoot('gold','Gold',icoKeyHTML('ui:gold',0),0,g,{gold:1}); }
 function feedMat(k,q){
   const M = MATS[k]; if(!M) return;
   /* the zone's rare material and its catalyst are worth their own colour */
   const z = ZONE_BY_ID[S.zone];
   const rar = k===z.cat ? 4 : k===z.mats[1] ? 2 : 0;
-  feedLoot('mat:'+k, M.n, M.ic, rar, q);
+  feedLoot('mat:'+k, M.n, icoKeyHTML('mat:'+k, rar), rar, q);
 }
 function feedItem(it){ feedLoot(null, it.name, icoHTML(it), it.rar, 1); }
 
@@ -3584,6 +3750,25 @@ function openChest(){
   nearChest = null; $('prompt').style.display='none';
   markAlert();
   showLoot(got, g);
+}
+
+function askRingSlot(uid){
+  const f = findItem(uid); if(!f) return;
+  const it = f.it;
+  const row = (sl)=>{
+    const cur = S.equip[sl];
+    return '<div class="slot '+(cur?'filled rar'+cur.rar:'empty')+'" data-ringslot="'+sl+'">'+
+      '<div class="slotIc">'+(cur?icoHTML(cur):icoKeyHTML('ring',0,'dim'))+'</div>'+
+      '<div class="slotTxt"><div class="slotLbl">'+SLOT_LABEL[sl]+'</div>'+
+      '<div class="slotName">'+(cur?cur.name:'empty')+'</div></div></div>';
+  };
+  $('modalBody').innerHTML =
+    '<div class="detHead rar'+it.rar+'"><div class="detIc">'+icoHTML(it)+'</div><div>'+
+    '<div class="detName">'+it.name+'</div>'+
+    '<div class="detSub">Choose a ring slot</div></div></div>'+
+    '<div class="slotGrid" id="ringPick" data-uid="'+uid+'">'+row('ring1')+row('ring2')+'</div>'+
+    '<div class="modalBtns"><button class="btn wide" data-act="close">Cancel</button></div>';
+  $('modalWrap').classList.add('open');
 }
 
 function openCharmModal(it){
@@ -3968,7 +4153,8 @@ function update(dt){
         pk.trigger = 0;
         toast('👁 Ambush!'); sfx('boss'); shake = Math.max(shake, 8); buzz(70);
         for(const m of pk.members){
-          m.hidden = 0; m.state = 'aggro'; m.born = 0; m.warp = 0.35;
+          m.hidden = 0; m.born = 0; m.warp = 0.35;
+          m.state = 'idle'; aggroPack(m);   /* via aggroPack, so ranks announce */
           burst(m.x, m.y, m.def.col, 10, 150, 0.45, 2.5);
         }
       }
@@ -4089,6 +4275,7 @@ function update(dt){
       f.hp=Math.min(f.max, f.hp+f.max*0.06*dt);
       if(hd<18){ f.state='idle'; f.alerted=0; if(f===bossRef){ bossRef=null;
         $('bossBar').classList.remove('on'); } }
+      /* cleared so the banner and the warning fire again next time */
       continue;
     }
     if(Math.hypot(f.x-f.home.x, f.y-f.home.y) > f.leashR){
@@ -5057,33 +5244,37 @@ const RIG3D = {
       ['lBL','body',[0.20,-0.10,-0.30]], ['lBR','body',[-0.20,-0.10,-0.30]],
     ],
     parts: [
-      {b:'body', shape:'box', w:0.50,h:0.42,d:1.00, c:'mid'},
-      {b:'body', shape:'box', w:0.54,h:0.20,d:0.56, y:0.16, z:0.14, c:'lite'}, /* shoulders */
-      /* a dorsal ridge: the single cheapest way to make a beast read as a
-         predator rather than a crate on legs */
-      {b:'body', shape:'cone',w:0.16,h:0.26, y:0.26, z: 0.24, c:'out'},
-      {b:'body', shape:'cone',w:0.15,h:0.23, y:0.26, z: 0.02, c:'out'},
-      {b:'body', shape:'cone',w:0.13,h:0.19, y:0.24, z:-0.20, c:'out'},
-      {b:'body', shape:'box', w:0.46,h:0.26,d:0.40, y:-0.10, z:-0.32, c:'dark'}, /* haunch */
-      {b:'neck', shape:'box', w:0.28,h:0.28,d:0.32, z:0.08, c:'mid'},
-      {b:'neck', shape:'sphere', w:0.46, sy:0.7, z:0.02, c:'lite'},            /* ruff */
-      {b:'head', shape:'box', w:0.34,h:0.32,d:0.44, z:0.16, c:'lite'},
-      {b:'head', shape:'box', w:0.16,h:0.14,d:0.22, z:0.44, y:-0.06, c:'dark'},/* snout */
-      {b:'head', shape:'box', w:0.13,h:0.05,d:0.12, z:0.50, y:-0.12, c:'out'}, /* teeth */
-      {b:'head', shape:'cone',w:0.16,h:0.20, x:0.12, y:0.22, c:'dark'},
-      {b:'head', shape:'cone',w:0.16,h:0.20, x:-0.12,y:0.22, c:'dark'},
-      {b:'head', shape:'sphere', w:0.10, x: 0.11, y:0.06, z:0.34, c:'glow'},
-      {b:'head', shape:'sphere', w:0.10, x:-0.11, y:0.06, z:0.34, c:'glow'},
-      {b:'tail', shape:'box', w:0.12,h:0.12,d:0.44, z:-0.20, c:'dark'},
-      {b:'tail', shape:'sphere', w:0.22, z:-0.44, c:'out'},                    /* tuft */
-      {b:'lFL',  shape:'box', w:0.16,h:0.56,d:0.16, y:-0.28, c:'dark'},
-      {b:'lFL',  shape:'box', w:0.18,h:0.09,d:0.26, y:-0.56, z:0.05, c:'out'}, /* paw */
-      {b:'lFR',  shape:'box', w:0.16,h:0.56,d:0.16, y:-0.28, c:'dark'},
-      {b:'lFR',  shape:'box', w:0.18,h:0.09,d:0.26, y:-0.56, z:0.05, c:'out'},
-      {b:'lBL',  shape:'box', w:0.17,h:0.58,d:0.17, y:-0.29, c:'dark'},
-      {b:'lBL',  shape:'box', w:0.19,h:0.09,d:0.26, y:-0.58, z:0.05, c:'out'},
-      {b:'lBR',  shape:'box', w:0.17,h:0.58,d:0.17, y:-0.29, c:'dark'},
-      {b:'lBR',  shape:'box', w:0.19,h:0.09,d:0.26, y:-0.58, z:0.05, c:'out'},
+      /* Rebuilt from tapered cylinders and spheres like the hero. A beast made
+         of boxes reads as a crate on legs however much detail is bolted on -
+         the blockiness is in the primitives, not in the part count. */
+      {b:'body', shape:'cyl', w:0.44, w2:0.52, h:0.96, rot:[1.5708,0,0], c:'mid'},
+      {b:'body', shape:'sphere', w:0.56, sy:0.86, z: 0.30, y:0.04, c:'mid'},   /* chest  */
+      {b:'body', shape:'sphere', w:0.60, sy:0.84, z:-0.28, y:0.02, c:'dark'},  /* haunch */
+      {b:'body', shape:'sphere', w:0.50, sy:0.70, y:0.14, z:0.12, c:'lite'},   /* withers */
+      /* dorsal ridge: the cheapest way to read as predator, not livestock */
+      {b:'body', shape:'cone', w:0.15,h:0.26, y:0.28, z: 0.24, c:'out'},
+      {b:'body', shape:'cone', w:0.14,h:0.23, y:0.28, z: 0.02, c:'out'},
+      {b:'body', shape:'cone', w:0.12,h:0.19, y:0.26, z:-0.20, c:'out'},
+      {b:'neck', shape:'cyl', w:0.30, w2:0.25, h:0.34, rot:[1.1,0,0], z:0.08, c:'mid'},
+      {b:'neck', shape:'sphere', w:0.46, sy:0.72, z:0.02, c:'lite'},           /* ruff */
+      {b:'head', shape:'sphere', w:0.38, det:1, z:0.14, c:'lite'},
+      {b:'head', shape:'sphere', w:0.26, sy:0.78, z:0.36, y:-0.04, c:'lite'},  /* muzzle */
+      {b:'head', shape:'sphere', w:0.13, z:0.50, y:-0.05, c:'dark'},           /* nose  */
+      {b:'head', shape:'cone', w:0.12,h:0.09, rot:[1.5708,0,0], z:0.46, y:-0.14, c:'out'},
+      {b:'head', shape:'cone', w:0.15,h:0.20, rot:[-0.25,0,0.30],  x: 0.13, y:0.20, c:'dark'},
+      {b:'head', shape:'cone', w:0.15,h:0.20, rot:[-0.25,0,-0.30], x:-0.13, y:0.20, c:'dark'},
+      {b:'head', shape:'sphere', w:0.10, x: 0.12, y:0.07, z:0.32, c:'glow'},
+      {b:'head', shape:'sphere', w:0.10, x:-0.12, y:0.07, z:0.32, c:'glow'},
+      {b:'tail', shape:'cyl', w:0.13, w2:0.07, h:0.44, rot:[1.5708,0,0], z:-0.20, c:'dark'},
+      {b:'tail', shape:'sphere', w:0.20, det:1, z:-0.44, c:'out'},
+      {b:'lFL',  shape:'cyl', w:0.18, w2:0.13, h:0.56, y:-0.28, c:'dark'},
+      {b:'lFL',  shape:'sphere', w:0.19, sy:0.62, y:-0.56, z:0.04, c:'out'},
+      {b:'lFR',  shape:'cyl', w:0.18, w2:0.13, h:0.56, y:-0.28, c:'dark'},
+      {b:'lFR',  shape:'sphere', w:0.19, sy:0.62, y:-0.56, z:0.04, c:'out'},
+      {b:'lBL',  shape:'cyl', w:0.20, w2:0.14, h:0.58, y:-0.29, c:'dark'},
+      {b:'lBL',  shape:'sphere', w:0.20, sy:0.62, y:-0.58, z:0.04, c:'out'},
+      {b:'lBR',  shape:'cyl', w:0.20, w2:0.14, h:0.58, y:-0.29, c:'dark'},
+      {b:'lBR',  shape:'sphere', w:0.20, sy:0.62, y:-0.58, z:0.04, c:'out'},
     ],
     pose(b, an, st){
       const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.6)*0.5+0.5;
@@ -5117,20 +5308,20 @@ const RIG3D = {
     h: 1.3, hs: 1.65,
     bones: [ ['root',null,[0,0,0]], ['body','root',[0,0.48,0]], ['top','body',[0,0.30,0]] ],
     parts: [
-      {b:'body', shape:'sphere', w:1.05, sy:0.86, c:'mid'},
-      {b:'top',  shape:'sphere', w:0.55, sy:0.80, c:'lite'},
-      /* nodules break the perfect sphere - without them it is a ball, and a
-         ball reads as a placeholder */
-      {b:'body', shape:'sphere', w:0.38, det:0, x: 0.40, y: 0.10, z: 0.26, c:'lite'},
-      {b:'body', shape:'sphere', w:0.30, det:0, x:-0.44, y:-0.04, z: 0.14, c:'lite'},
-      {b:'body', shape:'sphere', w:0.26, det:0, x: 0.10, y:-0.06, z:-0.44, c:'dark'},
-      {b:'body', shape:'sphere', w:0.22, det:0, x:-0.22, y: 0.22, z:-0.34, c:'dark'},
-      {b:'body', shape:'sphere', w:0.16, det:0, x: 0.30, y: 0.30, z:-0.16, c:'out'},
-      /* eyes floating in the mass */
-      {b:'top',  shape:'sphere', w:0.20, x: 0.17, y:0.02, z:0.26, c:'glow'},
-      {b:'top',  shape:'sphere', w:0.20, x:-0.17, y:0.02, z:0.26, c:'glow'},
-      {b:'top',  shape:'sphere', w:0.11, x: 0.17, y:0.02, z:0.33, c:'out'},
-      {b:'top',  shape:'sphere', w:0.11, x:-0.17, y:0.02, z:0.33, c:'out'},
+      {b:'body', shape:'sphere', w:1.05, det:2, sy:0.86, c:'mid'},
+      {b:'top',  shape:'sphere', w:0.55, det:2, sy:0.80, c:'lite'},
+      /* a higher-detail hull plus off-centre lobes: a single low-poly sphere
+         is a faceted ball, and no amount of nodules hides that silhouette */
+      {b:'body', shape:'sphere', w:0.62, det:1, x: 0.34, y: 0.06, z: 0.24, c:'mid'},
+      {b:'body', shape:'sphere', w:0.54, det:1, x:-0.38, y:-0.04, z: 0.10, c:'mid'},
+      {b:'body', shape:'sphere', w:0.46, det:1, x: 0.06, y:-0.08, z:-0.40, c:'dark'},
+      {b:'body', shape:'sphere', w:0.34, det:1, x:-0.24, y: 0.24, z:-0.30, c:'dark'},
+      {b:'body', shape:'sphere', w:0.24, det:1, x: 0.32, y: 0.30, z:-0.12, c:'out'},
+      {b:'body', shape:'sphere', w:0.18, det:0, x:-0.06, y: 0.36, z: 0.30, c:'out'},
+      {b:'top',  shape:'sphere', w:0.20, det:1, x: 0.17, y:0.02, z:0.26, c:'glow'},
+      {b:'top',  shape:'sphere', w:0.20, det:1, x:-0.17, y:0.02, z:0.26, c:'glow'},
+      {b:'top',  shape:'sphere', w:0.11, det:1, x: 0.17, y:0.02, z:0.33, c:'out'},
+      {b:'top',  shape:'sphere', w:0.11, det:1, x:-0.17, y:0.02, z:0.33, c:'out'},
     ],
     pose(b, an, st){
       const p=Math.sin(st.t*3.2), w=an.walk;
@@ -5927,6 +6118,15 @@ function render(){
 /* ================================================================
    MINIMAP — 2D overlay canvas (the arena canvas is WebGL now)
    ================================================================ */
+/* Markup declares its icon with data-ico and this fills it once at boot,
+   so the static chrome does not need a render function of its own. */
+function paintStaticIcons(){
+  for(const el of document.querySelectorAll('[data-ico]')){
+    if(el.firstElementChild) continue;
+    el.innerHTML = icoKeyHTML(el.dataset.ico, +(el.dataset.icoRar||0));
+  }
+}
+
 /* ---------- enemy nameplates ----------
    Enemies were anonymous and only the boss had a health bar, so you could not
    tell what you were fighting or how close it was to dying. Drawn on the 2D
@@ -5996,10 +6196,8 @@ function drawPlates(){
       hctx.fillStyle = 'rgba(167,139,250,.55)';
       hctx.fillRect(sp.x-w/2, sp.y, w, bh);
     }
-    const tag = (f.affix && f.affix.length)
-      ? f.affix.map(k=>AFFIX[k].ic).join('') + ' ' : '';
     const base = f.rareName || f.def.n;
-    const nm = tag + (f.rank ? (base + '  Lv' + f.lvl) : base);
+    const nm = (f.rank ? (base + '  Lv' + f.lvl) : base);
     hctx.font = (f.rank ? '700 10px ' : '600 9px ') + 'system-ui,-apple-system,sans-serif';
     /* stroke first: over a dark ridge or a bright lava channel alike, plain
        fill text disappears into whatever happens to be behind it */
@@ -6008,6 +6206,13 @@ function drawPlates(){
     hctx.strokeText(nm, sp.x, sp.y-4);
     hctx.fillStyle = f.rank===2 ? '#ffc2cc' : f.rank===1 ? '#ffd7ae' : '#dfe4f0';
     hctx.fillText(nm, sp.x, sp.y-4);
+    /* affix badges sit to the left of the name rather than inside it, so a
+       long name never pushes them off the plate */
+    if(f.affix && f.affix.length){
+      const tw = hctx.measureText(nm).width;
+      let bx = sp.x - tw/2 - 7;
+      for(let k=f.affix.length-1;k>=0;k--){ plateAffixBadge(hctx, f.affix[k], bx, sp.y-7.5, 4.2); bx -= 11; }
+    }
   }
   hctx.restore();
 }
@@ -6131,14 +6336,14 @@ function syncHud(){
   setBar('mpBar', P.mp/D.maxMp);
   setBar('xpBar', S.xp/TUNE.xpNeed(S.lvl));
   $('lvlPill').textContent = S.lvl;
-  $('hudGold').textContent = '🪙 '+fmt(S.gold);
+  $('hudGold').innerHTML = icoKeyHTML('ui:gold',0,'inl')+fmt(S.gold);
   /* the objective is what you are FOR; the camp tally is just progress */
   let line = objective
-    ? objective.ic+' '+(objective.done ? objective.n+' ✓'
+    ? icoKeyHTML(objective.ico,0,'inl')+' '+(objective.done ? objective.n+' ✓'
         : objective.n+' '+objective.got+'/'+objective.need)
-    : '⚑ '+campsCleared()+'/'+campTotal();
-  if(surge.lvl>0) line = '⚡'+surge.lvl+'  '+line;
-  $('hudKills').textContent = line;
+    : icoKeyHTML('ui:purge',0,'inl')+' '+campsCleared()+'/'+campTotal();
+  if(surge.lvl>0) line = icoKeyHTML('ui:surge',4,'inl')+surge.lvl+'&nbsp; '+line;
+  $('hudKills').innerHTML = line;
   $('hudZone').textContent = ZONE_BY_ID[S.zone].n;
   if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max,
     Math.ceil(clamp(bossRef.hp/bossRef.max,0,1)*100)+'%'); }
@@ -6251,11 +6456,18 @@ function findItem(uid){
    EQUIP
    ================================================================ */
 function bagRoom(n){ return S.bag.length + (n||1) <= TUNE.bagMax; }
-function equipItem(uid){
+/* Rings are the only item with two interchangeable homes. Auto-picking meant
+   a better ring silently replaced whichever one the code happened to reach
+   first, so once both are full you get asked. */
+function equipItem(uid, forceSlot){
   const f = findItem(uid); if(!f || f.where!=='bag') return;
   const it = f.it;
-  let slot = it.slot;
-  if(slot==='ring') slot = S.equip.ring1 ? (S.equip.ring2 ? 'ring1':'ring2') : 'ring1';
+  let slot = forceSlot || it.slot;
+  if(slot==='ring'){
+    if(!S.equip.ring1) slot='ring1';
+    else if(!S.equip.ring2) slot='ring2';
+    else { askRingSlot(uid); return; }
+  }
 
   const outs = [];
   if(slot==='weapon'){
@@ -6393,7 +6605,7 @@ function openItemModal(uid){
     const y = salvageYield(it);
     h += '<div class="costRow" style="margin-bottom:10px;">'+
       Object.keys(y).map(k=>'<span class="cost">'+(k==='gold'? y.gold+'g' :
-        MATS[k].ic+' '+y[k]+'× '+MATS[k].n)+'</span>').join('')+'</div>';
+        icoKeyHTML('mat:'+k,0,'inl')+y[k]+'× '+MATS[k].n)+'</span>').join('')+'</div>';
   }
 
   h += '<div class="modalBtns">';
@@ -6409,6 +6621,13 @@ function openItemModal(uid){
   $('modalWrap').classList.add('open');
 }
 $('modalBody').addEventListener('click', e=>{
+  const rs = e.target.closest('[data-ringslot]');
+  if(rs){
+    const pick = document.getElementById('ringPick');
+    closeModal();
+    equipItem(pick.dataset.uid, rs.dataset.ringslot);
+    return;
+  }
   const c = e.target.closest('[data-cact]');
   if(c){
     const slot = S.charms.findIndex(x=>x && x.uid===modalUid);
@@ -6631,7 +6850,8 @@ function costRow(cost){
   return '<div class="costRow">'+Object.keys(cost).map(k=>{
     const have = k==='gold'? S.gold : (S.mats[k]||0);
     const ok = have>=cost[k];
-    const label = k==='gold' ? fmt(cost[k])+'g' : MATS[k].ic+' '+cost[k]+' '+MATS[k].n;
+    const label = k==='gold' ? fmt(cost[k])+'g'
+      : icoKeyHTML('mat:'+k,0,'inl')+cost[k]+' '+MATS[k].n;
     return '<span class="cost '+(ok?'ok':'no')+'">'+label+' <span style="opacity:.6">('+fmt(have)+')</span></span>';
   }).join('')+'</div>';
 }
@@ -6769,7 +6989,8 @@ function renderCraft(){
           '<div class="rDesc">'+C.d.replace('{v}', C.lo+'–'+C.hi)+'</div>'+
           '<div class="costRow">'+Object.keys(cost).map(k=>{
             const have = k==='gold'? S.gold : (S.mats[k]||0);
-            const lbl = k==='gold'? fmt(cost[k])+' gold' : MATS[k].ic+' '+cost[k]+' '+MATS[k].n;
+            const lbl = k==='gold'? fmt(cost[k])+' gold'
+              : icoKeyHTML('mat:'+k,0,'inl')+cost[k]+' '+MATS[k].n;
             return '<span class="cost '+(have>=cost[k]?'ok':'no')+'">'+lbl+'</span>';
           }).join('')+'</div>'+
           '<button class="btn '+(can?'pri':'')+'" data-forge="'+key+'" '+(can?'':'disabled')+
@@ -6783,7 +7004,8 @@ function renderCraft(){
       const made = S.crafted.includes(r.id);
       const can = hasMats(r.cost);
       h += '<div class="recipe rar5'+(can||made?'':' locked')+'">'+
-        '<div class="rHead"><div class="cIcon" style="width:36px;height:36px;font-size:19px;">'+r.ic+'</div>'+
+        '<div class="rHead"><div class="cIcon" style="width:36px;height:36px;">'+
+          icoKeyHTML(r.slot==='offhand'?(r.off||'shield'):(r.arch||'amulet'),5)+'</div>'+
         '<div style="flex:1;"><div class="rName">'+r.n+'</div>'+
         '<div class="cMeta">Relic · '+SLOT_LABEL[r.slot==='ring'?'ring1':r.slot]+' · iLvl '+r.ilvl+'</div></div>'+
         (made?'<span class="tagEq">CRAFTED</span>':'')+'</div>'+
@@ -6810,7 +7032,7 @@ function renderCraft(){
 function matCell(k){
   const q = S.mats[k]||0;
   return '<div class="mat'+(q?'':' zero')+'" style="--mc:'+MATS[k].col+'">'+
-    '<div class="mIc">'+MATS[k].ic+'</div><div class="mQ">'+fmt(q)+'</div>'+
+    '<div class="mIc">'+icoKeyHTML('mat:'+k,0)+'</div><div class="mQ">'+fmt(q)+'</div>'+
     '<div class="mN">'+MATS[k].n+'</div></div>';
 }
 function upgradeCard(it){
@@ -6907,8 +7129,9 @@ function renderZones(){
             (gap>6?'LETHAL':gap>2?'RISKY':gap>-4?'FAIR':'TRIVIAL')+'</span>'+
         '</div>'+
         '<div class="zStats" style="margin-top:6px;">'+
-          '<span>Drops '+MATS[z.mats[0]].ic+' '+MATS[z.mats[0]].n+' · '+
-            MATS[z.mats[1]].ic+' '+MATS[z.mats[1]].n+' · '+MATS[z.cat].ic+' '+MATS[z.cat].n+'</span>'+
+          '<span>Drops '+icoKeyHTML('mat:'+z.mats[0],0,'inl')+MATS[z.mats[0]].n+' · '+
+            icoKeyHTML('mat:'+z.mats[1],0,'inl')+MATS[z.mats[1]].n+' · '+
+            icoKeyHTML('mat:'+z.cat,0,'inl')+MATS[z.cat].n+'</span>'+
         '</div>'+
         '<div class="zBtnRow">'+
           '<button class="btn '+(cur?'':'pri')+' wide" data-zone="'+z.id+'" '+(cur?'disabled':'')+'>'+
@@ -6958,10 +7181,10 @@ function renderMenu(){
   }
 
   h += '<div class="sectionLbl">Options</div><div id="optRow">'+
-    optBtn('sfx','🔊 Sound')+optBtn('haptic','📳 Haptics')+optBtn('autoAim','🎯 Auto-Attack')+'</div>'+
+    optBtn('sfx','Sound')+optBtn('haptic','Haptics')+optBtn('autoAim','Auto-Attack')+'</div>'+
     '<div id="optRow" style="margin-top:7px;">'+
       ['high','med','low'].map(t=>'<button class="chip'+(S.opts.gfx===t?' sel':'')+
-        '" data-gfx="'+t+'">🖼 '+({high:'Sharp',med:'Balanced',low:'Battery'})[t]+'</button>').join('')+
+        '" data-gfx="'+t+'">'+({high:'Sharp',med:'Balanced',low:'Battery'})[t]+'</button>').join('')+
     '</div>'+
     '<div class="warn" style="margin-top:10px;">Auto-Attack fires the moment an enemy enters range. Turn it off to attack only while holding ⚔️.</div>';
 
@@ -7111,7 +7334,7 @@ let pickedClass=null;
 function buildIntro(){
   $('classPick').innerHTML = CLASSES.map(c=>
     '<button class="classOpt" data-cls="'+c.k+'" style="--cc:'+c.col+'">'+
-    '<span class="cIc2">'+c.ic+'</span><span class="cNm">'+c.n+'</span>'+
+    '<span class="cIc2">'+icoKeyHTML(CLASS_ICO[c.k]||'sword',0)+'</span><span class="cNm">'+c.n+'</span>'+
     '<span class="cDs">'+c.d+'</span></button>').join('');
   $('classPick').addEventListener('click', e=>{
     const b=e.target.closest('[data-cls]'); if(!b) return;
@@ -7181,6 +7404,9 @@ function boot(){
 
 /* boot or intro */
 window.__scriptEnd = 1;
+/* the nav rail and action pad are static markup, so their art is painted once
+   here rather than on every panel render */
+paintStaticIcons();
 buildIntro();
 if(loadGame()){
   $('intro').classList.add('gone');
