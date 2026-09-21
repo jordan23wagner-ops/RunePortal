@@ -3962,44 +3962,50 @@ const RIG3D = {
     h: 2.2, hs: 2.60,     /* world height per unit of def.size */
     bones: [
       ['root',null,[0,0,0]], ['hips','root',[0,0.95,0]], ['chest','hips',[0,0.45,0]],
-      ['head','chest',[0,0.52,0]],
+      ['neck','chest',[0,0.44,0]], ['head','neck',[0,0.10,0]],
       ['armL','chest',[0.34,0.28,0]], ['foreL','armL',[0,-0.36,0]],
       ['armR','chest',[-0.34,0.28,0]],['foreR','armR',[0,-0.36,0]],
       ['legL','hips',[0.17,-0.06,0]], ['shinL','legL',[0,-0.44,0]],
       ['legR','hips',[-0.17,-0.06,0]],['shinR','legR',[0,-0.44,0]],
     ],
     parts: [
-      {b:'hips', shape:'box', w:0.52,h:0.40,d:0.32, y:0.10, c:'dark'},
-      {b:'hips', shape:'box', w:0.58,h:0.10,d:0.36, y:0.25, c:'out'},      /* belt   */
-      {b:'hips', shape:'box', w:0.16,h:0.14,d:0.08, y:0.25, z:0.20, c:'glow'}, /* buckle */
-      {b:'chest',shape:'box', w:0.66,h:0.52,d:0.38, y:0.18, c:'mid'},
-      {b:'chest',shape:'box', w:0.86,h:0.18,d:0.42, y:0.36, c:'lite'},
-      {b:'chest',shape:'box', w:0.30,h:0.26,d:0.10, y:0.20, z:0.20, c:'lite'}, /* breastplate */
-      {b:'chest',shape:'cone',w:0.16,h:0.26, y:0.44, z:-0.17, c:'out'},    /* spine spike */
-      {b:'chest',shape:'cone',w:0.12,h:0.19, y:0.28, z:-0.19, c:'out'},
-      {b:'head', shape:'box', w:0.40,h:0.38,d:0.40, y:0.19, c:'lite'},
-      {b:'head', shape:'box', w:0.44,h:0.09,d:0.18, y:0.30, z:0.02, c:'out'}, /* brow  */
-      {b:'head', shape:'box', w:0.26,h:0.11,d:0.13, y:0.06, z:0.19, c:'dark'},/* jaw   */
-      /* eyes do more for readability at this zoom than any other detail */
-      {b:'head', shape:'sphere', w:0.10, x: 0.10, y:0.20, z:0.19, c:'glow'},
-      {b:'head', shape:'sphere', w:0.10, x:-0.10, y:0.20, z:0.19, c:'glow'},
-      {b:'armL', shape:'sphere', w:0.30, y:-0.01, c:'lite'},                /* pauldron */
-      {b:'armL', shape:'box', w:0.19,h:0.40,d:0.19, y:-0.18, c:'mid'},
-      {b:'foreL',shape:'box', w:0.16,h:0.38,d:0.16, y:-0.18, c:'dark'},
-      {b:'foreL',shape:'box', w:0.19,h:0.15,d:0.19, y:-0.38, c:'out'},      /* fist  */
-      {b:'armR', shape:'sphere', w:0.30, y:-0.01, c:'lite'},
-      {b:'armR', shape:'box', w:0.19,h:0.40,d:0.19, y:-0.18, c:'mid'},
-      {b:'foreR',shape:'box', w:0.16,h:0.38,d:0.16, y:-0.18, c:'dark'},
-      {b:'foreR',shape:'box', w:0.19,h:0.15,d:0.19, y:-0.38, c:'out'},
-      /* a crude cleaver: an empty-handed humanoid reads as unfinished */
+      /* Built from tapered cylinders and spheres, the way the hero is. Boxes
+         everywhere made these read as crates with legs - and a torso that is
+         a literal cube is the single loudest 'blocky' tell. */
+      {b:'hips', shape:'cyl', w:0.50, w2:0.44, h:0.34, y:0.10, c:'dark'},
+      {b:'hips', shape:'cyl', w:0.54, w2:0.54, h:0.09, y:0.25, c:'out'},      /* belt   */
+      {b:'hips', shape:'box', w:0.13,h:0.12,d:0.08, y:0.25, z:0.21, c:'glow'},/* buckle */
+      /* torso tapers OUT toward the shoulders, which is what gives a humanoid
+         its wedge instead of a fridge outline */
+      {b:'chest',shape:'cyl', w:0.50, w2:0.64, h:0.52, y:0.18, c:'mid'},
+      {b:'chest',shape:'sphere', w:0.52, sy:0.46, y:0.40, c:'lite'},          /* yoke   */
+      {b:'chest',shape:'sphere', w:0.34, sy:0.70, y:0.20, z:0.15, c:'lite'},  /* pectoral */
+      {b:'chest',shape:'cone',w:0.15,h:0.25, y:0.46, z:-0.16, c:'out'},
+      {b:'chest',shape:'cone',w:0.12,h:0.19, y:0.28, z:-0.18, c:'out'},
+      {b:'neck', shape:'cyl', w:0.17, w2:0.19, h:0.13, y:0.03, c:'dark'},
+      {b:'head', shape:'sphere', w:0.40, det:1, y:0.19, c:'lite'},
+      {b:'head', shape:'sphere', w:0.30, det:1, sy:0.62, y:0.11, z:0.15, c:'lite'}, /* muzzle */
+      {b:'head', shape:'cyl', w:0.42, w2:0.36, h:0.08, rot:[0.10,0,0], y:0.30, c:'out'}, /* brow */
+      {b:'head', shape:'sphere', w:0.09, x: 0.10, y:0.21, z:0.17, c:'glow'},
+      {b:'head', shape:'sphere', w:0.09, x:-0.10, y:0.21, z:0.17, c:'glow'},
+      {b:'head', shape:'cone',w:0.11,h:0.20, rot:[-0.35,0,0.45],  x: 0.17, y:0.32, c:'out'},
+      {b:'head', shape:'cone',w:0.11,h:0.20, rot:[-0.35,0,-0.45], x:-0.17, y:0.32, c:'out'},
+      {b:'armL', shape:'sphere', w:0.31, det:1, y:-0.01, c:'lite'},           /* pauldron */
+      {b:'armL', shape:'cyl', w:0.19, w2:0.16, h:0.38, y:-0.18, c:'mid'},
+      {b:'foreL',shape:'cyl', w:0.17, w2:0.14, h:0.36, y:-0.18, c:'dark'},
+      {b:'foreL',shape:'sphere', w:0.19, y:-0.38, c:'out'},                   /* fist */
+      {b:'armR', shape:'sphere', w:0.31, det:1, y:-0.01, c:'lite'},
+      {b:'armR', shape:'cyl', w:0.19, w2:0.16, h:0.38, y:-0.18, c:'mid'},
+      {b:'foreR',shape:'cyl', w:0.17, w2:0.14, h:0.36, y:-0.18, c:'dark'},
+      {b:'foreR',shape:'sphere', w:0.19, y:-0.38, c:'out'},
       {b:'foreR',shape:'cyl', w:0.07,h:0.22, rot:[0.42,0,0], y:-0.46, z:0.06, c:'out'},
-      {b:'foreR',shape:'box', w:0.09,h:0.52,d:0.20, rot:[0.42,0,0], y:-0.70, z:0.16, c:'lite'},
-      {b:'legL', shape:'box', w:0.22,h:0.46,d:0.22, y:-0.22, c:'dark'},
-      {b:'shinL',shape:'box', w:0.19,h:0.44,d:0.24, y:-0.22, c:'dark'},
-      {b:'shinL',shape:'box', w:0.21,h:0.12,d:0.32, y:-0.44, z:0.05, c:'out'}, /* foot */
-      {b:'legR', shape:'box', w:0.22,h:0.46,d:0.22, y:-0.22, c:'dark'},
-      {b:'shinR',shape:'box', w:0.19,h:0.44,d:0.24, y:-0.22, c:'dark'},
-      {b:'shinR',shape:'box', w:0.21,h:0.12,d:0.32, y:-0.44, z:0.05, c:'out'},
+      {b:'foreR',shape:'box', w:0.08,h:0.52,d:0.19, rot:[0.42,0,0], y:-0.70, z:0.16, c:'lite'},
+      {b:'legL', shape:'cyl', w:0.23, w2:0.19, h:0.44, y:-0.22, c:'dark'},
+      {b:'shinL',shape:'cyl', w:0.19, w2:0.16, h:0.42, y:-0.21, c:'dark'},
+      {b:'shinL',shape:'box', w:0.19,h:0.11,d:0.30, y:-0.43, z:0.06, c:'out'},
+      {b:'legR', shape:'cyl', w:0.23, w2:0.19, h:0.44, y:-0.22, c:'dark'},
+      {b:'shinR',shape:'cyl', w:0.19, w2:0.16, h:0.42, y:-0.21, c:'dark'},
+      {b:'shinR',shape:'box', w:0.19,h:0.11,d:0.30, y:-0.43, z:0.06, c:'out'},
     ],
     pose(b, an, st){
       const s=Math.sin(an.ph), w=an.walk, br=Math.sin(st.t*2.2)*0.5+0.5;
@@ -4860,12 +4866,77 @@ function render(){
 
   syncFx();
   t.renderer.render(t.scene, t.cam);
-  drawMinimap();
+  drawMinimap();      /* clears the 2D overlay, so plates go after it */
+  drawPlates();
 }
 
 /* ================================================================
    MINIMAP — 2D overlay canvas (the arena canvas is WebGL now)
    ================================================================ */
+/* ---------- enemy nameplates ----------
+   Enemies were anonymous and only the boss had a health bar, so you could not
+   tell what you were fighting or how close it was to dying. Drawn on the 2D
+   overlay rather than as 3D sprites: crisp text at any zoom, no extra draw
+   calls in the scene, and no per-enemy mesh to pool. */
+const PLATE_R = 560;     /* world units - the local encounter, not the whole map */
+const PLATE_MAX = 16;    /* bounds the cost when a whole camp aggros at once */
+function drawPlates(){
+  if(!hctx || !T3 || !P || P.dead) return;
+  const near = [];
+  for(const f of foes){
+    if(f.born < (f.warp||0.42)) continue;      /* still materialising */
+    const dx=f.x-P.x, dy=f.y-P.y, d2=dx*dx+dy*dy;
+    if(d2 > PLATE_R*PLATE_R) continue;
+    near.push({f, d:Math.sqrt(d2)});
+  }
+  /* nearest first, so the cap drops the ones you care least about */
+  near.sort((a,b)=>a.d-b.d);
+  hctx.save();
+  hctx.textAlign = 'center';
+  hctx.textBaseline = 'alphabetic';
+  hctx.lineJoin = 'round';
+  for(let i=0; i<near.length && i<PLATE_MAX; i++){
+    const f = near[i].f;
+    if(f === bossRef) continue;                /* the banner up top is its bar */
+    /* anchor above the model's own height, not a fixed offset, or the plate
+       sits inside anything larger than a wolf */
+    const sp = worldToScreen(f.x, f.r*VIS*2.5 + 16, f.y);
+    if(!sp) continue;
+    if(sp.x < -70 || sp.x > SW+70 || sp.y < -24 || sp.y > SH+24) continue;
+
+    const frac = clamp(f.hp/f.max, 0, 1);
+    /* fade with distance so a busy field does not become a wall of text */
+    const fade = clamp(1 - (near[i].d - PLATE_R*0.55)/(PLATE_R*0.45), 0.28, 1);
+    const w = f.rank===2 ? 76 : f.rank===1 ? 60 : 46;
+    const bh = f.rank ? 5 : 4;
+    const col = f.rank===2 ? '#f43f5e' : f.rank===1 ? '#fb923c' : '#e0455a';
+    hctx.globalAlpha = fade;
+
+    hctx.fillStyle = 'rgba(6,8,14,.82)';
+    hctx.fillRect(sp.x-w/2-1, sp.y-1, w+2, bh+2);
+    hctx.fillStyle = col;
+    hctx.fillRect(sp.x-w/2, sp.y, w*frac, bh);
+    /* a thin light line on the fill reads as a bar rather than a smear */
+    hctx.fillStyle = 'rgba(255,255,255,.22)';
+    hctx.fillRect(sp.x-w/2, sp.y, w*frac, 1);
+    if(f.rank){
+      hctx.strokeStyle = 'rgba(255,255,255,.35)'; hctx.lineWidth = 1;
+      hctx.strokeRect(sp.x-w/2-1.5, sp.y-1.5, w+3, bh+3);
+    }
+
+    const nm = f.rank ? (f.def.n + '  Lv' + f.lvl) : f.def.n;
+    hctx.font = (f.rank ? '700 10px ' : '600 9px ') + 'system-ui,-apple-system,sans-serif';
+    /* stroke first: over a dark ridge or a bright lava channel alike, plain
+       fill text disappears into whatever happens to be behind it */
+    hctx.lineWidth = 3;
+    hctx.strokeStyle = 'rgba(4,6,12,.92)';
+    hctx.strokeText(nm, sp.x, sp.y-4);
+    hctx.fillStyle = f.rank===2 ? '#ffc2cc' : f.rank===1 ? '#ffd7ae' : '#dfe4f0';
+    hctx.fillText(nm, sp.x, sp.y-4);
+  }
+  hctx.restore();
+}
+
 const MM = 94;
 let hudH = 104;
 /* The terrain layer is hundreds of discs and never moves, so it is baked once
