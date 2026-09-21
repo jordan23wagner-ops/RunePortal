@@ -5144,6 +5144,371 @@ function heroSpec(style, wk){
   return sp;
 }
 
+/* ================================================================
+   WOLF — a purpose-built quadruped rig
+   The shared 'quad' rig is a torso with four sticks under it. A dog reads
+   as a dog because of things that rig has no bones for: a hinged jaw, a
+   digitigrade hind leg that folds through THREE joints, a neck that carries
+   the head forward of the chest, and a tail that curves instead of pointing.
+   So this is a skeleton first and a costume second - all three variants
+   below are the same 27 bones wearing different parts.
+   ================================================================ */
+const WOLF_BONES = [
+  ['root',null,[0,0,0]],
+  ['hips','root',[0,0.92,-0.44]],
+  ['spineA','hips',[0,0.03,0.28]],
+  ['spineB','spineA',[0,0.02,0.28]],
+  ['chest','spineB',[0,0.00,0.26]],
+  ['neck','chest',[0,0.14,0.20]],
+  ['head','neck',[0,0.10,0.17]],
+  ['jaw','head',[0,-0.09,0.09]],
+  ['earL','head',[0.11,0.14,-0.05]],
+  ['earR','head',[-0.11,0.14,-0.05]],
+  ['tailA','hips',[0,0.12,-0.18]],
+  ['tailB','tailA',[0,-0.02,-0.26]],
+  ['tailC','tailB',[0,-0.02,-0.24]],
+  /* hind: femur, tibia, metatarsus, paw — the extra joint is what makes the
+     back leg fold into a Z instead of hanging like a table leg */
+  ['femL','hips',[ 0.17,-0.06,0.02]], ['tibL','femL',[0,-0.30,0]],
+  ['metL','tibL',[0,-0.28,0]],        ['pawL','metL',[0,-0.22,0]],
+  ['femR','hips',[-0.17,-0.06,0.02]], ['tibR','femR',[0,-0.30,0]],
+  ['metR','tibR',[0,-0.28,0]],        ['pawR','metR',[0,-0.22,0]],
+  /* front: humerus, radius, paw */
+  ['humL','chest',[ 0.16,-0.10,0.02]], ['radL','humL',[0,-0.36,0]], ['fpwL','radL',[0,-0.34,0]],
+  ['humR','chest',[-0.16,-0.10,0.02]], ['radR','humR',[0,-0.36,0]], ['fpwR','radR',[0,-0.34,0]],
+];
+
+function wolfPose(b, an, st){
+  const w = an.walk, ph = an.ph, run = st.sprint||0;
+  const br = Math.sin(st.t*2.4)*0.5+0.5;
+  /* Digitigrade gait. The hind leg's three joints counter-rotate, so the paw
+     travels roughly level while the knee and hock swing - which is the whole
+     difference between a walking animal and a rocking toy. */
+  const hind=(fem,tib,met,paw,off)=>{
+    const s=Math.sin(ph+off), lift=Math.max(0,s);
+    fem.rotation.x = -0.42 + s*0.60*w;
+    tib.rotation.x =  0.88 - lift*0.48*w;
+    met.rotation.x = -0.70 + lift*0.60*w;
+    paw.rotation.x =  0.24 - s*0.20*w;
+  };
+  const fore=(hum,rad,paw,off)=>{
+    const s=Math.sin(ph+off), lift=Math.max(0,s);
+    hum.rotation.x = -0.12 + s*0.70*w;
+    rad.rotation.x =  0.26 - lift*0.66*w;
+    paw.rotation.x =  0.06 - s*0.22*w;
+  };
+  hind(b.femL,b.tibL,b.metL,b.pawL, 0);
+  hind(b.femR,b.tibR,b.metR,b.pawR, 3.1416);
+  fore(b.humL,b.radL,b.fpwL, 3.1416);
+  fore(b.humR,b.radR,b.fpwR, 0);
+
+  /* the body rides the gait: two bounces per stride, plus a lateral roll */
+  b.hips.position.y = 0.92 - Math.abs(Math.sin(ph))*0.035*w + br*0.008;
+  b.hips.rotation.x = 0.04*w + run*0.05;
+  b.spineA.rotation.y = Math.sin(ph)*0.05*w;
+  b.spineB.rotation.y = Math.sin(ph-0.5)*0.05*w;
+  b.spineB.rotation.x = -0.05*w;
+  /* Channels that ONLY the flinch and the lunge write still have to be
+     cleared every frame, or their += compounds for as long as hurt is
+     non-zero. The no-drift check caught this at 31 radians. */
+  b.spineA.rotation.x = 0;
+  b.spineB.rotation.z = 0;
+  b.chest.rotation.x = 0.03 + br*0.02;
+
+  b.neck.rotation.x = -0.22 + br*0.05 - run*0.16;
+  b.head.rotation.x = 0.16 - br*0.05 + run*0.10;
+  b.head.rotation.y = Math.sin(st.t*0.7)*0.07;
+  b.jaw.rotation.x  = 0.05 + br*0.06 + run*0.12;
+  /* ears live: they flick independently, which sells "alive" at zero cost */
+  b.earL.rotation.x = -0.10 + Math.sin(st.t*3.1)*0.09;
+  b.earR.rotation.x = -0.10 + Math.sin(st.t*2.7+1.4)*0.09;
+  b.earL.rotation.z =  0.16; b.earR.rotation.z = -0.16;
+
+  /* tail arcs rather than points: each segment adds to the last */
+  const tw = Math.sin(st.t*2.2)*0.16 + Math.sin(ph)*0.10*w;
+  b.tailA.rotation.x = -0.45 - run*0.25;
+  b.tailA.rotation.y = tw;
+  b.tailB.rotation.x = -0.28; b.tailB.rotation.y = tw*0.9;
+  b.tailC.rotation.x = -0.18; b.tailC.rotation.y = tw*0.8;
+
+  if(an.atk>=0){
+    /* a lunge: haunches load, chest drives forward, jaw snaps */
+    const a=an.atk;
+    const wind = a<0.32 ? a/0.32 : 1;
+    const snap = a>=0.32 ? Math.max(0,1-(a-0.32)/0.34) : 0;
+    const rec  = a>=0.66 ? (a-0.66)/0.34 : 0;
+    const drive = snap*(1-rec);
+    b.hips.position.y += -0.10*wind + 0.06*drive;
+    b.spineA.rotation.x = -0.22*wind + 0.30*drive;
+    b.spineB.rotation.x =  0.10*wind - 0.16*drive;
+    b.chest.rotation.x  = -0.18*wind + 0.34*drive;
+    b.neck.rotation.x   = -0.10 - 0.30*wind + 0.46*drive;
+    b.head.rotation.x   =  0.10 + 0.24*wind - 0.30*drive;
+    b.jaw.rotation.x    =  0.10 + 0.72*wind - 0.30*drive;
+    b.femL.rotation.x += 0.36*wind; b.femR.rotation.x += 0.36*wind;
+    b.tibL.rotation.x -= 0.30*wind; b.tibR.rotation.x -= 0.30*wind;
+    b.humL.rotation.x -= 0.70*drive; b.humR.rotation.x -= 0.62*drive;
+    b.tailA.rotation.x += -0.30*wind + 0.40*drive;
+  }
+  if(an.hurt>0){
+    const h=an.hurt, hf=an.hf==null?-1:an.hf, hr=an.hr||0;
+    b.spineA.rotation.x += 0.26*hf*h;
+    b.spineB.rotation.z += -0.30*hr*h;
+    b.neck.rotation.x   += 0.40*hf*h;
+    b.head.rotation.x   += 0.26*hf*h;
+    b.jaw.rotation.x    += 0.40*h;
+    b.hips.position.y   -= 0.07*h;
+    b.tailA.rotation.x  += 0.55*h;
+    b.earL.rotation.x   += 0.5*h; b.earR.rotation.x += 0.5*h;
+  }
+}
+
+/* ---- shared anatomy: the animal under whatever it is wearing ---- */
+function wolfAnatomy(V){
+  const BONE = V.bone||'#e2dcc6', CLAW = V.claw||'#2b2f3a';
+  const p = [
+    /* torso: three tapered barrels so the back has a line instead of a lump */
+    {b:'hips',  shape:'sphere', w:0.62, det:1, sy:0.90, y:0.02, z:-0.04, c:'mid'},
+    /* spheres, not cylinders: a 7-sided barrel reads as a box in profile,
+       which was the single biggest source of "blocky" on the old rig */
+    {b:'spineA',shape:'sphere', w:0.60, det:1, sy:0.88, z:0.06, c:'mid'},
+    {b:'spineA',shape:'sphere', w:0.58, det:1, sy:0.88, z:0.24, c:'mid'},
+    {b:'spineB',shape:'sphere', w:0.57, det:1, sy:0.90, z:0.06, c:'mid'},
+    {b:'spineB',shape:'sphere', w:0.57, det:1, sy:0.92, z:0.24, c:'mid'},
+    {b:'chest', shape:'sphere', w:0.58, det:1, sy:0.94, z:0.06, c:'mid'},
+    {b:'chest', shape:'sphere', w:0.46, det:1, sy:0.80, y:-0.14, z:0.08, c:'lite'}, /* brisket */
+    {b:'hips',  shape:'sphere', w:0.52, det:1, sy:0.86, x:0.18, y:-0.02, z:-0.02, c:'dark'},
+    {b:'hips',  shape:'sphere', w:0.52, det:1, sy:0.86, x:-0.18,y:-0.02, z:-0.02, c:'dark'},
+    /* shoulder blades read through the coat on a lean animal */
+    {b:'chest', shape:'sphere', w:0.30, det:1, sy:0.62, x: 0.20, y:0.12, z:0.02, c:'lite'},
+    {b:'chest', shape:'sphere', w:0.30, det:1, sy:0.62, x:-0.20, y:0.12, z:0.02, c:'lite'},
+
+    /* neck and skull */
+    {b:'neck',  shape:'cyl', w:0.34, w2:0.29, h:0.30, rot:[1.2,0,0], z:0.08, y:0.02, c:'mid'},
+    {b:'head',  shape:'sphere', w:0.36, det:1, y:0.02, z:0.02, c:'lite'},
+    {b:'head',  shape:'sphere', w:0.30, det:1, sy:0.74, y:0.09, z:-0.04, c:'lite'}, /* cranium */
+    {b:'head',  shape:'cyl', w:0.25, w2:0.15, h:0.30, rot:[1.5708,0,0], y:-0.03, z:0.19, c:'lite'},
+    {b:'head',  shape:'sphere', w:0.20, det:1, sy:0.82, y:-0.02, z:0.10, c:'lite'},  /* cheek */
+    {b:'head',  shape:'sphere', w:0.155,det:1, sy:0.88, y:-0.035,z:0.32, c:'lite'},  /* muzzle tip */
+    {b:'head',  shape:'sphere', w:0.13, det:1, y:0.00, z:0.35, c:'dark'},           /* nose   */
+    {b:'head',  shape:'sphere', w:0.055,det:0, x: 0.045, y:0.02, z:0.375, c:'out'}, /* nostrils */
+    {b:'head',  shape:'sphere', w:0.055,det:0, x:-0.045, y:0.02, z:0.375, c:'out'},
+    {b:'head',  shape:'box', w:0.30, h:0.07, d:0.12, rot:[0.18,0,0], y:0.11, z:0.10, c:'out'}, /* brow */
+    /* eyes: sclera, iris, and a specular dot - this is what makes it LOOK at you */
+    {b:'head',  shape:'sphere', w:0.095,det:1, x: 0.093, y:0.072, z:0.150, c:'out'},
+    {b:'head',  shape:'sphere', w:0.095,det:1, x:-0.093, y:0.072, z:0.150, c:'out'},
+    {b:'head',  shape:'sphere', w:0.066,det:1, x: 0.100, y:0.074, z:0.176, c:'glow'},
+    {b:'head',  shape:'sphere', w:0.066,det:1, x:-0.100, y:0.074, z:0.176, c:'glow'},
+    {b:'head',  shape:'sphere', w:0.026,det:0, x: 0.106, y:0.090, z:0.194, c:'#ffffff'},
+    {b:'head',  shape:'sphere', w:0.026,det:0, x:-0.106, y:0.090, z:0.194, c:'#ffffff'},
+    {b:'earL',  shape:'cone', w:0.19, h:0.28, rot:[0.10,0,0], y:0.12, c:'lite'},
+    {b:'earR',  shape:'cone', w:0.19, h:0.28, rot:[0.10,0,0], y:0.12, c:'lite'},
+    {b:'earL',  shape:'cone', w:0.12, h:0.20, rot:[0.10,0,0], y:0.10, z:0.035, c:'out'},
+    {b:'earR',  shape:'cone', w:0.12, h:0.20, rot:[0.10,0,0], y:0.10, z:0.035, c:'out'},
+    /* hinged lower jaw with a tongue and real teeth */
+    {b:'jaw',   shape:'cyl', w:0.20, w2:0.15, h:0.26, rot:[1.5708,0,0], y:0.01, z:0.15, c:'dark'},
+    {b:'jaw',   shape:'sphere', w:0.13, det:0, sy:0.5, y:0.03, z:0.14, c:'#9c4a55'},
+    {b:'jaw',   shape:'cone', w:0.055,h:0.10, rot:[3.1416,0,0], x: 0.07, y:0.07, z:0.24, c:BONE},
+    {b:'jaw',   shape:'cone', w:0.055,h:0.10, rot:[3.1416,0,0], x:-0.07, y:0.07, z:0.24, c:BONE},
+    {b:'jaw',   shape:'cone', w:0.042,h:0.07, rot:[3.1416,0,0], x: 0.09, y:0.06, z:0.15, c:BONE},
+    {b:'jaw',   shape:'cone', w:0.042,h:0.07, rot:[3.1416,0,0], x:-0.09, y:0.06, z:0.15, c:BONE},
+    {b:'head',  shape:'cone', w:0.06, h:0.11, x: 0.075, y:-0.10, z:0.245, c:BONE},  /* upper fangs */
+    {b:'head',  shape:'cone', w:0.06, h:0.11, x:-0.075, y:-0.10, z:0.245, c:BONE},
+
+    /* legs: tapered, with a defined hock and toes */
+    ...['L','R'].flatMap(sd=>{
+      const S2 = sd;
+      return [
+        {b:'fem'+S2, shape:'cyl', w:0.27,w2:0.20,h:0.32, y:-0.15, c:'dark'},
+        {b:'fem'+S2, shape:'sphere', w:0.30, det:1, sy:0.9, y:0.00, c:'dark'},
+        {b:'tib'+S2, shape:'cyl', w:0.19,w2:0.13,h:0.30, y:-0.14, c:'dark'},
+        {b:'met'+S2, shape:'cyl', w:0.12,w2:0.10,h:0.24, y:-0.11, c:'dark'},
+        {b:'paw'+S2, shape:'sphere', w:0.20, det:1, sy:0.58, y:-0.04, z:0.03, c:'out'},
+        {b:'paw'+S2, shape:'sphere', w:0.085,det:0, x: 0.05, y:-0.05, z:0.10, c:'out'},
+        {b:'paw'+S2, shape:'sphere', w:0.085,det:0, x:-0.05, y:-0.05, z:0.10, c:'out'},
+        {b:'paw'+S2, shape:'cone', w:0.045,h:0.09, rot:[1.9,0,0], x: 0.055, y:-0.07, z:0.16, c:CLAW},
+        {b:'paw'+S2, shape:'cone', w:0.045,h:0.09, rot:[1.9,0,0], x:-0.055, y:-0.07, z:0.16, c:CLAW},
+        {b:'hum'+S2, shape:'cyl', w:0.24,w2:0.17,h:0.36, y:-0.17, c:'dark'},
+        {b:'hum'+S2, shape:'sphere', w:0.26, det:1, sy:0.9, y:0.00, c:'dark'},
+        {b:'rad'+S2, shape:'cyl', w:0.155,w2:0.115,h:0.34, y:-0.16, c:'dark'},
+        {b:'fpw'+S2, shape:'sphere', w:0.19, det:1, sy:0.58, y:-0.04, z:0.03, c:'out'},
+        {b:'fpw'+S2, shape:'sphere', w:0.08, det:0, x: 0.05, y:-0.05, z:0.09, c:'out'},
+        {b:'fpw'+S2, shape:'sphere', w:0.08, det:0, x:-0.05, y:-0.05, z:0.09, c:'out'},
+        {b:'fpw'+S2, shape:'cone', w:0.042,h:0.085, rot:[1.9,0,0], x: 0.05, y:-0.07, z:0.15, c:CLAW},
+        {b:'fpw'+S2, shape:'cone', w:0.042,h:0.085, rot:[1.9,0,0], x:-0.05, y:-0.07, z:0.15, c:CLAW},
+      ];
+    }),
+    /* tail: three tapering segments so it can curve */
+    {b:'tailA', shape:'cyl', w:0.17,w2:0.14,h:0.26, rot:[1.5708,0,0], z:-0.12, c:'dark'},
+    {b:'tailB', shape:'cyl', w:0.14,w2:0.11,h:0.24, rot:[1.5708,0,0], z:-0.11, c:'dark'},
+    {b:'tailC', shape:'cyl', w:0.11,w2:0.06,h:0.22, rot:[1.5708,0,0], z:-0.10, c:'dark'},
+  ];
+  return p;
+}
+
+/* ---- variant dressings ----
+   Same skeleton, same anatomy; only the coat changes. That is the point of
+   splitting them: a new beast is a parts list, not a new rig. */
+const WOLF_COAT = {
+  /* A — DIRE: naturalistic. Layered ruff, guard hairs, bushy tail, scars. */
+  dire(){
+    const t=[];
+    /* ruff: three stacked collars, each smaller and pushed back */
+    t.push({b:'neck', shape:'sphere', w:0.62, det:1, sy:0.70, y:0.00, z:0.00, c:'lite'});
+    t.push({b:'neck', shape:'sphere', w:0.54, det:1, sy:0.66, y:0.02, z:0.12, c:'mid'});
+    t.push({b:'chest',shape:'sphere', w:0.66, det:1, sy:0.62, y:0.06, z:-0.02, c:'lite'});
+    /* guard hairs: cones laid back along the spine and haunches */
+    const tuft=(b,x,y,z,w,h,rx,c)=>t.push({b,shape:'cone',w,h,rot:[rx,0,0],x,y,z,c});
+    for(const [bn,zz] of [['neck',0.02],['spineA',0.10],['spineA',-0.06],
+                          ['spineB',0.10],['spineB',-0.06],['hips',0.02]]){
+      tuft(bn, 0, 0.24, zz, 0.15, 0.30, -0.95, 'dark');
+      tuft(bn, 0.13, 0.19, zz, 0.11, 0.22, -0.95, 'dark');
+      tuft(bn,-0.13, 0.19, zz, 0.11, 0.22, -0.95, 'dark');
+    }
+    for(const sd of ['L','R']){
+      const sx = sd==='L'?1:-1;
+      tuft('chest', sx*0.26, 0.02, -0.06, 0.16, 0.26, -1.5, 'lite');
+      tuft('hips',  sx*0.24, 0.04, -0.14, 0.16, 0.26, -1.5, 'lite');
+      /* feathering behind the front legs */
+      t.push({b:'hum'+sd, shape:'cone', w:0.20,h:0.26, rot:[-2.0,0,0], y:-0.10, z:-0.06, c:'lite'});
+      t.push({b:'fem'+sd, shape:'cone', w:0.24,h:0.30, rot:[-2.0,0,0], y:-0.08, z:-0.08, c:'lite'});
+    }
+    /* brush tail: overlapping cones make a bushy mass, not a pipe */
+    /* a brush is many SHORT overlapping cones; long thin ones read as spines */
+    for(let i=0;i<3;i++){
+      const bn = ['tailA','tailB','tailC'][i], sc=1-i*0.14;
+      for(let k=0;k<8;k++){
+        const a=k/8*6.283;
+        for(const zz of [-0.05,-0.17])
+          t.push({b:bn, shape:'cone', w:0.17*sc, h:0.17*sc, rot:[-1.75,0,0],
+            x:Math.cos(a)*0.10*sc, y:Math.sin(a)*0.10*sc, z:zz, c: k%2?'dark':'mid'});
+      }
+    }
+    t.push({b:'tailC', shape:'sphere', w:0.19, det:1, z:-0.22, c:'lite'});
+    /* an old wound: asymmetry is what stops a model looking machine-made */
+    t.push({b:'chest', shape:'box', w:0.03,h:0.015,d:0.22, rot:[0,0,0.5], x:0.22, y:0.02, z:0.12, c:'out'});
+    t.push({b:'earR',  shape:'cone', w:0.10,h:0.12, rot:[0.5,0,0], y:0.14, c:'out'}); /* torn tip */
+    return t;
+  },
+
+  /* B — REVENANT: something died and kept walking. Bone plate, rift light. */
+  revenant(){
+    const t=[];
+    const BONE='#ded6bb';
+    t.push({b:'head', shape:'sphere', w:0.40, det:1, sy:0.80, y:0.07, z:0.01, c:BONE});
+    t.push({b:'head', shape:'cone', w:0.13,h:0.30, rot:[-0.45,0,0.32], x: 0.16, y:0.18, z:-0.02, c:BONE});
+    t.push({b:'head', shape:'cone', w:0.13,h:0.30, rot:[-0.45,0,-0.32], x:-0.16, y:0.18, z:-0.02, c:BONE});
+    t.push({b:'head', shape:'cone', w:0.09,h:0.20, rot:[-0.2,0,0.55], x: 0.20, y:0.10, z:-0.10, c:BONE});
+    t.push({b:'head', shape:'cone', w:0.09,h:0.20, rot:[-0.2,0,-0.55], x:-0.20, y:0.10, z:-0.10, c:BONE});
+    /* exposed ribs down both flanks */
+    for(const sd of ['L','R']){
+      const sx = sd==='L'?1:-1;
+      for(let i=0;i<4;i++){
+        const bn = i<2?'spineA':'spineB';
+        t.push({b:bn, shape:'cyl', w:0.055,h:0.40, rot:[0,0,sx*1.02],
+          x:sx*0.29, y:-0.03, z:0.28-i*0.15, c:BONE});
+      }
+    }
+    t.push({b:'chest', shape:'cyl', w:0.07,h:0.30, rot:[1.5708,0,0], y:-0.20, z:0.04, c:BONE});
+    /* spine plates */
+    for(const [bn,zz] of [['spineA',0.14],['spineA',-0.04],['spineB',0.14],
+                          ['spineB',-0.04],['hips',0.04]]){
+      t.push({b:bn, shape:'cone', w:0.18,h:0.34, rot:[-0.55,0,0], y:0.24, z:zz, c:BONE});
+    }
+    /* Rift light bleeding through the seams. Deliberately a LITERAL colour:
+       the palette's 'glow' is derived from the enemy's own hue, so a green
+       wolf could only ever glow pale green - which is not a rift. */
+    const RIFT='#c39cff', RIFTD='#7d4fd6';
+    /* on the FLANKS between the ribs, not along the spine - the bone plates
+       sit above the spine line and swallowed them completely */
+    for(const sd of ['L','R']){
+      const sx = sd==='L'?1:-1;
+      for(const [bn,z] of [['spineA',0.22],['spineA',0.06],['spineB',0.22],
+                           ['spineB',0.06],['chest',0.10],['hips',-0.04]]){
+        t.push({b:bn, shape:'sphere', w:0.22, det:0, sy:0.55, x:sx*0.27, y:-0.04, z, c:RIFTD});
+        t.push({b:bn, shape:'sphere', w:0.14, det:0, sy:0.60, x:sx*0.30, y:-0.04, z, c:RIFT});
+      }
+    }
+    /* and a hot core under the chest, which the low camera actually sees */
+    t.push({b:'chest', shape:'sphere', w:0.26, det:0, sy:0.5, y:-0.20, z:0.06, c:RIFTD});
+    t.push({b:'chest', shape:'sphere', w:0.16, det:0, sy:0.5, y:-0.23, z:0.06, c:RIFT});
+    t.push({b:'jaw', shape:'sphere', w:0.17, det:0, sy:0.6, y:0.02, z:0.12, c:RIFT});
+    t.push({b:'head',shape:'sphere', w:0.10, det:0, x: 0.10, y:0.074, z:0.18, c:RIFT});
+    t.push({b:'head',shape:'sphere', w:0.10, det:0, x:-0.10, y:0.074, z:0.18, c:RIFT});
+    /* spiked collar - it belonged to somebody once */
+    t.push({b:'neck', shape:'cyl', w:0.50,w2:0.50,h:0.11, rot:[1.2,0,0], z:0.06, c:'out'});
+    for(let i=0;i<8;i++){
+      const a=i/8*6.283;
+      t.push({b:'neck', shape:'cone', w:0.09,h:0.17,
+        rot:[1.2+Math.sin(a)*0.9, 0, -Math.cos(a)*1.2],
+        x:Math.cos(a)*0.25, y:Math.sin(a)*0.22+0.02, z:0.06, c:BONE});
+    }
+    /* tail stripped to vertebrae */
+    for(const bn of ['tailA','tailB','tailC'])
+      for(const zz of [-0.05,-0.14,-0.22])
+        t.push({b:bn, shape:'sphere', w:0.13, det:0, sy:0.75, z:zz, c:BONE});
+    t.push({b:'tailC', shape:'cone', w:0.10,h:0.22, rot:[-1.5708,0,0], z:-0.30, c:BONE});
+    for(const sd of ['L','R'])
+      t.push({b:'fem'+sd, shape:'cone', w:0.16,h:0.22, rot:[-2.0,0,0], y:-0.06, z:-0.08, c:BONE});
+    return t;
+  },
+
+  /* C — THORNBACK: the Hollow grew it. Bark hide, moss, antler-thorns. */
+  thornback(){
+    const t=[];
+    const BARK='#4a3a24', MOSS='#7fae52';
+    t.push({b:'head', shape:'sphere', w:0.38, det:1, sy:0.76, y:0.08, z:0.00, c:BARK});
+    /* antler thorns forking off the skull */
+    /* swept UP and BACK. Splayed sideways they read as handlebars, and from
+       the game's overhead camera they vanished into the head silhouette. */
+    const horn=(sx)=>{
+      t.push({b:'head', shape:'cyl', w:0.10,w2:0.06,h:0.34, rot:[-0.55,0,sx*0.22], x:sx*0.12, y:0.24, z:-0.06, c:BARK});
+      t.push({b:'head', shape:'cone', w:0.08,h:0.26, rot:[-0.95,0,sx*0.30], x:sx*0.17, y:0.44, z:-0.19, c:BARK});
+      t.push({b:'head', shape:'cone', w:0.06,h:0.20, rot:[-0.30,0,sx*0.95], x:sx*0.24, y:0.36, z:-0.10, c:BARK});
+      t.push({b:'head', shape:'cone', w:0.05,h:0.15, rot:[-1.25,0,sx*0.20], x:sx*0.14, y:0.52, z:-0.30, c:MOSS});
+    };
+    horn(1); horn(-1);
+    /* bark plates along the back, moss growing in the cracks */
+    for(const [bn,zz] of [['neck',0.04],['spineA',0.14],['spineA',-0.04],
+                          ['spineB',0.14],['spineB',-0.04],['hips',0.02]]){
+      t.push({b:bn, shape:'cyl', w:0.40,w2:0.30,h:0.13, rot:[1.40,0,0], y:0.20, z:zz, c:BARK});
+      t.push({b:bn, shape:'cone', w:0.16,h:0.28, rot:[-0.75,0,0], y:0.26, z:zz-0.02, c:BARK});
+      t.push({b:bn, shape:'sphere', w:0.20, det:1, sy:0.40, y:0.25, z:zz+0.07, c:MOSS});
+    }
+    for(const sd of ['L','R']){
+      const sx=sd==='L'?1:-1;
+      t.push({b:'chest', shape:'sphere', w:0.26, det:1, sy:0.45, x:sx*0.24, y:0.08, z:0.02, c:MOSS});
+      t.push({b:'hips',  shape:'sphere', w:0.24, det:1, sy:0.45, x:sx*0.22, y:0.08, z:-0.06, c:MOSS});
+      t.push({b:'fem'+sd, shape:'cone', w:0.18,h:0.24, rot:[-2.0,0,0], y:-0.06, z:-0.08, c:MOSS});
+      /* root-like dewclaws */
+      t.push({b:'paw'+sd, shape:'cone', w:0.05,h:0.13, rot:[2.4,0,0], y:-0.03, z:-0.09, c:BARK});
+      t.push({b:'fpw'+sd, shape:'cone', w:0.05,h:0.13, rot:[2.4,0,0], y:-0.03, z:-0.09, c:BARK});
+    }
+    /* glowing sap in the seams */
+    for(const [bn,z] of [['chest',0.14],['spineA',0.04],['hips',-0.02]])
+      t.push({b:bn, shape:'sphere', w:0.13, det:0, sy:0.5, y:0.14, z, c:'glow'});
+    /* the tail is a vine that ends in a bud */
+    for(const bn of ['tailA','tailB','tailC']){
+      t.push({b:bn, shape:'cone', w:0.09,h:0.15, rot:[-2.3,0,0.6], x: 0.07, y:0.03, z:-0.12, c:MOSS});
+      t.push({b:bn, shape:'cone', w:0.09,h:0.15, rot:[-2.3,0,-0.6], x:-0.07, y:0.03, z:-0.12, c:MOSS});
+    }
+    t.push({b:'tailC', shape:'sphere', w:0.22, det:1, z:-0.24, c:MOSS});
+    t.push({b:'tailC', shape:'sphere', w:0.12, det:0, z:-0.30, c:'glow'});
+    return t;
+  },
+};
+
+const _wolfCache = new Map();
+function wolfSpec(variant){
+  let sp = _wolfCache.get(variant);
+  if(sp) return sp;
+  sp = {h:1.5, hs:1.78, bones:WOLF_BONES,
+        parts: wolfAnatomy({}).concat((WOLF_COAT[variant]||WOLF_COAT.dire)()),
+        pose: wolfPose};
+  _wolfCache.set(variant, sp);
+  return sp;
+}
+
 /* Rigs are authored roughly 2 units tall and scaled by the entity radius. */
 const RIG3D = {
   /* The hero is composed, not fixed. Armour style follows the weapon CLASS and
@@ -5386,6 +5751,8 @@ const RIG3D = {
 /* milestone 1 covers humanoid, quadruped, blob and floater; the remaining
    silhouettes (worm, arachnid, golem plate work) map onto the closest of
    these until they get purpose-built forms */
+/* the three wolf dressings, selectable by rig key */
+RIG3D.wolfDire      = null;   /* filled below once wolfSpec exists */
 const RIG3D_FOR = {
   knight:'human', golem:'human',
   beast:'quad',
@@ -5393,7 +5760,19 @@ const RIG3D_FOR = {
   ghost:'float', eye:'float', flyer:'float',
 };
 
-function rigKeyFor(def){ return RIG3D_FOR[def.shape] || 'blob'; }
+RIG3D.wolfDire      = wolfSpec('dire');
+RIG3D.wolfRevenant  = wolfSpec('revenant');
+RIG3D.wolfThornback = wolfSpec('thornback');
+/* The wolf is 3.5x the triangles of the old quad per foe (4,966 vs 1,424) at
+   the SAME draw call, since each foe is one SkinnedMesh either way. Draw calls
+   are what actually hurt on integrated graphics, so it ships on Sharp and
+   Balanced and falls back to the cheap rig on Battery. */
+const BEAST_RIG = 'wolfDire';
+function rigKeyFor(def){
+  const k = RIG3D_FOR[def.shape] || 'blob';
+  if(k==='quad' && S && S.opts && S.opts.gfx!=='low') return BEAST_RIG;
+  return k;
+}
 
 /* ---------- death collapse ----------
    Applied ON TOP of the rig's own idle pose, so every rig gets a fall without
@@ -5427,6 +5806,35 @@ function collapsePose(b, k, key){
     return;
   }
 
+  if(key && key.indexOf('wolf')===0){
+    /* The wolf has its own bone names, so it would otherwise fall through to
+       the humanoid branch and reach for a legL that does not exist. Same idea
+       as the quad - roll onto the flank - but through this skeleton. */
+    b.root.rotation.z = 1.24*e;
+    b.root.rotation.x = -0.16*e + bounce;
+    b.root.position.y = e*0.10;
+    b.hips.position.y = 0.92 - 0.34*buckle + e*0.08;
+    b.spineA.rotation.x = 0.16*buckle - 0.10*e;
+    b.spineB.rotation.x = 0.12*buckle;
+    b.neck.rotation.x   = 0.30*buckle + e*0.55;
+    b.head.rotation.x   = -0.20*e;
+    b.jaw.rotation.x    = 0.30*buckle + 0.25*e;
+    b.tailA.rotation.x  = -0.20 - 0.45*e;
+    b.tailB.rotation.x  = -0.15*e;
+    b.tailC.rotation.x  = -0.10*e;
+    b.earL.rotation.x = 0.55*e; b.earR.rotation.x = 0.55*e;
+    for(const sd of ['L','R']){
+      const f = sd==='L' ? 1 : -1;
+      b['fem'+sd].rotation.x = 0.70*buckle*f + e*0.30;
+      b['tib'+sd].rotation.x = 1.15 - 0.45*e;
+      b['met'+sd].rotation.x = -0.85 + 0.35*e;
+      b['paw'+sd].rotation.x = 0.30;
+      b['hum'+sd].rotation.x = -0.65*buckle*f - e*0.25;
+      b['rad'+sd].rotation.x = 0.85 - 0.35*e;
+      b['fpw'+sd].rotation.x = 0.25;
+    }
+    return;
+  }
   if(key==='quad'){
     /* a quadruped is ALREADY horizontal - pitching it 90 degrees the way a
        humanoid falls stands it on its nose. It rolls onto its flank instead. */
