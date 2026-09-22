@@ -277,8 +277,8 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   padding-bottom:var(--safe-b);z-index:40;flex:0 0 auto;
 }
 .tab{
-  flex:1;padding:7px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;
-  font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim2);
+  flex:1;min-width:0;padding:7px 1px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  font-size:8.5px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;color:var(--dim2);
   position:relative;transition:color .15s;
 }
 .tab .ic{font-size:19px;line-height:1;opacity:.55;transition:opacity .15s;
@@ -289,7 +289,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .tab.sel::before{content:'';position:absolute;top:0;left:22%;right:22%;height:2px;
   background:var(--gold);border-radius:0 0 2px 2px;box-shadow:0 0 8px var(--gold);}
 .tab .dot{
-  position:absolute;top:5px;right:calc(50% - 18px);width:8px;height:8px;border-radius:50%;
+  position:absolute;top:5px;right:calc(50% - 15px);width:8px;height:8px;border-radius:50%;
   background:var(--r4);border:1.5px solid var(--bg2);display:none;
   box-shadow:0 0 6px var(--r4);
 }
@@ -371,6 +371,123 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .cIc2 .ico{width:30px;height:30px;}
 .recipe .cIcon .ico{width:80%;height:80%;}
 .lootRow.big .fi .ico{width:23px;height:23px;}
+
+
+/* ============================================================
+   SKILL LATTICE
+   ============================================================ */
+#skillBody{padding:0;overflow:auto;touch-action:pan-x pan-y;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(232,180,74,.07), transparent 58%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.016) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.016) 0 1px, transparent 1px 34px),
+    var(--bg);}
+#skillWrap{position:relative;}
+.skLines{position:absolute;left:0;top:0;pointer-events:none;}
+.skNode{
+  position:absolute;width:34px;height:34px;transform:translate(-50%,-50%);
+  border-radius:9px;
+  /* the arm's colour, heavily muted, so the four regions are legible from
+     the moment the panel opens */
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.05), transparent),
+    color-mix(in srgb, var(--nc) 13%, #121724);
+  border:2px solid color-mix(in srgb, var(--nc) 26%, #222a3d);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .12s, box-shadow .15s, border-color .15s;
+}
+.skNode .skIn{width:12px;height:12px;border-radius:4px;display:block;
+  background:color-mix(in srgb, var(--nc) 34%, #232a3d);
+  transition:background .15s;}
+.skNode .skStar{position:absolute;font-size:9px;color:#0b0e15;font-weight:900;line-height:1;}
+.skNode.k-major{width:38px;height:38px;border-radius:11px;}
+.skNode.k-key{width:46px;height:46px;border-radius:50%;}
+.skNode.k-core{width:46px;height:46px;border-radius:50%;border-color:var(--gold);}
+.skNode.near{border-color:color-mix(in srgb, var(--nc) 34%, #2b3348);}
+.skNode.can{border-color:var(--nc);box-shadow:0 0 12px -3px var(--nc);}
+.skNode.can .skIn{background:var(--nc);opacity:.55;}
+.skNode.own{border-color:var(--nc);background:var(--nc);
+  box-shadow:0 0 16px -3px var(--nc), inset 0 0 10px -4px #000;}
+.skNode.own .skIn{background:rgba(10,12,20,.55);}
+.skNode.sel{transform:translate(-50%,-50%) scale(1.22);
+  box-shadow:0 0 0 2px var(--txt), 0 0 18px -2px var(--nc);z-index:3;}
+.skNode:active{transform:translate(-50%,-50%) scale(.92);}
+#skillDetail{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:9px 11px;min-height:56px;}
+.skdHead{display:flex;align-items:center;gap:7px;font-size:12.5px;}
+.skdPip{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.skdTag{margin-left:auto;font-size:8.5px;font-weight:800;letter-spacing:1.2px;color:var(--dim2);}
+.skdBody{font-size:11px;color:var(--dim);line-height:1.5;margin-top:5px;}
+.skdRow{margin-top:7px;}
+
+/* ============================================================
+   THEME — forged, not flat
+   The UI was a clean dark app sitting in front of a game about hitting
+   things with axes. Panels get a hammered metal ground, the gold
+   accents get an edge, and the action buttons become struck plates.
+   ============================================================ */
+#app{
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -10%, rgba(232,180,74,.05), transparent 60%),
+    var(--bg);
+}
+.pHead{
+  background:linear-gradient(180deg, #1a2032 0%, var(--bg2) 100%);
+  border-bottom:1px solid var(--line);
+  box-shadow:0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.pTitle{
+  background:linear-gradient(180deg,#fff3cf,var(--gold) 55%,#9a7320);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:0 1px 0 rgba(0,0,0,.4);
+}
+.pFoot{background:linear-gradient(0deg, #141826 0%, var(--bg2) 100%);
+  box-shadow:0 -2px 0 rgba(0,0,0,.3);}
+#tabbar{
+  background:linear-gradient(180deg, #161b29 0%, #0d111b 100%);
+  border-top:1px solid #2a3250;
+  box-shadow:0 -3px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.tab.sel::before{box-shadow:0 0 10px var(--gold), 0 0 22px rgba(232,180,74,.5);}
+.btn{
+  background:linear-gradient(180deg, #252c42, #171c2b);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 5px rgba(0,0,0,.4);
+}
+.btn.pri{
+  background:linear-gradient(180deg,#f0c464 0%,#c99534 45%,#8a6318 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 3px 10px rgba(232,180,74,.28);
+  text-shadow:0 1px 0 rgba(255,255,255,.25);
+}
+.btn.dan{
+  background:linear-gradient(180deg,#b03446 0%,#8f2534 45%,#5c1420 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 3px 10px rgba(224,69,90,.22);
+}
+.card,.detBlock,.statRow,.mat,.recipe,.slot,.zoneCard{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035), 0 1px 3px rgba(0,0,0,.35);
+}
+.actBtn{
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255,255,255,.14), transparent 55%),
+    linear-gradient(180deg, #2b3350 0%, #161b2b 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),
+             inset 0 -2px 6px rgba(0,0,0,.5),
+             0 4px 14px rgba(0,0,0,.55);
+}
+#btnAtk{border-color:#e8b44a;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), inset 0 -2px 8px rgba(0,0,0,.5),
+             0 0 18px -4px rgba(232,180,74,.55), 0 4px 14px rgba(0,0,0,.55);}
+#btnAtk:active{box-shadow:inset 0 2px 10px rgba(0,0,0,.6), 0 0 26px -2px rgba(232,180,74,.7);}
+#lvlPill{
+  background:linear-gradient(180deg,#3a4362,#1b2032);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 1px 4px rgba(0,0,0,.45);
+}
+.bar{box-shadow:inset 0 1px 3px rgba(0,0,0,.6);}
+#intro h1{
+  text-shadow:0 0 44px rgba(232,180,74,.35), 0 4px 0 rgba(0,0,0,.5);
+  letter-spacing:10px;
+}
+.sectionLbl{color:var(--gold);opacity:.75;}
+.sectionLbl::after{background:linear-gradient(90deg,rgba(232,180,74,.35),transparent);}
 
 /* ============================================================
    ITEM CARDS — the heart of the card-game look
@@ -555,7 +672,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   padding:6px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.5px;
   background:var(--panel);border:1px solid var(--line);color:var(--dim);
 }
-.chip.sel{background:var(--panel3);color:var(--txt);border-color:var(--line2);}
+.chip.sel{
+  background:linear-gradient(180deg,#e0b354,#9a7320);
+  color:#1a1408;border-color:#f0c464;font-weight:800;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 2px 8px rgba(232,180,74,.22);
+}
 #bagCount{margin-left:auto;font-size:10px;color:var(--dim2);font-variant-numeric:tabular-nums;}
 #bagCount.full{color:var(--hp);font-weight:800;}
 
@@ -940,6 +1061,19 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       </div>
     </div>
 
+    <!-- SKILLS -->
+    <div class="panel" id="pSkill">
+      <div class="pHead">
+        <div><div class="pTitle">Lattice</div><div class="pSub" id="skillSub">—</div></div>
+        <button class="pClose" data-close>✕</button>
+      </div>
+      <div class="pBody" id="skillBody"><div id="skillWrap"></div></div>
+      <div class="pFoot" style="flex-direction:column;gap:7px;align-items:stretch;">
+        <div id="skillDetail"></div>
+        <button class="btn gho sm" id="btnRespec">Unwind the lattice</button>
+      </div>
+    </div>
+
     <!-- ZONES -->
     <div class="panel" id="pZone">
       <div class="pHead">
@@ -966,6 +1100,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     <button class="tab sel" data-tab="arena"><span class="ic" data-ico="ui:hunt"></span>Hunt</button>
     <button class="tab" data-tab="pBag"><span class="ic" data-ico="ui:bag"></span>Bag<span class="dot"></span></button>
     <button class="tab" data-tab="pGear"><span class="ic" data-ico="ui:hero"></span>Hero<span class="dot"></span></button>
+    <button class="tab" data-tab="pSkill"><span class="ic" data-ico="ui:lattice"></span>Skills<span class="dot"></span></button>
     <button class="tab" data-tab="pCraft"><span class="ic" data-ico="ui:forge"></span>Forge</button>
     <button class="tab" data-tab="pZone"><span class="ic" data-ico="ui:rift"></span>Rifts</button>
     <button class="tab" data-tab="pMenu"><span class="ic" data-ico="ui:camp"></span>Camp</button>
@@ -1204,6 +1339,14 @@ function _bar(g, x, y, w, h, fill, stroke){
   _p(g,[x,y, x+w,y, x+w,y+h, x,y+h], fill, stroke);
 }
 /* the rarity gem every piece carries, so tier reads before the shape does */
+/* A flat fill reads as a sticker; two stops across the shape give it a
+   lit side and a shaded side, which is most of what "high quality" means
+   at 24 pixels. */
+function _lg(g, x0, y0, x1, y1, c0, c1){
+  const gr = g.createLinearGradient(x0,y0,x1,y1);
+  gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+  return gr;
+}
 function _gem(g, x, y, r, rc){
   _p(g,[x,y-r, x+r,y, x,y+r, x-r,y], rc);
   _p(g,[x,y-r, x+r*0.45,y-r*0.1, x,y+r*0.2, x-r*0.45,y-r*0.1], 'rgba(255,255,255,.45)', null);
@@ -1448,62 +1591,134 @@ const ICO_DRAW = {
                    i?g.lineTo(x,y):g.moveTo(x,y); }
                  g.stroke(); },
   /* ---------------- UI chrome ---------------- */
+  /* ---------------- UI ----------------
+     These are drawn at 64px and shown at 20-33px, so the rule is silhouette
+     first: at tab-bar size the only thing that survives is the OUTLINE.
+     Everything below is built from one unmistakable shape with the detail
+     layered inside it, never detail arranged into a shape. */
   u_hunt(g,rc){
-    _p(g,[10,52, 18,52, 50,14, 46,8, 40,8, 8,46], IC.steel);
-    _p(g,[54,52, 46,52, 14,14, 18,8, 24,8, 56,46], IC.steel);
-    _c(g,32,34,5, rc);
+    /* a horned beast skull — this is the hunting ground, and a pair of
+       crossed swords is the most generic mark in the genre */
+    _p(g,[24,8, 40,8, 46,20, 44,40, 32,54, 20,40, 18,20], _lg(g,20,8,44,54,IC.bone,'#9c9480'));
+    _p(g,[25,10, 14,0, 2,6, 2,18, 12,22, 21,20], IC.bone);
+    _p(g,[39,10, 50,0, 62,6, 62,18, 52,22, 43,20], IC.bone);
+    _p(g,[22,24, 30,24, 29,34, 21,33], '#0d1017', null);
+    _p(g,[34,24, 42,24, 43,33, 35,34], '#0d1017', null);
+    _c(g,26,29,3.0, rc, null); _c(g,38,29,3.0, rc, null);
+    _p(g,[28,40, 36,40, 35,50, 29,50], '#0d1017', null);
+    _bar(g,26,36,12,3, '#7e7767');
   },
   u_bag(g,rc){
-    _p(g,[14,22, 50,22, 55,58, 9,58], IC.leather);
-    _p(g,[14,22, 50,22, 50,32, 14,32], IC.leatherD, null);
-    g.strokeStyle=IC.line; g.lineWidth=5;
-    g.beginPath(); g.arc(32,22,11,3.34,6.08); g.stroke();
-    g.strokeStyle=IC.leatherD; g.lineWidth=3;
-    g.beginPath(); g.arc(32,22,11,3.34,6.08); g.stroke();
-    _bar(g,26,36,12,10, rc);
+    _p(g,[13,24, 51,24, 56,58, 8,58], _lg(g,13,24,51,58,IC.leather,IC.leatherD));
+    _bar(g,11,24,42,9, IC.leatherD);
+    g.strokeStyle=IC.line; g.lineWidth=6; g.lineCap='round';
+    g.beginPath(); g.arc(32,24,12,3.30,6.12); g.stroke();
+    g.strokeStyle='#a97c4a'; g.lineWidth=3.5;
+    g.beginPath(); g.arc(32,24,12,3.30,6.12); g.stroke();
+    /* the flap and buckle: what makes a bag read as a bag and not a bucket */
+    _p(g,[15,24, 49,24, 47,40, 17,40], IC.leatherD);
+    _bar(g,26,35,12,11, IC.goldD);
+    _bar(g,28.5,38,7,5, rc, null);
+    _c(g,16,50,2.6,'#4a3018',null); _c(g,48,50,2.6,'#4a3018',null);
   },
   u_hero(g,rc){
-    _p(g,[32,6, 54,15, 50,40, 32,58, 14,40, 10,15], IC.steel);
-    _c(g,32,26,9, IC.steelD);
-    _p(g,[24,40, 40,40, 44,52, 20,52], IC.steelD, null);
-    _gem(g,32,26,5,rc);
+    /* a great helm, front on. A shield outline could be anything. */
+    _p(g,[32,4, 50,12, 52,34, 44,52, 32,60, 20,52, 12,34, 14,12],
+       _lg(g,14,4,50,60,IC.steelL,IC.steelD));
+    _p(g,[32,4, 44,10, 45,30, 32,34, 19,30, 20,10], IC.steel, null);
+    _bar(g,16,26,32,7, '#0b0e15');            /* visor slit */
+    _bar(g,29,33,6,15, '#0b0e15');            /* breath bar */
+    _p(g,[32,2, 36,10, 32,16, 28,10], rc);    /* crest */
+    _c(g,20,40,3, IC.steelD, null); _c(g,44,40,3, IC.steelD, null);
+  },
+  u_lattice(g,rc){
+    /* the skill panel is a hex lattice, so the icon is one: a lit core with
+       spokes out to three taken nodes and three that are not */
+    const hx=(cx,cy,r,f,st)=>{
+      const p=[]; for(let i=0;i<6;i++){ const a=i/6*6.283-Math.PI/2;
+        p.push(cx+Math.cos(a)*r, cy+Math.sin(a)*r); }
+      _p(g,p,f,st);
+    };
+    g.strokeStyle='#4a5674'; g.lineWidth=5; g.lineCap='round';
+    const pts=[[32,10],[54,22],[54,44],[32,56],[10,44],[10,22]];
+    g.beginPath();
+    for(const [x,y] of pts){ g.moveTo(32,33); g.lineTo(x,y); }
+    g.stroke();
+    for(let i=0;i<6;i++){
+      const [x,y]=pts[i];
+      hx(x,y,8, i%2? '#20263a' : rc);
+    }
+    hx(32,33,11, _lg(g,21,22,43,44,IC.gold,IC.goldD));
+    hx(32,33,5, '#fff7dd', null);
   },
   u_forge(g,rc){
-    _bar(g,29,26,7,34, IC.wood);
-    _p(g,[10,10, 54,10, 54,26, 10,26], IC.steelD);
-    _p(g,[14,13, 50,13, 50,20, 14,20], IC.steel, null);
-    _gem(g,32,18,5,rc);
+    /* The ANVIL is the whole icon: horn on the left, flat face, waisted
+       body, splayed foot. One unmistakable outline beats an anvil plus a
+       hammer, which at tab size merges into an unreadable stack. */
+    _p(g,[2,26, 44,20, 56,22, 50,30, 42,32, 40,40, 46,52, 46,58, 16,58, 16,52, 22,40, 20,32, 8,32],
+       _lg(g,2,20,56,58,IC.steelL,IC.steelD));
+    _p(g,[6,26, 44,22, 52,24, 46,28, 10,30], IC.steelL, null);  /* lit face */
+    _bar(g,14,56,36,6, '#2a2f3d');
+    /* struck sparks off the horn, in the accent colour */
+    _c(g,12,16,3.4, rc, null); _c(g,22,10,2.6, rc, null);
+    _c(g,4,14,2.2, rc, null);  _c(g,30,16,2.0, rc, null);
   },
   u_rift(g,rc){
-    _c(g,32,32,22, IC.clothD);
-    g.strokeStyle=rc; g.lineWidth=6; g.lineCap='round';
-    g.beginPath();
-    for(let i=0;i<46;i++){ const t=i/46*7.2, r=2.5+t*2.7;
-      const x=32+Math.cos(t)*r, y=32+Math.sin(t)*r; i?g.lineTo(x,y):g.moveTo(x,y); }
-    g.stroke();
+    /* A TEAR with mass: a tall lens, bitten on both edges, lit from inside.
+       The first pass was a two-pixel zigzag and it vanished at tab size. */
+    _p(g,[32,2, 46,16, 38,26, 50,36, 40,48, 32,62, 24,48, 14,36, 26,26, 18,16],
+       _lg(g,14,2,50,62,IC.clothD,'#1a1030'));
+    _p(g,[32,8, 41,18, 35,27, 44,36, 36,46, 32,56, 28,46, 20,36, 29,27, 23,18],
+       _lg(g,20,8,44,56,rc,shade(rc,-0.45)), null);
+    _p(g,[32,15, 36,22, 32,29, 37,36, 32,44, 30,36, 27,29, 31,22],
+       '#ffffff', null);
+    _c(g,12,12,3.0, rc, null); _c(g,53,26,2.4, rc, null); _c(g,10,46,2.4, rc, null);
   },
   u_camp(g,rc){
-    _c(g,32,32,20, IC.steelD);
-    for(let i=0;i<8;i++){ const a=i/8*6.283;
-      _bar(g,30+Math.cos(a)*22-3, 32+Math.sin(a)*22-3, 8, 8, IC.steelD); }
-    _c(g,32,32,20, IC.steel);
-    _c(g,32,32,9, '#151a26');
-    _c(g,32,32,6, rc, null);
+    /* a brazier. A tent reads as camping; this reads as the place you rest
+       between things that are trying to kill you. */
+    _p(g,[16,34, 48,34, 44,50, 20,50], _lg(g,16,34,48,50,IC.steel,IC.steelD));
+    _bar(g,14,30,36,6, IC.steelD);
+    _p(g,[26,50, 30,60, 34,60, 38,50], IC.steelD, null);
+    _bar(g,18,58,28,5, '#2a2f3d');
+    _p(g,[32,2, 40,16, 36,20, 44,28, 32,34, 20,28, 28,20, 24,16], rc);
+    _p(g,[32,10, 37,20, 32,30, 27,20], '#fff2c0', null);
   },
-  u_dash(g,rc){
-    for(const [y,w2] of [[18,40],[32,52],[46,34]]){
-      _p(g,[6,y-5, w2,y-5, w2+8,y, w2,y+5, 6,y+5], IC.steelL);
-    }
-    _c(g,54,32,5, rc);
+  /* ---------------- action buttons ----------------
+     Shown at 27-33px on a round button, so these are chunkier again and
+     each one has a different OUTER shape: a sweep, a burst, a chevron. */
+  u_atk(g,rc){
+    /* a heavy blade mid-swing, with the arc it just cut */
+    g.strokeStyle=rc; g.lineWidth=6; g.lineCap='round';
+    g.beginPath(); g.arc(30,34,26,-1.15,0.62); g.stroke();
+    g.strokeStyle='rgba(255,255,255,.45)'; g.lineWidth=2.5;
+    g.beginPath(); g.arc(30,34,26,-1.05,0.45); g.stroke();
+    _p(g,[46,4, 54,10, 26,48, 18,52, 16,44], _lg(g,16,4,54,52,IC.steelL,IC.steelD));
+    _p(g,[46,4, 50,8, 24,46, 20,48], '#ffffff', null);
+    _bar(g,10,44,16,7, IC.goldD);
+    _c(g,12,54,4.5, IC.gold);
   },
   u_skill(g,rc){
-    _p(g,[32,2, 39,25, 62,32, 39,39, 32,62, 25,39, 2,32, 25,25], rc);
-    _c(g,32,32,6, '#ffffff', null);
+    /* a rune burst: eight spikes, long and short alternating */
+    const p=[];
+    for(let i=0;i<16;i++){
+      const a=i/16*6.283-Math.PI/2, r=i%2?11:29;
+      p.push(32+Math.cos(a)*r, 32+Math.sin(a)*r);
+    }
+    _p(g,p,_lg(g,4,4,60,60,rc,shade(rc,-0.35)));
+    _c(g,32,32,11, '#0e1220');
+    _c(g,32,32,7, '#ffffff', null);
+    _c(g,32,32,3.4, rc, null);
   },
-  u_atk(g,rc){
-    _p(g,[10,52, 18,52, 50,14, 46,8, 40,8, 8,46], IC.steelL);
-    _p(g,[54,52, 46,52, 14,14, 18,8, 24,8, 56,46], IC.steel);
-    _c(g,32,34,6, rc);
+  u_dash(g,rc){
+    /* three chevrons, biggest at the front, with a trail behind */
+    for(const [x,sc,al] of [[42,1.0,1],[26,0.82,0.72],[12,0.64,0.45]]){
+      g.globalAlpha = al;
+      _p(g,[x,32-15*sc, x+16*sc,32, x,32+15*sc, x-7*sc,32],
+         _lg(g,x-7,10,x+16,54,IC.steelL,IC.steelD));
+      g.globalAlpha = 1;
+    }
+    _c(g,54,32,4.5, rc, null);
   },
   u_gold(g,rc){
     _c(g,32,32,20, IC.goldD);
@@ -1997,7 +2212,8 @@ function freshState(cls){
        the numbers would run away inside an hour. */
     charms:[null,null,null],
     zone:'verdant', zoneKills:{}, crafted:[],
-    opts:{sfx:true,haptic:true,autoAim:true,gfx:'high'},
+    opts:{sfx:true,haptic:true,autoAim:true,gfx:'high',music:true,musVol:0.8},
+    sp:1, skills:{},
     meta:{kills:0,deaths:0,items:0,salvaged:0,best:0,chests:0},
     seen:{},
   };
@@ -2021,10 +2237,14 @@ function loadGame(){
     if(!o || !o.s || o.s.ver!==SAVE_VER) return false;
     S = o.s; uidSeq = o.uid||1;
     /* forward-fill any missing keys */
-    if(!S.opts) S.opts={sfx:true,haptic:true,autoAim:true,gfx:'high'};
+    if(!S.opts) S.opts={sfx:true,haptic:true,autoAim:true,gfx:'high',music:true,musVol:0.8};
     if(!S.opts.gfx) S.opts.gfx='high';
+    if(S.opts.music==null) S.opts.music=true;
+    if(S.opts.musVol==null) S.opts.musVol=0.8;
     if(!S.meta) S.meta={kills:0,deaths:0,items:0,salvaged:0,best:0,chests:0};
     if(!S.crafted) S.crafted=[];
+    if(S.sp==null) S.sp=S.lvl||1;
+    if(!S.skills) S.skills={};
     if(!S.seen) S.seen={};
     return true;
   }catch(e){ return false; }
@@ -2169,6 +2389,9 @@ function computeStats(){
     for(const a of it.affixes){ if(d[a.k]!=null) d[a.k]+=a.v; }
     if(it.uniq) uniq[it.uniq.k]=it.uniq;
   }
+  /* the skill lattice, before level scaling so its Vitality actually
+     multiplies into the health pool like any other point of VIT */
+  if(typeof skillBonus==='function') skillBonus(d, uniq);
   /* attuned charms. maxHpP is a PERCENT and has to wait until the flat pool
      is known, so it is banked here and applied after level scaling. */
   let hpPct = 0;
@@ -2239,7 +2462,7 @@ function gainXp(n){
   let leveled = 0;
   while(S.xp >= TUNE.xpNeed(S.lvl)){
     S.xp -= TUNE.xpNeed(S.lvl);
-    S.lvl++; S.pts += TUNE.ptsPerLvl; leveled++;
+    S.lvl++; S.pts += TUNE.ptsPerLvl; S.sp = (S.sp||0)+1; leveled++;
   }
   if(leveled){
     computeStats();
@@ -2299,16 +2522,494 @@ function upgradeCost(it){
 /* ================================================================
    AUDIO — pure WebAudio synthesis, zero asset files
    ================================================================ */
-let AC=null, masterGain=null;
+/* ================================================================
+   AUDIO — synthesised, no asset files
+
+   The game is one self-contained HTML file, so the soundtrack cannot be
+   an mp3. It is generated: a real amp chain, a drum kit built from
+   oscillators and shaped noise, and a lookahead scheduler that plays
+   per-zone riffs. Nothing is sampled and nothing is loaded.
+
+   What makes it read as METAL rather than as chiptune with a fuzz on:
+
+   - The power chord goes through ONE distortion stage. Root, fifth and
+     octave are summed BEFORE the waveshaper so they intermodulate; run
+     each note through its own distortion and you get three fuzzy tones
+     sounding at once, which is the sound of a synth, not an amp.
+   - Two-stage gain: a soft asymmetric clip for the preamp, then a hard
+     clip for the power section. One stage alone sounds either polite or
+     like a broken speaker.
+   - A cabinet. Guitar distortion is almost all upper harmonics, and a
+     real 4x12 throws them away above ~5kHz. Without the lowpass the
+     whole thing is fizz; that filter is most of the "expensive" sound.
+   - Palm mutes are a separate articulation, not a short note: the chug
+     also loses its top end and drops a few cents in pitch.
+   ================================================================ */
+let AC=null, masterGain=null, sfxBus=null, musBus=null, musComp=null;
 function audioInit(){
   if(AC) return;
   try{
     AC = new (window.AudioContext||window.webkitAudioContext)();
     masterGain = AC.createGain(); masterGain.gain.value = 0.32;
     masterGain.connect(AC.destination);
+    /* Two buses. Music runs through its own compressor so a wall of
+       guitar cannot swallow the hit you just landed, and so the mix can
+       duck the band without touching the effects. */
+    sfxBus = AC.createGain(); sfxBus.gain.value = 1.0;
+    sfxBus.connect(masterGain);
+    musComp = AC.createDynamicsCompressor();
+    musComp.threshold.value = -20; musComp.knee.value = 14;
+    musComp.ratio.value = 7; musComp.attack.value = 0.004; musComp.release.value = 0.16;
+    musBus = AC.createGain(); musBus.gain.value = 0.0;
+    musBus.connect(musComp); musComp.connect(masterGain);
   }catch(e){ AC=null; }
 }
-function tone(freq, dur, type, vol, slideTo, delay){
+/* the browser starts the context suspended until a real gesture */
+function audioResume(){
+  audioInit();
+  if(AC && AC.state==='suspended') AC.resume().catch(()=>{});
+}
+
+/* ---------------- distortion curves ---------------- */
+const _curves = {};
+function driveCurve(k, hard){
+  const key = k+'|'+(hard?1:0);
+  if(_curves[key]) return _curves[key];
+  const n = 2048, c = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const x = i*2/n - 1;
+    /* soft asymmetric clip: the asymmetry is what adds even harmonics,
+       which is the difference between "warm" and "buzzy" */
+    let y = (1+k)*x/(1+k*Math.abs(x));
+    y = y + 0.12*y*y;
+    if(hard) y = Math.max(-0.82, Math.min(0.82, y*1.45));
+    c[i] = Math.max(-1, Math.min(1, y));
+  }
+  _curves[key] = c; return c;
+}
+/* One amp per voice, built once and left connected. Only oscillators are
+   created per note, which is what keeps the audio thread cheap. */
+function makeAmp(o){
+  const inp = AC.createGain(); inp.gain.value = o.pre || 8;
+  const pre = AC.createWaveShaper(); pre.curve = driveCurve(o.k1||14, false);
+  pre.oversample = '2x';
+  const tone = AC.createBiquadFilter();
+  tone.type='peaking'; tone.frequency.value = o.mid||760;
+  tone.Q.value = 0.9; tone.gain.value = o.midDb==null?-4:o.midDb;
+  const pow = AC.createWaveShaper(); pow.curve = driveCurve(o.k2||6, true);
+  pow.oversample = '2x';
+  /* the cabinet: a tight band. Everything above ~5k is fizz a real 4x12
+     never puts in the room. */
+  const hp = AC.createBiquadFilter(); hp.type='highpass';
+  hp.frequency.value = o.hp||88; hp.Q.value = 0.7;
+  const lp = AC.createBiquadFilter(); lp.type='lowpass';
+  lp.frequency.value = o.lp||4800; lp.Q.value = 1.1;
+  const pres = AC.createBiquadFilter();
+  pres.type='peaking'; pres.frequency.value = 2600; pres.Q.value=1.2; pres.gain.value = o.pres==null?4:o.pres;
+  const out = AC.createGain(); out.gain.value = o.vol||0.5;
+  inp.connect(pre); pre.connect(tone); tone.connect(pow);
+  pow.connect(hp); hp.connect(pres); pres.connect(lp); lp.connect(out);
+  return {inp, out, lp, drive:inp};
+}
+function noiseBuf(dur, curveP){
+  const n = Math.max(1, Math.floor(AC.sampleRate*dur));
+  const b = AC.createBuffer(1,n,AC.sampleRate);
+  const ch = b.getChannelData(0);
+  const p = curveP==null?2.2:curveP;
+  for(let i=0;i<n;i++) ch[i] = (Math.random()*2-1)*Math.pow(1-i/n,p);
+  return b;
+}
+
+/* ================================================================
+   THE BAND
+   ================================================================ */
+let BAND = null;
+function bandInit(){
+  if(BAND || !AC) return;
+  /* rhythm guitar: scooped mids, tight low end, doubled hard left/right */
+  const mkGtr = (pan)=>{
+    const a = makeAmp({pre:9, k1:17, k2:7, mid:700, midDb:-6, hp:92, lp:4700, pres:5, vol:0.42});
+    const p = AC.createStereoPanner ? AC.createStereoPanner() : null;
+    if(p){ p.pan.value = pan; a.out.connect(p); p.connect(musBus); }
+    else a.out.connect(musBus);
+    return a;
+  };
+  const gtrL = mkGtr(-0.62), gtrR = mkGtr(0.62);
+  /* lead: more gain, mids PUSHED instead of scooped so it cuts through the
+     rhythm track rather than sitting underneath it */
+  const lead = makeAmp({pre:12, k1:24, k2:9, mid:1100, midDb:+6, hp:150, lp:5200, pres:6, vol:0.30});
+  const dly = AC.createDelay(1.0); dly.delayTime.value = 0.28;
+  const dfb = AC.createGain(); dfb.gain.value = 0.26;
+  const dwet = AC.createGain(); dwet.gain.value = 0.22;
+  lead.out.connect(musBus);
+  lead.out.connect(dly); dly.connect(dfb); dfb.connect(dly); dly.connect(dwet); dwet.connect(musBus);
+  /* bass: barely driven, and lowpassed hard. An overdriven bass eats the
+     kick and the whole mix turns to mud. */
+  const bass = makeAmp({pre:4, k1:6, k2:3, mid:420, midDb:+2, hp:30, lp:1500, pres:0, vol:0.78});
+  bass.out.connect(musBus);
+  const drums = AC.createGain(); drums.gain.value = 0.86; drums.connect(musBus);
+  BAND = {gtrL, gtrR, lead, bass, drums,
+          layers:{gtr:1, lead:0, dbl:0}};
+}
+
+/* ---- guitar: a power chord through one amp ---- */
+function gtrChord(amp, f, t, dur, mute, vel, fifth){
+  if(!AC) return;
+  const g = AC.createGain();
+  const peak = (vel==null?1:vel) * (mute?0.85:0.62);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t+0.004);
+  if(mute){
+    /* a palm mute is an ARTICULATION: it loses its top end and decays in a
+       tenth of a second. Just shortening the note gives you a staccato
+       chord, which is a completely different sound. */
+    g.gain.exponentialRampToValueAtTime(peak*0.25, t+0.045);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  } else {
+    g.gain.setValueAtTime(peak, t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  }
+  const mf = AC.createBiquadFilter();
+  mf.type='lowpass'; mf.frequency.value = mute?1500:4200; mf.Q.value=0.8;
+  g.connect(mf); mf.connect(amp.inp);
+  /* root, fifth, octave — summed BEFORE the distortion so they interact */
+  const parts = fifth===false ? [[1,1],[2,0.5]] : [[1,1],[1.4983,0.82],[2,0.55]];
+  for(const [mul,amt] of parts){
+    for(const det of [-5.5, 5.5]){
+      const o = AC.createOscillator();
+      o.type = 'sawtooth';
+      const fr = f*mul*Math.pow(2, det/1200) * (mute?0.997:1);
+      o.frequency.setValueAtTime(fr, t);
+      if(mute) o.frequency.exponentialRampToValueAtTime(fr*0.986, t+0.07);
+      const og = AC.createGain(); og.gain.value = amt*0.5;
+      o.connect(og); og.connect(g);
+      o.start(t); o.stop(t+dur+0.03);
+    }
+  }
+}
+function leadNote(f, t, dur, vel){
+  if(!AC) return;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime((vel||1)*0.5, t+0.006);
+  g.gain.setValueAtTime((vel||1)*0.5, t+dur*0.55);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  g.connect(BAND.lead.inp);
+  for(const det of [-4, 4]){
+    const o = AC.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(f*Math.pow(2,det/1200), t);
+    /* a touch of vibrato on anything held: a dead-straight lead line is the
+       tell that nobody played it */
+    if(dur>0.22){
+      const lfo = AC.createOscillator(), la = AC.createGain();
+      lfo.frequency.value = 5.4; la.gain.value = f*0.011;
+      lfo.connect(la); la.connect(o.frequency);
+      lfo.start(t+0.10); lfo.stop(t+dur+0.02);
+    }
+    const og=AC.createGain(); og.gain.value=0.5;
+    o.connect(og); og.connect(g); o.start(t); o.stop(t+dur+0.02);
+  }
+}
+function bassNote(f, t, dur, vel){
+  if(!AC) return;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime((vel||1)*0.9, t+0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  g.connect(BAND.bass.inp);
+  const o = AC.createOscillator(); o.type='sawtooth';
+  o.frequency.setValueAtTime(f, t);
+  const sub = AC.createOscillator(); sub.type='sine';
+  sub.frequency.setValueAtTime(f*0.5, t);
+  const sg = AC.createGain(); sg.gain.value = 1.15;
+  o.connect(g); sub.connect(sg); sg.connect(g);
+  o.start(t); o.stop(t+dur+0.02); sub.start(t); sub.stop(t+dur+0.02);
+}
+
+/* ---- the kit ---- */
+function drKick(t, vel){
+  if(!AC) return;
+  const v=(vel||1);
+  /* body: a fast pitch drop into the low forties, held long enough to be felt */
+  const g=AC.createGain(), o=AC.createOscillator();
+  o.type='sine';
+  o.frequency.setValueAtTime(165, t);
+  o.frequency.exponentialRampToValueAtTime(48, t+0.055);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(v*1.30, t+0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.26);
+  o.connect(g); g.connect(BAND.drums);
+  o.start(t); o.stop(t+0.28);
+  /* a sub layer under it. The guitars are highpassed at 92Hz and the bass
+     is a fundamental, so without this there is nothing at all below 60. */
+  const sg=AC.createGain(), so=AC.createOscillator();
+  so.type='sine'; so.frequency.setValueAtTime(58,t);
+  so.frequency.exponentialRampToValueAtTime(38, t+0.09);
+  sg.gain.setValueAtTime(0.0001,t);
+  sg.gain.linearRampToValueAtTime(v*0.85, t+0.006);
+  sg.gain.exponentialRampToValueAtTime(0.0001, t+0.22);
+  so.connect(sg); sg.connect(BAND.drums); so.start(t); so.stop(t+0.24);
+  /* the beater. BANDPASSED, not highpassed: a highpass at 2.6k passes every
+     bit of fizz above it too, and that put a third of the kick's energy in
+     the cymbal range where it read as a tick rather than a drum. */
+  const n=AC.createBufferSource(); n.buffer=noiseBuf(0.012, 4.5);
+  const bp=AC.createBiquadFilter(); bp.type='bandpass';
+  bp.frequency.value=2900; bp.Q.value=1.5;
+  const cg=AC.createGain(); cg.gain.value=v*0.20;
+  n.connect(bp); bp.connect(cg); cg.connect(BAND.drums); n.start(t);
+}
+function drSnare(t, vel){
+  if(!AC) return;
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(0.18, 1.6);
+  const bp=AC.createBiquadFilter(); bp.type='bandpass';
+  bp.frequency.value=1750; bp.Q.value=0.7;
+  const g=AC.createGain();
+  g.gain.setValueAtTime((vel||1)*0.62, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+0.17);
+  s.connect(bp); bp.connect(g); g.connect(BAND.drums); s.start(t);
+  /* two tuned shells under the wires, or it reads as a hi-hat */
+  for(const [f,v] of [[186,0.5],[254,0.32]]){
+    const o=AC.createOscillator(); o.type='triangle';
+    o.frequency.setValueAtTime(f,t); o.frequency.exponentialRampToValueAtTime(f*0.8,t+0.09);
+    const og=AC.createGain();
+    og.gain.setValueAtTime((vel||1)*v, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t+0.13);
+    o.connect(og); og.connect(BAND.drums); o.start(t); o.stop(t+0.15);
+  }
+}
+function drHat(t, open, vel){
+  if(!AC) return;
+  const d = open?0.26:0.045;
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(d, open?1.1:3.0);
+  const hp=AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value= open?7000:9000;
+  const g=AC.createGain(); g.gain.value=(vel||1)*(open?0.16:0.13);
+  s.connect(hp); hp.connect(g); g.connect(BAND.drums); s.start(t);
+}
+function drCrash(t, vel){
+  if(!AC) return;
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(1.6, 0.85);
+  const hp=AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=4200;
+  const g=AC.createGain();
+  g.gain.setValueAtTime((vel||1)*0.30, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+1.5);
+  s.connect(hp); hp.connect(g); g.connect(BAND.drums); s.start(t);
+}
+function drTom(t, f, vel){
+  if(!AC) return;
+  const o=AC.createOscillator(); o.type='triangle';
+  o.frequency.setValueAtTime(f,t); o.frequency.exponentialRampToValueAtTime(f*0.62,t+0.20);
+  const g=AC.createGain();
+  g.gain.setValueAtTime((vel||1)*0.6,t);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.26);
+  o.connect(g); g.connect(BAND.drums); o.start(t); o.stop(t+0.28);
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(0.09,2.4);
+  const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=f*2.4;
+  const ng=AC.createGain(); ng.gain.value=(vel||1)*0.18;
+  s.connect(bp); bp.connect(ng); ng.connect(BAND.drums); s.start(t);
+}
+
+/* ================================================================
+   THE SONGS
+   Each zone gets a key, a tempo and a two-bar riff on a sixteenth grid.
+   `rhy`: 0 rest · 1 palm-muted chug · 2 accented open chord
+   `deg`: scale degree for that sixteenth
+   The scales are the point. Phrygian and phrygian dominant have a
+   flat second sitting a semitone off the root, and that interval is
+   the entire sound of "something is wrong here". Locrian adds the
+   flat fifth on top of it, which is why the Voidspire riff is the
+   one that never resolves.
+   ================================================================ */
+const SCALES = {
+  aeolian:  [0,2,3,5,7,8,10],
+  phrygian: [0,1,3,5,7,8,10],
+  phryDom:  [0,1,4,5,7,8,10],
+  locrian:  [0,1,3,5,6,8,10],
+  harmMin:  [0,2,3,5,7,8,11],
+};
+const SONGS = {
+  /* E — a straight, driving mid-tempo riff. The zone you learn on. */
+  verdant:{ bpm:150, root:41.20, scale:'phrygian',
+    rhy:[2,0,1,1, 0,1,1,0, 2,0,1,1, 1,0,1,0,  2,0,1,1, 0,1,1,0, 2,0,1,0, 3,0,3,0],
+    deg:[0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 0,0,0,0, 3,0,3,0, 2,0,1,0],
+    lead:[0,-1,3,-1, 4,-1,3,2, 1,-1,0,-1, -1,-1,-1,-1],
+    kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,0,0,  1,0,0,1, 0,0,1,0, 1,0,1,0, 1,0,1,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0]},
+  /* D# — the gallop. Fast, relentless, barely any rest in it. */
+  ashen:{ bpm:172, root:38.89, scale:'phryDom',
+    rhy:[2,0,1,1, 1,0,1,1, 1,0,1,1, 2,0,1,1,  2,0,1,1, 1,0,1,1, 3,0,1,1, 3,3,1,1],
+    deg:[0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,1,1,  0,0,0,0, 0,0,0,0, 4,0,4,4, 3,3,1,1],
+    lead:[0,1,4,-1, 5,4,1,0, 4,-1,5,-1, 6,5,4,-1],
+    kick:[1,0,1,1, 1,0,1,1, 1,0,1,1, 1,0,1,1,  1,0,1,1, 1,0,1,1, 1,1,1,1, 1,1,1,1],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,1]},
+  /* D — half-time doom. Slow, enormous gaps, the ring is the riff. */
+  frost:{ bpm:126, root:36.71, scale:'aeolian',
+    rhy:[3,0,0,0, 0,0,1,0, 2,0,0,0, 1,0,1,0,  3,0,0,0, 0,0,1,1, 2,0,0,0, 2,0,1,0],
+    deg:[0,0,0,0, 0,0,0,0, 2,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0, 5,0,0,0, 3,0,2,0],
+    lead:[0,-1,-1,2, -1,3,-1,-1, 2,-1,0,-1, -1,-1,-1,-1],
+    kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 1,0,0,0,  1,0,0,0, 0,0,1,1, 1,0,0,0, 1,0,1,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]},
+  /* C# — sludge. Dragging, dissonant, sits on the flat second. */
+  rotmire:{ bpm:112, root:34.65, scale:'phrygian',
+    rhy:[3,0,0,1, 0,0,1,0, 2,0,1,0, 0,1,0,0,  3,0,0,1, 0,1,0,0, 2,0,1,1, 1,0,1,0],
+    deg:[0,0,0,0, 0,0,1,0, 0,0,0,0, 1,1,0,0,  0,0,0,0, 0,0,0,0, 1,0,1,1, 2,0,1,0],
+    lead:[0,-1,1,-1, 0,-1,-1,-1, 3,-1,1,0, -1,-1,-1,-1],
+    kick:[1,0,0,1, 0,0,1,0, 1,0,1,0, 0,1,0,0,  1,0,0,1, 0,1,0,0, 1,0,1,1, 1,0,1,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]},
+  /* C locrian — the fastest and the only one with no stable tonic. */
+  voidspire:{ bpm:188, root:32.70, scale:'locrian',
+    rhy:[2,1,1,1, 1,1,1,1, 2,1,1,1, 1,1,3,0,  2,1,1,1, 1,1,1,1, 3,0,3,0, 3,1,1,1],
+    deg:[0,0,0,0, 1,1,0,0, 0,0,0,0, 4,4,4,0,  0,0,0,0, 1,1,0,0, 4,0,3,0, 1,1,0,0],
+    lead:[0,1,3,4, 6,4,3,1, 0,-1,6,-1, 4,3,1,0],
+    kick:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1,  1,1,1,1, 1,1,1,1, 1,0,1,0, 1,1,1,1],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,1]},
+};
+function noteHz(root, scaleName, deg, oct){
+  const sc = SCALES[scaleName] || SCALES.aeolian;
+  const n = ((deg % sc.length) + sc.length) % sc.length;
+  const o = Math.floor(deg/sc.length) + (oct||0);
+  return root * Math.pow(2, (sc[n] + o*12)/12);
+}
+
+/* ================================================================
+   THE SCHEDULER
+   setTimeout is far too jittery to place a sixteenth note. The clock is
+   AudioContext.currentTime; a timer only wakes up often enough to queue
+   the next slice, and every event is scheduled at an exact sample time.
+   ================================================================ */
+const MUS = {
+  on:false, zone:null, song:null, step:0, next:0, timer:null,
+  intensity:'explore', want:'explore', fade:0, started:false,
+};
+const MUS_MIX = {explore:0.30, combat:0.46, boss:0.58};
+function musicStart(){
+  if(!S || !S.opts || S.opts.music===false) return;
+  audioResume();
+  if(!AC) return;
+  bandInit();
+  if(MUS.timer) return;
+  MUS.song = SONGS[S.zone] || SONGS.verdant;
+  MUS.zone = S.zone;
+  MUS.step = 0;
+  MUS.next = AC.currentTime + 0.12;
+  MUS.on = true;
+  musSetIntensity(MUS.want, true);
+  MUS.timer = setInterval(musTick, 25);
+}
+function musicStop(fade){
+  if(musBus && AC) musBus.gain.linearRampToValueAtTime(0.0001, AC.currentTime + (fade||0.6));
+  if(MUS.timer){ clearInterval(MUS.timer); MUS.timer=null; }
+  MUS.on = false;
+}
+function musSetIntensity(k, now){
+  MUS.want = k;
+  if(!AC || !musBus || !MUS.on) return;
+  const vol = (MUS_MIX[k]||0.3) * ((S.opts && S.opts.musVol!=null) ? S.opts.musVol : 1);
+  musBus.gain.cancelScheduledValues(AC.currentTime);
+  musBus.gain.setValueAtTime(musBus.gain.value, AC.currentTime);
+  musBus.gain.linearRampToValueAtTime(vol, AC.currentTime + (now?0.05:1.4));
+  MUS.intensity = k;
+}
+/* the zone changed: swap songs on the next bar so it does not sound broken */
+function musSetZone(z){
+  if(!MUS.on){ MUS.zone=z; return; }
+  if(MUS.zone===z) return;
+  MUS.zone = z;
+  MUS.song = SONGS[z] || SONGS.verdant;
+  MUS.step = 0;
+}
+function musTick(){
+  if(!AC || !MUS.on || !BAND) return;
+  const sp = MUS.song;
+  const spb = 60/sp.bpm;          /* seconds per beat */
+  const s16 = spb/4;              /* ...per sixteenth */
+  const AHEAD = 0.18;
+  /* If the clock ran away — a backgrounded tab, a long frame, a device
+     waking up — resync instead of trying to play the missing minute. The
+     guard below would otherwise cap catch-up at 64 sixteenths per tick and
+     the band would lag further behind for as long as it took. */
+  if(MUS.next < AC.currentTime - 0.5){
+    MUS.next = AC.currentTime + 0.05;
+    MUS.step = 0;
+  }
+  let guard = 0;
+  while(MUS.next < AC.currentTime + AHEAD && guard++ < 64){
+    musStep(MUS.step, MUS.next, s16, sp);
+    MUS.step = (MUS.step + 1) % 32;
+    MUS.next += s16;
+  }
+}
+function musStep(i, t, s16, sp){
+  const hot = MUS.intensity!=='explore';
+  const boss = MUS.intensity==='boss';
+  const root = sp.root;
+  /* ---- guitars ---- */
+  const r = sp.rhy[i];
+  if(r){
+    const f = noteHz(root, sp.scale, sp.deg[i], 1);
+    const mute = r===1;
+    const dur = r===3 ? s16*6 : r===2 ? s16*2.4 : s16*1.6;
+    const vel = r===1 ? 0.78 : 1.0;
+    /* double-tracked: the same part played twice and panned apart. It is the
+       oldest trick in metal production and it is what makes one guitar
+       sound like a wall. */
+    gtrChord(BAND.gtrL, f, t,          dur, mute, vel);
+    gtrChord(BAND.gtrR, f, t + 0.011,  dur, mute, vel*0.96);
+    if(i%2===0 || r>1) bassNote(f*0.5, t, Math.min(dur, s16*3), r===1?0.8:1);
+  }
+  /* ---- drums ---- */
+  if(sp.kick[i]) drKick(t, i%8===0?1:0.86);
+  if(sp.snare[i]) drSnare(t, 0.95);
+  /* the hats only show up once the fight starts; in explore the kit is
+     bare, which is what leaves room for the riff */
+  if(hot && i%2===0) drHat(t, false, i%4===0?0.95:0.62);
+  if(boss && i%2===1) drHat(t, false, 0.4);
+  if(i===0) drCrash(t, hot?0.95:0.55);
+  if(boss && i===16) drCrash(t, 0.7);
+  /* double kick under the boss: the sixteenths between the written kicks */
+  if(boss && !sp.kick[i] && i%2===1) drKick(t, 0.55);
+  /* a tom fill into the top of the loop */
+  if(hot && i>=29){ drTom(t, [200,168,140][i-29], 0.7); }
+  /* ---- lead ---- */
+  if(hot && i%2===0){
+    const li = (i/2)|0;
+    const d = sp.lead[li % sp.lead.length];
+    if(d>=0){
+      const oct = boss ? 3 : 2;
+      leadNote(noteHz(root, sp.scale, d, oct), t, s16*(boss?1.8:2.6), boss?0.95:0.72);
+      /* tremolo picking on the boss: the same note hammered in sixteenths */
+      if(boss) leadNote(noteHz(root, sp.scale, d, oct), t+s16, s16*1.2, 0.7);
+    }
+  }
+}
+/* Driven from the game loop. Intensity follows the fight, not the zone:
+   the band picks up when something is actually hunting you. */
+let _musT = 0;
+function musUpdate(dt){
+  if(!MUS.on) return;
+  _musT += dt;
+  if(_musT < 0.35) return;
+  _musT = 0;
+  let want = 'explore';
+  if(bossRef && bossRef.state==='aggro') want = 'boss';
+  else {
+    for(const f of foes){
+      if(f.state!=='aggro') continue;
+      const dx=f.x-P.x, dy=f.y-P.y;
+      if(dx*dx+dy*dy < 620*620){ want='combat'; break; }
+    }
+  }
+  if(want !== MUS.want) musSetIntensity(want);
+}
+
+/* ---------------- effects ----------------
+   Everything here goes through sfxBus, not the master, so the band can be
+   compressed and ducked without flattening the hits.
+
+   The rule every one of these follows: a sound effect is a TRANSIENT plus a
+   BODY. The transient is 5-20ms of filtered noise and it is what your ear
+   locates and times; the body carries the weight and the pitch. The old set
+   was bodies only, which is why everything sounded soft and slightly late. */
+function tone(freq, dur, type, vol, slideTo, delay, bus){
   if(!AC || !S || !S.opts.sfx) return;
   const t0 = AC.currentTime + (delay||0);
   const o = AC.createOscillator(), g = AC.createGain();
@@ -2316,45 +3017,112 @@ function tone(freq, dur, type, vol, slideTo, delay){
   o.frequency.setValueAtTime(freq, t0);
   if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20,slideTo), t0+dur);
   g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol||0.2), t0+0.008);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol||0.2), t0+0.006);
   g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
-  o.connect(g); g.connect(masterGain);
+  o.connect(g); g.connect(bus||sfxBus||masterGain);
   o.start(t0); o.stop(t0+dur+0.02);
 }
-function noise(dur, vol, hp){
+function noise(dur, vol, hp, delay, q){
   if(!AC || !S || !S.opts.sfx) return;
-  const n = Math.floor(AC.sampleRate*dur);
-  const buf = AC.createBuffer(1,n,AC.sampleRate);
-  const ch = buf.getChannelData(0);
-  for(let i=0;i<n;i++) ch[i] = (Math.random()*2-1)*Math.pow(1-i/n,2.2);
-  const src = AC.createBufferSource(); src.buffer = buf;
-  const f = AC.createBiquadFilter(); f.type = hp?'highpass':'lowpass';
-  f.frequency.value = hp||1400;
+  const t0 = AC.currentTime + (delay||0);
+  const src = AC.createBufferSource(); src.buffer = noiseBuf(dur, 2.2);
+  const f = AC.createBiquadFilter();
+  f.type = q ? 'bandpass' : (hp?'highpass':'lowpass');
+  f.frequency.value = hp||1400; if(q) f.Q.value = q;
   const g = AC.createGain(); g.gain.value = vol||0.18;
-  src.connect(f); f.connect(g); g.connect(masterGain); src.start();
+  src.connect(f); f.connect(g); g.connect(sfxBus||masterGain); src.start(t0);
+}
+/* the 8ms crack that makes an impact land ON the frame it happened */
+function crack(vol, freq, delay){
+  if(!AC || !S || !S.opts.sfx) return;
+  const t0 = AC.currentTime + (delay||0);
+  const src = AC.createBufferSource(); src.buffer = noiseBuf(0.018, 4.0);
+  const f = AC.createBiquadFilter(); f.type='bandpass';
+  f.frequency.value = freq||3200; f.Q.value = 0.9;
+  const g = AC.createGain(); g.gain.value = vol||0.22;
+  src.connect(f); f.connect(g); g.connect(sfxBus||masterGain); src.start(t0);
+}
+/* a struck-metal ring: three inharmonic partials, which is what separates
+   "steel" from "a bell" */
+function clang(f, dur, vol, delay){
+  if(!AC || !S || !S.opts.sfx) return;
+  [[1,1],[2.76,0.5],[5.40,0.26]].forEach(([m,a])=>
+    tone(f*m, dur*(1-0.22*Math.log2(m+1)), 'triangle', (vol||0.14)*a, null, delay));
 }
 const SFX = {
-  hit:   ()=>{ tone(rnd(180,240),0.07,'square',0.11,90); noise(0.05,0.07,900); },
-  crit:  ()=>{ tone(340,0.13,'sawtooth',0.17,120); noise(0.09,0.13,600); tone(720,0.09,'square',0.09,400,0.02); },
-  shoot: ()=>{ tone(620,0.07,'triangle',0.08,300); },
-  cast:  ()=>{ tone(440,0.14,'sine',0.10,880); },
-  kill:  ()=>{ noise(0.16,0.13,420); tone(150,0.16,'sawtooth',0.10,55); },
-  hurt:  ()=>{ tone(190,0.20,'sawtooth',0.16,70); noise(0.12,0.12,500); },
-  die:   ()=>{ tone(240,0.9,'sawtooth',0.22,48); noise(0.6,0.16,300); },
-  dash:  ()=>{ noise(0.16,0.13,2200); tone(300,0.14,'sine',0.06,700); },
-  pot:   ()=>{ tone(520,0.1,'sine',0.13,780); tone(780,0.14,'sine',0.10,1100,0.06); },
-  level: ()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,0.3,'triangle',0.16,null,i*0.085)); },
-  chest: ()=>{ [392,523,659].forEach((f,i)=>tone(f,0.22,'triangle',0.13,null,i*0.06)); noise(0.2,0.1,700); },
-  craft: ()=>{ noise(0.1,0.16,300); tone(180,0.12,'square',0.12,320); tone(520,0.2,'triangle',0.1,null,0.1); },
-  salv:  ()=>{ noise(0.14,0.13,1800); tone(260,0.1,'square',0.08,150); },
-  boss:  ()=>{ tone(90,1.1,'sawtooth',0.26,55); tone(135,1.0,'square',0.12,70,0.05); noise(0.7,0.14,240); },
-  buy:   ()=>{ tone(880,0.09,'triangle',0.11); tone(1174,0.12,'triangle',0.09,null,0.05); },
-  no:    ()=>{ tone(150,0.13,'square',0.11,90); },
+  /* melee: crack, then a low thump under it */
+  hit:   ()=>{ crack(0.26, rnd(2400,3600)); noise(0.055,0.09,700);
+               tone(rnd(150,200),0.09,'square',0.10,80); },
+  hitHeavy:()=>{ crack(0.32, 1800); noise(0.10,0.14,420);
+               tone(96,0.18,'sawtooth',0.17,52); },
+  crit:  ()=>{ crack(0.40, 4200); clang(880,0.26,0.13);
+               tone(300,0.16,'sawtooth',0.19,110); noise(0.12,0.15,520); },
+  block: ()=>{ crack(0.30, 5200); clang(1320,0.34,0.15); },
+  shoot: ()=>{ noise(0.05,0.13,3400); tone(760,0.07,'triangle',0.08,320); },
+  cast:  ()=>{ tone(330,0.20,'sawtooth',0.07,990); tone(495,0.16,'sine',0.07,1480,0.02);
+               noise(0.14,0.06,2600); },
+  kill:  ()=>{ crack(0.24, 1500); noise(0.22,0.15,380);
+               tone(140,0.24,'sawtooth',0.13,48); },
+  hurt:  ()=>{ crack(0.30, 900); tone(175,0.24,'sawtooth',0.18,64); noise(0.16,0.14,460); },
+  die:   ()=>{ tone(220,1.2,'sawtooth',0.24,40); tone(110,1.4,'square',0.14,32,0.05);
+               noise(0.8,0.18,260); clang(140,1.6,0.10,0.1); },
+  dash:  ()=>{ noise(0.20,0.16,2600); tone(420,0.16,'sine',0.07,140); },
+  pot:   ()=>{ for(let i=0;i<3;i++) tone(300+i*90,0.06,'sine',0.10,null,i*0.045);
+               tone(620,0.16,'sine',0.11,940,0.14); },
+  /* the fanfares are POWER CHORDS now, not arpeggios on a triangle wave —
+     this game does not have a music box in it */
+  level: ()=>{ if(!BAND){ bandInit(); }
+               if(BAND){ const t=AC.currentTime;
+                 [0,3,5,7].forEach((d,i)=>{ const f=noteHz(82.4,'aeolian',d,0);
+                   gtrChord(BAND.gtrL, f, t+i*0.10, 0.5, false, 0.9);
+                   gtrChord(BAND.gtrR, f, t+i*0.11, 0.5, false, 0.9); });
+                 drCrash(t, 0.8); drKick(t,1); drKick(t+0.30,1); }
+               else [523,659,784,1047].forEach((f,i)=>tone(f,0.3,'triangle',0.16,null,i*0.085)); },
+  chest: ()=>{ crack(0.24,1400); noise(0.26,0.12,600);
+               clang(520,0.5,0.12,0.05); clang(780,0.45,0.09,0.12); },
+  craft: ()=>{ crack(0.34,2600); noise(0.10,0.17,300);
+               clang(330,0.4,0.15,0.02); crack(0.22,3400,0.14); clang(440,0.3,0.10,0.16); },
+  salv:  ()=>{ noise(0.18,0.15,2000); clang(260,0.22,0.09); crack(0.18,1600,0.06); },
+  boss:  ()=>{ if(!BAND){ bandInit(); }
+               if(BAND){ const t=AC.currentTime;
+                 /* a tritone: the interval that has meant "danger" for about
+                    six hundred years */
+                 gtrChord(BAND.gtrL, 41.2, t, 1.6, false, 1.0, false);
+                 gtrChord(BAND.gtrR, 58.27, t+0.02, 1.6, false, 1.0, false);
+                 drCrash(t,1); drKick(t,1); }
+               else tone(90,1.1,'sawtooth',0.26,55);
+               noise(0.7,0.16,240); },
+  buy:   ()=>{ clang(1046,0.18,0.10); clang(1568,0.16,0.07,0.05); },
+  no:    ()=>{ tone(140,0.16,'square',0.13,86); crack(0.14,700); },
+  /* UI */
+  tab:   ()=>{ crack(0.10, 5600); tone(1200,0.045,'triangle',0.045); },
+  open:  ()=>{ noise(0.09,0.06,3000); tone(420,0.09,'triangle',0.05,620); },
+  close: ()=>{ noise(0.08,0.05,2400); tone(620,0.08,'triangle',0.045,380); },
+  /* a skill node going live: one struck chord and a rising shimmer */
+  skillUp:()=>{ if(!BAND) bandInit();
+                if(BAND){ const t=AC.currentTime;
+                  gtrChord(BAND.gtrL, noteHz(82.4,'harmMin',0,0), t, 0.7, false, 0.85);
+                  gtrChord(BAND.gtrR, noteHz(82.4,'harmMin',4,0), t+0.06, 0.7, false, 0.85);
+                  drCrash(t, 0.55); }
+                [784,1047,1319].forEach((f,i)=>tone(f,0.24,'triangle',0.09,null,0.08+i*0.055)); },
+  portal:()=>{ tone(120,0.9,'sawtooth',0.12,760); noise(0.7,0.10,1800);
+               clang(660,0.8,0.08,0.2); },
+  obelisk:()=>{ if(!BAND) bandInit();
+                if(BAND){ const t=AC.currentTime;
+                  gtrChord(BAND.gtrL, 43.65, t, 1.2, false, 1.0, false);
+                  gtrChord(BAND.gtrR, 61.74, t+0.03, 1.2, false, 1.0, false);
+                  drCrash(t,0.9); }
+                tone(70,1.0,'sine',0.20,40); },
   loot:  (r)=>{
-    if(r>=4){ [523,659,784,1047,1319].forEach((f,i)=>tone(f,0.36,'triangle',0.17,null,i*0.07)); noise(0.3,0.1,900); }
-    else if(r===3){ [523,698,880].forEach((f,i)=>tone(f,0.26,'triangle',0.14,null,i*0.07)); }
-    else if(r===2){ tone(587,0.18,'triangle',0.12); tone(880,0.2,'triangle',0.1,null,0.07); }
-    else tone(440,0.12,'triangle',0.09);
+    if(r>=4){ if(!BAND) bandInit();
+      if(BAND){ const t=AC.currentTime;
+        [0,4,7].forEach((d,i)=>{ const f=noteHz(110,'harmMin',d,0);
+          gtrChord(BAND.gtrL,f,t+i*0.09,0.6,false,0.9); gtrChord(BAND.gtrR,f,t+i*0.10,0.6,false,0.9); });
+        drCrash(t,0.85); }
+      [1047,1319,1568].forEach((f,i)=>tone(f,0.34,'triangle',0.13,null,0.10+i*0.06)); }
+    else if(r===3){ clang(784,0.3,0.13); clang(1175,0.28,0.10,0.07); crack(0.16,4200); }
+    else if(r===2){ clang(659,0.22,0.11); clang(880,0.2,0.08,0.06); }
+    else tone(440,0.13,'triangle',0.09);
   },
 };
 function sfx(k,a){ if(!S||!S.opts.sfx) return; audioInit(); const f=SFX[k]; if(f) f(a); }
@@ -4213,6 +4981,7 @@ function update(dt){
   }
 
   stepSurge(dt);
+  musUpdate(dt);
 
   /* ---- camp archetypes: pack-level behaviour ---- */
   for(const pk of packs){
@@ -9750,6 +10519,275 @@ function drawMinimap(){
 }
 
 /* ================================================================
+   SKILL LATTICE
+
+   Not a class tree. A hex lattice with one node in the middle, and the
+   only rule is: you may take any node TOUCHING one you already own. So
+   you grow outward in whatever direction you like, you can walk one arm
+   to the rim or spread evenly across all four, and nothing is gated on
+   what weapon you happen to be holding.
+
+   The arms are flavour, not permission. Which arm a node sits in is
+   decided by its ANGLE from the centre and its tier by its RING, so the
+   whole thing is generated rather than hand-placed — 61 nodes that stay
+   consistent instead of 61 hand-written objects that drift.
+
+   Adjacency is plain axial hex neighbours, which is also why the lattice
+   is hexagonal in the first place: on a square grid "adjacent" has to
+   pick between 4 and 8 neighbours and both look wrong.
+   ================================================================ */
+const HEX_DIRS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+const SK_ARMS = {
+  might:  {n:'Might',     col:'#f0955a', d:'Strength, armour, raw damage'},
+  edge:   {n:'Precision', col:'#6ee7a8', d:'Dexterity, crit, speed'},
+  arcana: {n:'Arcana',    col:'#8ab4ff', d:'Intellect, mana, magic find'},
+  blood:  {n:'Vitality',  col:'#f4607a', d:'Health, regen, lifesteal'},
+};
+/* the stat pools each arm draws from, by tier */
+const SK_POOL = {
+  might:  {t1:[['str',4],['armor',7]], t2:[['str',8],['allDmg',5],['armor',14]],
+           t3:[['str',14],['allDmg',9]]},
+  edge:   {t1:[['dex',4],['atkSpd',3]], t2:[['dex',8],['critC',3],['movSpd',4]],
+           t3:[['dex',14],['critD',18]]},
+  arcana: {t1:[['int',4],['mpReg',0.5]], t2:[['int',8],['luck',6],['allDmg',5]],
+           t3:[['int',14],['luck',12]]},
+  blood:  {t1:[['vit',4],['maxHp',22]], t2:[['vit',8],['hpReg',1.1],['lifeHit',3]],
+           t3:[['vit',14],['maxHp',70]]},
+};
+/* Keystones. Every one is a real package, and four of them hand you a
+   mechanic the relics already implement rather than a bigger number. */
+const SK_KEYS = {
+  might:  [{id:'k_bulwark', n:'Bulwark',    d:'Each hit taken stacks damage reduction, up to 3',
+            st:[['armor',30],['vit',10]], uniq:{k:'bulwark',n:'Bulwark',d:'Each hit taken stacks damage reduction, up to 3'}},
+           {id:'k_ruin',    n:'Ruination',  d:'+16% all damage and +20 Strength',
+            st:[['allDmg',16],['str',20]]}],
+  edge:   [{id:'k_shock',   n:'Chain Shock',d:'Critical hits arc to a nearby enemy',
+            st:[['critC',6],['dex',10]], uniq:{k:'cleaveShock',n:'Chain Shock',d:'Critical hits arc to a nearby enemy'}},
+           {id:'k_gale',    n:'Gale Step',  d:'+16% attack speed, +14% move speed',
+            st:[['atkSpd',16],['movSpd',14]]}],
+  arcana: [{id:'k_venom',   n:'Riftvenom',  d:'Poisoned enemies take escalating damage',
+            st:[['int',12],['allDmg',8]], uniq:{k:'poison',n:'Riftvenom',d:'Poisoned enemies take escalating damage'}},
+           {id:'k_avarice', n:'Avarice',    d:'+30% gold find, +22% magic find',
+            st:[['goldF',30],['luck',22]]}],
+  blood:  [{id:'k_surge',   n:'Hollowblood',d:'Health regen doubles below 40% HP',
+            st:[['hpReg',2.2],['vit',12]], uniq:{k:'regenSurge',n:'Hollowblood',d:'Health regen doubles below 40% HP'}},
+           {id:'k_leech',   n:'Sanguine',   d:'+8 life on hit, +14% max health',
+            st:[['lifeHit',8],['maxHp',120]]}],
+};
+const SK_RING_COST = [0,1,1,2,3];
+const SK_RAD = 4;
+
+/* ---- generate the lattice ---- */
+const SKILLS = (()=>{
+  const nodes = {}, order = [];
+  const armFor = (q,r)=>{
+    /* pixel angle, so the four arms are visually quarters of the disc
+       rather than quarters of some coordinate nobody can see */
+    const x = Math.sqrt(3)*(q + r/2), y = 1.5*r;
+    let a = Math.atan2(y, x);                 /* -PI..PI */
+    a = (a + Math.PI*2 + Math.PI/4) % (Math.PI*2);
+    return ['might','blood','edge','arcana'][Math.floor(a/(Math.PI/2))%4];
+  };
+  const key = (q,r)=>q+','+r;
+  for(let q=-SK_RAD;q<=SK_RAD;q++){
+    for(let r=Math.max(-SK_RAD,-q-SK_RAD); r<=Math.min(SK_RAD,-q+SK_RAD); r++){
+      const ring = (Math.abs(q)+Math.abs(q+r)+Math.abs(r))/2;
+      const id = key(q,r);
+      const n = {id, q, r, ring, x:Math.sqrt(3)*(q+r/2), y:1.5*r};
+      if(ring===0){
+        n.arm='core'; n.kind='core'; n.cost=0; n.n='Rift Spark';
+        n.d='Where it starts. Everything you take must touch something you already have.';
+        n.st=[['vit',3],['str',2],['dex',2],['int',2]];
+      } else {
+        n.arm = armFor(q,r);
+        n.cost = SK_RING_COST[ring];
+        const P2 = SK_POOL[n.arm];
+        if(ring<=2){
+          n.kind='minor';
+          const pool=P2.t1, pick2=pool[(Math.abs(q*7+r*13))%pool.length];
+          n.st=[[pick2[0], pick2[1]]];
+        } else if(ring===3){
+          n.kind='major';
+          const pool=P2.t2, pick2=pool[(Math.abs(q*5+r*11))%pool.length];
+          n.st=[[pick2[0], pick2[1]]];
+        } else {
+          /* the rim: two keystones per arm, everything else a strong stat */
+          const ks = SK_KEYS[n.arm];
+          const slot = (Math.abs(q*3+r*7))%5;
+          if(slot===0 || slot===3){
+            const K = ks[slot===0?0:1];
+            n.kind='key'; n.n=K.n; n.d=K.d; n.st=K.st; n.uniq=K.uniq; n.cost=3;
+          } else {
+            n.kind='major';
+            const pool=P2.t3, pick2=pool[(Math.abs(q*5+r*11))%pool.length];
+            n.st=[[pick2[0], pick2[1]]]; n.cost=2;
+          }
+        }
+      }
+      if(!n.n){
+        const s0=n.st[0], A=AFFIX_MAP[s0[0]];
+        const nm = A ? A.n : s0[0];
+        n.n = (n.kind==='major'?'Greater ':'')+nm;
+        n.d = '+'+s0[1]+(A&&A.pct?'%':'')+' '+nm;
+      }
+      nodes[id]=n; order.push(id);
+    }
+  }
+  /* neighbours */
+  for(const id of order){
+    const n = nodes[id];
+    n.adj = HEX_DIRS.map(([dq,dr])=>key(n.q+dq, n.r+dr)).filter(k=>nodes[k]);
+  }
+  return {nodes, order, root:'0,0'};
+})();
+
+function skOwned(){ return (S && S.skills) || {}; }
+function skHas(id){ return !!skOwned()[id]; }
+/* the whole rule, in one function: touching something you own */
+function skCanTake(id){
+  const n = SKILLS.nodes[id];
+  if(!n || skHas(id)) return false;
+  if(id===SKILLS.root) return true;
+  return n.adj.some(a=>skHas(a));
+}
+function skSpent(){
+  let c=0; for(const id in skOwned()) if(skOwned()[id]) c += SKILLS.nodes[id].cost;
+  return c;
+}
+function skTake(id){
+  if(!skCanTake(id)) { sfx('no'); return false; }
+  const n = SKILLS.nodes[id];
+  if((S.sp||0) < n.cost){ toast('Need '+n.cost+' skill point'+(n.cost===1?'':'s')); sfx('no'); return false; }
+  S.sp -= n.cost;
+  S.skills = S.skills || {};
+  S.skills[id] = 1;
+  computeStats();
+  P.hp = Math.min(P.hp, D.maxHp);
+  sfx('skillUp'); buzz(18);
+  toast('Learned '+n.n);
+  renderSkills(); syncHud(); saveGame();
+  return true;
+}
+function skRespecCost(){ return 400 + skSpent()*260; }
+function skRespec(){
+  const cost = skRespecCost();
+  if(S.gold < cost){ toast('Need '+fmt(cost)+' gold'); sfx('no'); return; }
+  S.gold -= cost;
+  S.sp = (S.sp||0) + skSpent();
+  S.skills = {};
+  computeStats();
+  sfx('craft'); toast('Lattice unwound');
+  renderSkills(); syncHud(); saveGame();
+}
+/* folded into computeStats, so a node is worth exactly what it says */
+function skillBonus(d, uniq){
+  const own = skOwned();
+  for(const id in own){
+    if(!own[id]) continue;
+    const n = SKILLS.nodes[id]; if(!n) continue;
+    for(const [k,v] of n.st) if(d[k]!=null) d[k]+=v;
+    if(n.uniq) uniq[n.uniq.k] = n.uniq;
+  }
+}
+
+/* ---------------- the panel ---------------- */
+const SK_SIZE = 40;      /* hex radius in px */
+let skSel = null;
+function renderSkills(){
+  const host = $('skillWrap'); if(!host) return;
+  const pad = SK_SIZE*2.4;
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  for(const id of SKILLS.order){
+    const n=SKILLS.nodes[id];
+    minX=Math.min(minX,n.x); maxX=Math.max(maxX,n.x);
+    minY=Math.min(minY,n.y); maxY=Math.max(maxY,n.y);
+  }
+  const W2 = (maxX-minX)*SK_SIZE + pad*2, H2 = (maxY-minY)*SK_SIZE + pad*2;
+  const px = n => (n.x-minX)*SK_SIZE + pad;
+  const py = n => (n.y-minY)*SK_SIZE + pad;
+
+  /* links first, as one SVG underneath — 150-odd edges as DOM elements
+     would be 150 more things for the browser to lay out every repaint */
+  let lines='';
+  const seen={};
+  for(const id of SKILLS.order){
+    const n=SKILLS.nodes[id];
+    for(const a of n.adj){
+      const k = id<a ? id+'|'+a : a+'|'+id;
+      if(seen[k]) continue; seen[k]=1;
+      const m=SKILLS.nodes[a];
+      const both = skHas(id)&&skHas(a);
+      const live = both || (skHas(id)&&skCanTake(a)) || (skHas(a)&&skCanTake(id));
+      lines += '<line x1="'+px(n).toFixed(1)+'" y1="'+py(n).toFixed(1)+
+               '" x2="'+px(m).toFixed(1)+'" y2="'+py(m).toFixed(1)+
+               '" stroke="'+(both?'#e8b44a':live?'#4a5674':'#222839')+
+               '" stroke-width="'+(both?3:2)+'"/>';
+    }
+  }
+  let dots='';
+  for(const id of SKILLS.order){
+    const n = SKILLS.nodes[id];
+    const owned = skHas(id), can = skCanTake(id);
+    const afford = can && (S.sp||0) >= n.cost;
+    const col = n.arm==='core' ? '#e8b44a' : SK_ARMS[n.arm].col;
+    const cls = 'skNode k-'+n.kind+(owned?' own':can?(afford?' can':' near'):'');
+    dots += '<button class="'+cls+(skSel===id?' sel':'')+'" data-sk="'+id+'" '+
+      'style="left:'+px(n).toFixed(1)+'px;top:'+py(n).toFixed(1)+'px;--nc:'+col+'">'+
+      '<span class="skIn"></span>'+
+      (n.kind==='key'?'<span class="skStar">◆</span>':'')+
+      (n.kind==='major'?'<span class="skStar">●</span>':'')+
+      '</button>';
+  }
+  host.style.width = W2+'px'; host.style.height = H2+'px';
+  host.innerHTML = '<svg class="skLines" width="'+W2+'" height="'+H2+'">'+lines+'</svg>'+dots;
+
+  const sel = skSel && SKILLS.nodes[skSel];
+  const det = $('skillDetail');
+  if(sel){
+    const owned=skHas(skSel), can=skCanTake(skSel);
+    const A = sel.arm==='core' ? {n:'Core', col:'#e8b44a'} : SK_ARMS[sel.arm];
+    det.innerHTML =
+      '<div class="skdHead"><span class="skdPip" style="background:'+A.col+'"></span>'+
+      '<b style="color:'+A.col+'">'+sel.n+'</b>'+
+      '<span class="skdTag">'+A.n+' · '+(sel.kind==='key'?'KEYSTONE':sel.kind==='major'?'GREATER':'MINOR')+'</span></div>'+
+      '<div class="skdBody">'+sel.d+'</div>'+
+      '<div class="skdRow">'+
+        (owned ? '<span class="cmp better">LEARNED</span>'
+               : '<span class="cmp '+(can?'better':'worse')+'">'+
+                   (can?'Costs '+sel.cost+' SP':'Not connected yet')+'</span>')+
+      '</div>'+
+      (owned||!can ? '' :
+        '<button class="btn pri" style="width:100%;margin-top:8px;" data-sktake="'+skSel+'" '+
+        ((S.sp||0)>=sel.cost?'':'disabled')+'>Learn · '+sel.cost+' SP</button>');
+  } else {
+    det.innerHTML = '<div class="skdBody" style="text-align:center;color:var(--dim2)">'+
+      'Tap a node. You can take anything touching what you already own — '+
+      'there is no path you are locked out of.</div>';
+  }
+  $('skillSub').textContent = (S.sp||0)+' SP · '+skSpent()+' spent';
+  /* Centre the view on the FRONTIER — the middle of what you own — rather
+     than the top-left corner. The lattice is wider than any phone, so
+     without this the panel opens looking at empty grid. */
+  const body = $('skillBody');
+  if(!body._skCentred || skSel==null){
+    let cx=0, cy=0, k=0;
+    for(const id in skOwned()) if(skOwned()[id]){
+      const n=SKILLS.nodes[id]; cx+=px(n); cy+=py(n); k++;
+    }
+    if(!k){ const n=SKILLS.nodes[SKILLS.root]; cx=px(n); cy=py(n); k=1; }
+    cx/=k; cy/=k;
+    requestAnimationFrame(()=>{
+      body.scrollLeft = Math.max(0, cx - body.clientWidth/2);
+      body.scrollTop  = Math.max(0, cy - body.clientHeight/2);
+    });
+    body._skCentred = 1;
+  }
+  const tb = document.querySelector('[data-tab="pSkill"]');
+  if(tb) tb.classList.toggle('alert', (S.sp||0) > 0 &&
+    SKILLS.order.some(id=>skCanTake(id) && SKILLS.nodes[id].cost<=(S.sp||0)));
+}
+
+/* ================================================================
    HUD
    ================================================================ */
 function setBar(id, pct, txt){
@@ -10716,7 +11754,9 @@ function travelTo(id){
   P.hp=D.maxHp; P.mp=D.maxMp; P.dead=false;
   buildZoneWorld();
   toast('Entering '+ZONE_BY_ID[id].n);
-  sfx('cast');
+  sfx('portal');
+  musSetZone(id);
+  if(S.opts.music!==false && !MUS.on) musicStart();
   renderZones(); saveGame();
   showTab('arena');
 }
@@ -10745,7 +11785,13 @@ function renderMenu(){
   }
 
   h += '<div class="sectionLbl">Options</div><div id="optRow">'+
-    optBtn('sfx','Sound')+optBtn('haptic','Haptics')+optBtn('autoAim','Auto-Attack')+'</div>'+
+    optBtn('sfx','Sound')+optBtn('music','Music')+optBtn('haptic','Haptics')+
+    optBtn('autoAim','Auto-Attack')+'</div>'+
+    '<div id="optRow" style="margin-top:7px;">'+
+      [['Quiet',0.4],['Loud',0.8],['Deafening',1.3]].map(([n,v])=>
+        '<button class="chip'+(Math.abs((S.opts.musVol||0.8)-v)<0.01?' sel':'')+
+        '" data-mvol="'+v+'">'+n+'</button>').join('')+
+    '</div>'+
     '<div id="optRow" style="margin-top:7px;">'+
       ['high','med','low'].map(t=>'<button class="chip'+(S.opts.gfx===t?' sel':'')+
         '" data-gfx="'+t+'">'+({high:'Sharp',med:'Balanced',low:'Battery'})[t]+'</button>').join('')+
@@ -10786,8 +11832,13 @@ $('menuBody').addEventListener('click', e=>{
   const q=e.target.closest('[data-gfx]');
   if(q){ S.opts.gfx=q.dataset.gfx; _downgrades=0; applyGfx(S.opts.gfx);
          sfx('buy'); renderMenu(); saveGame(); return; }
+  const mv=e.target.closest('[data-mvol]');
+  if(mv){ S.opts.musVol=+mv.dataset.mvol; musSetIntensity(MUS.want, true);
+          sfx('buy'); renderMenu(); saveGame(); return; }
   const o=e.target.closest('[data-opt]');
-  if(o){ S.opts[o.dataset.opt]=!S.opts[o.dataset.opt]; if(S.opts.sfx) audioInit();
+  if(o){ S.opts[o.dataset.opt]=!S.opts[o.dataset.opt];
+         if(S.opts.sfx) audioResume();
+         if(o.dataset.opt==='music'){ if(S.opts.music) musicStart(); else musicStop(0.4); }
          sfx('buy'); renderMenu(); saveGame(); return; }
   const b=e.target.closest('[data-buy]'); if(b){ doBuy(b.dataset.buy); return; }
   const s=e.target.closest('[data-sel]');
@@ -10832,7 +11883,7 @@ $('lootOk').addEventListener('click', ()=>{
 });
 function showLevelUp(n){
   $('lvlNum').textContent = S.lvl;
-  $('lvlDesc').innerHTML = '+<b>'+(TUNE.ptsPerLvl*n)+'</b> attribute points<br>'+
+  $('lvlDesc').innerHTML = '+<b>'+(TUNE.ptsPerLvl*n)+'</b> attribute points &nbsp;·&nbsp; +<b>'+n+'</b> skill point'+(n===1?'':'s')+'<br>'+
     'Health and mana fully restored<br>'+
     '<span style="color:var(--dim2);font-size:11px;">Spend points in Hero → Stats</span>';
   $('lvlWrap').classList.add('open');
@@ -10872,12 +11923,34 @@ function showTab(t){
     if(t==='pGear') renderGear();
     if(t==='pCraft') renderCraft();
     if(t==='pZone') renderZones();
+    if(t==='pSkill') renderSkills();
     if(t==='pMenu') renderMenu();
     saveGame();
   }
 }
 document.querySelectorAll('.tab').forEach(b=>{
-  b.addEventListener('click', ()=>{ audioInit(); showTab(b.dataset.tab); });
+  b.addEventListener('click', ()=>{ audioResume(); sfx('tab'); showTab(b.dataset.tab); });
+});
+/* ---- skill lattice interaction ---- */
+$('skillBody').addEventListener('click', e=>{
+  const n = e.target.closest('[data-sk]'); if(!n) return;
+  skSel = n.dataset.sk; sfx('open'); renderSkills();
+});
+$('skillDetail').addEventListener('click', e=>{
+  const t = e.target.closest('[data-sktake]'); if(!t) return;
+  skTake(t.dataset.sktake);
+});
+$('btnRespec').addEventListener('click', ()=>{
+  if(!skSpent()){ toast('Nothing to unwind'); sfx('no'); return; }
+  const cost = skRespecCost();
+  $('modalBody').innerHTML =
+    '<div class="pTitle" style="margin-bottom:4px;">Unwind the Lattice</div>'+
+    '<div class="pSub" style="margin-bottom:12px;">Refunds every point you have spent. '+
+    'Costs <b class="goldTxt">'+fmt(cost)+' gold</b>.</div>'+
+    '<div class="modalBtns"><button class="btn dan wide" id="respecYes">Unwind</button>'+
+    '<button class="btn gho" data-act="close">Cancel</button></div>';
+  $('modalWrap').classList.add('open');
+  $('respecYes').addEventListener('click', ()=>{ closeModal(); skRespec(); });
 });
 document.querySelectorAll('[data-close]').forEach(b=>{
   b.addEventListener('click', ()=>showTab('arena'));
@@ -10912,11 +11985,13 @@ function buildIntro(){
 }
 $('startBtn').addEventListener('click', ()=>{
   if(!pickedClass) return;
-  audioInit();
+  audioResume();
   S = freshState(pickedClass);
   $('intro').classList.add('gone');
   boot();
   sfx('level');
+  /* the context only unlocks on a real gesture, and this is the one */
+  setTimeout(musicStart, 260);
 });
 
 /* An in-app browser can report a viewport taller than what is actually on
