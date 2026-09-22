@@ -2623,33 +2623,171 @@ function noiseBuf(dur, curveP){
 /* ================================================================
    THE BAND
    ================================================================ */
+/* ================================================================
+   THE BAND — dungeon metal, not thrash
+
+   The first pass was technically metal and sounded RETRO, for four
+   reasons, all of which are fixed here:
+
+   1. It was bone dry. Nothing says "tracker module" like a distorted
+      guitar with no room around it. Everything now feeds a convolution
+      reverb built from a procedurally generated impulse — a long, DARK
+      tail, because a stone vault absorbs the top end. This single change
+      does more than the other three together.
+   2. Everything sat exactly on the grid at exactly the same velocity.
+      Machine timing is the sound of a sequencer, not a band. Every hit
+      now gets a few milliseconds of jitter and a few percent of level
+      variation.
+   3. It riffed CONSTANTLY. Dungeon music is mostly space — a drone, a
+      distant hit, a single chord left to ring for four bars — and the
+      riff is what arrives when something notices you. Exploration is now
+      its own sparse layer rather than the combat riff played quieter.
+   4. It was fast and tuned high. These are slower and tuned down, so the
+      weight comes from the low end rather than from note density.
+   ================================================================ */
 let BAND = null;
+/* A stone room, generated: noise with an exponential decay, then a
+   one-pole lowpass to take the glare off it. A bright tail reads as a
+   cathedral plate; a dark one reads as being underground. */
+function makeIR(seconds, decay, dark){
+  const len = Math.max(1, Math.floor(AC.sampleRate*seconds));
+  const buf = AC.createBuffer(2, len, AC.sampleRate);
+  for(let c=0;c<2;c++){
+    const d = buf.getChannelData(c);
+    for(let i=0;i<len;i++){
+      const t = i/len;
+      /* a couple of early reflections before the tail, which is what tells
+         the ear how big the room is */
+      let e = 1;
+      if(i > len*0.012 && i < len*0.02) e = 2.4;
+      if(i > len*0.035 && i < len*0.045) e = 1.8;
+      d[i] = (Math.random()*2-1) * Math.pow(1-t, decay) * e;
+    }
+    let y=0;
+    for(let i=0;i<len;i++){ y += (d[i]-y)*dark; d[i]=y*1.8; }
+  }
+  return buf;
+}
+/* humanisation. Without these two everything lands on the same sample with
+   the same level, and no amount of tone makes that sound played. */
+const hT = (t, a)=> t + (Math.random()-0.5)*(a==null?0.011:a);
+const hV = (v, a)=> v * (1 - Math.random()*(a==null?0.16:a));
+
 function bandInit(){
   if(BAND || !AC) return;
-  /* rhythm guitar: scooped mids, tight low end, doubled hard left/right */
+  /* ---- the room ---- */
+  const verb = AC.createConvolver();
+  verb.buffer = makeIR(4.2, 2.3, 0.19);
+  const verbHP = AC.createBiquadFilter();
+  verbHP.type='highpass'; verbHP.frequency.value=180;   /* keep mud out of the tail */
+  const verbOut = AC.createGain(); verbOut.gain.value = 0.9;
+  verb.connect(verbHP); verbHP.connect(verbOut); verbOut.connect(musBus);
+  const send = (node, amt)=>{ const g=AC.createGain(); g.gain.value=amt;
+                              node.connect(g); g.connect(verb); return g; };
+
   const mkGtr = (pan)=>{
-    const a = makeAmp({pre:9, k1:17, k2:7, mid:700, midDb:-6, hp:92, lp:4700, pres:5, vol:0.42});
+    const a = makeAmp({pre:9, k1:16, k2:6.5, mid:700, midDb:-5, hp:86, lp:4400, pres:4, vol:0.40});
     const p = AC.createStereoPanner ? AC.createStereoPanner() : null;
-    if(p){ p.pan.value = pan; a.out.connect(p); p.connect(musBus); }
-    else a.out.connect(musBus);
+    if(p){ p.pan.value = pan; a.out.connect(p); p.connect(musBus); send(p, 0.38); }
+    else { a.out.connect(musBus); send(a.out, 0.38); }
     return a;
   };
-  const gtrL = mkGtr(-0.62), gtrR = mkGtr(0.62);
-  /* lead: more gain, mids PUSHED instead of scooped so it cuts through the
-     rhythm track rather than sitting underneath it */
-  const lead = makeAmp({pre:12, k1:24, k2:9, mid:1100, midDb:+6, hp:150, lp:5200, pres:6, vol:0.30});
-  const dly = AC.createDelay(1.0); dly.delayTime.value = 0.28;
-  const dfb = AC.createGain(); dfb.gain.value = 0.26;
-  const dwet = AC.createGain(); dwet.gain.value = 0.22;
+  const gtrL = mkGtr(-0.58), gtrR = mkGtr(0.58);
+  const lead = makeAmp({pre:12, k1:22, k2:8, mid:1100, midDb:+5, hp:150, lp:5000, pres:5, vol:0.26});
+  const dly = AC.createDelay(1.2); dly.delayTime.value = 0.42;
+  const dfb = AC.createGain(); dfb.gain.value = 0.34;
+  const dwet = AC.createGain(); dwet.gain.value = 0.26;
   lead.out.connect(musBus);
   lead.out.connect(dly); dly.connect(dfb); dfb.connect(dly); dly.connect(dwet); dwet.connect(musBus);
-  /* bass: barely driven, and lowpassed hard. An overdriven bass eats the
-     kick and the whole mix turns to mud. */
-  const bass = makeAmp({pre:4, k1:6, k2:3, mid:420, midDb:+2, hp:30, lp:1500, pres:0, vol:0.78});
+  send(lead.out, 0.46); send(dwet, 0.30);
+  const bass = makeAmp({pre:4, k1:6, k2:3, mid:420, midDb:+2, hp:28, lp:1400, pres:0, vol:0.80});
   bass.out.connect(musBus);
-  const drums = AC.createGain(); drums.gain.value = 0.86; drums.connect(musBus);
-  BAND = {gtrL, gtrR, lead, bass, drums,
-          layers:{gtr:1, lead:0, dbl:0}};
+  const drums = AC.createGain(); drums.gain.value = 0.84; drums.connect(musBus);
+  send(drums, 0.30);
+
+  /* ---- the drone: the floor the whole thing stands on ----
+     Two oscillators a hair apart, through a slowly sweeping lowpass. It is
+     never a note you notice; it is the reason the room feels occupied. */
+  const droneGain = AC.createGain(); droneGain.gain.value = 0.0;
+  const droneFilt = AC.createBiquadFilter();
+  droneFilt.type='lowpass'; droneFilt.frequency.value=260; droneFilt.Q.value=3.2;
+  droneGain.connect(droneFilt); droneFilt.connect(musBus); send(droneFilt, 0.34);
+  const droneLfo = AC.createOscillator(), droneLfoA = AC.createGain();
+  droneLfo.frequency.value = 0.055; droneLfoA.gain.value = 150;
+  droneLfo.connect(droneLfoA); droneLfoA.connect(droneFilt.frequency);
+  droneLfo.start();
+
+  /* ---- the choir: a dark pad, slow in, slow out ---- */
+  const pad = AC.createGain(); pad.gain.value = 0.0;
+  const padFilt = AC.createBiquadFilter();
+  padFilt.type='lowpass'; padFilt.frequency.value=1250; padFilt.Q.value=0.8;
+  pad.connect(padFilt); padFilt.connect(musBus); send(padFilt, 0.58);
+
+  BAND = {gtrL, gtrR, lead, bass, drums, verb, verbOut, send,
+          droneGain, droneFilt, pad, padFilt, droneOscs:null};
+}
+/* the drone is one persistent voice, started once and left running */
+function droneSet(root, on){
+  if(!BAND || !AC) return;
+  if(!on && !BAND.droneOscs) return;
+  if(on && !BAND.droneOscs){
+    const oscs=[];
+    for(const [mul,det,type] of [[1,-7,'sawtooth'],[1,+7,'sawtooth'],
+                                 [0.5,0,'sine'],[1.4983,-4,'sawtooth']]){
+      const o=AC.createOscillator(); o.type=type;
+      o.frequency.value = root*mul*Math.pow(2,det/1200);
+      const g=AC.createGain(); g.gain.value = type==='sine'?0.55:0.26;
+      o.connect(g); g.connect(BAND.droneGain); o.start();
+      oscs.push({o,g});
+    }
+    BAND.droneOscs = oscs; BAND.droneRoot = root;
+  }
+  if(BAND.droneOscs && BAND.droneRoot !== root){
+    for(let i=0;i<BAND.droneOscs.length;i++){
+      const muls=[1,1,0.5,1.4983], dets=[-7,7,0,-4];
+      BAND.droneOscs[i].o.frequency.linearRampToValueAtTime(
+        root*muls[i]*Math.pow(2,dets[i]/1200), AC.currentTime+1.2);
+    }
+    BAND.droneRoot = root;
+  }
+  BAND.droneGain.gain.cancelScheduledValues(AC.currentTime);
+  BAND.droneGain.gain.setValueAtTime(BAND.droneGain.gain.value, AC.currentTime);
+  BAND.droneGain.gain.linearRampToValueAtTime(on?0.30:0.0, AC.currentTime+2.2);
+}
+/* a swelling chord. Long attack, longer release — it is atmosphere, so it
+   must never sound struck. */
+function padChord(f, t, dur, vel){
+  if(!AC || !BAND) return;
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime((vel||1)*0.20, t+dur*0.42);
+  g.gain.linearRampToValueAtTime(0.0001, t+dur);
+  g.connect(BAND.pad);
+  for(const [mul,det] of [[1,-6],[1,6],[1.4983,0],[2,-4],[2,5]]){
+    const o=AC.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(f*mul*Math.pow(2,det/1200), t);
+    const og=AC.createGain(); og.gain.value=0.22;
+    o.connect(og); og.connect(g); o.start(t); o.stop(t+dur+0.05);
+  }
+}
+/* a distant struck thing: the sound of a dungeon having a beyond */
+function farHit(t, f, vel){
+  if(!AC || !BAND) return;
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime((vel||1)*0.18, t+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+1.1);
+  const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500;
+  g.connect(lp);
+  /* mostly the reverb, barely any dry — that is what puts it far away */
+  const dry=AC.createGain(); dry.gain.value=0.22; lp.connect(dry); dry.connect(musBus);
+  BAND.send(lp, 1.0);
+  for(const [m,a] of [[1,1],[2.41,0.42],[4.07,0.2]]){
+    const o=AC.createOscillator(); o.type='triangle';
+    o.frequency.setValueAtTime(f*m,t);
+    const og=AC.createGain(); og.gain.value=a*0.5;
+    o.connect(og); og.connect(g); o.start(t); o.stop(t+1.2);
+  }
 }
 
 /* ---- guitar: a power chord through one amp ---- */
@@ -2809,68 +2947,6 @@ function drTom(t, f, vel){
 }
 
 /* ================================================================
-   THE SONGS
-   Each zone gets a key, a tempo and a two-bar riff on a sixteenth grid.
-   `rhy`: 0 rest · 1 palm-muted chug · 2 accented open chord
-   `deg`: scale degree for that sixteenth
-   The scales are the point. Phrygian and phrygian dominant have a
-   flat second sitting a semitone off the root, and that interval is
-   the entire sound of "something is wrong here". Locrian adds the
-   flat fifth on top of it, which is why the Voidspire riff is the
-   one that never resolves.
-   ================================================================ */
-const SCALES = {
-  aeolian:  [0,2,3,5,7,8,10],
-  phrygian: [0,1,3,5,7,8,10],
-  phryDom:  [0,1,4,5,7,8,10],
-  locrian:  [0,1,3,5,6,8,10],
-  harmMin:  [0,2,3,5,7,8,11],
-};
-const SONGS = {
-  /* E — a straight, driving mid-tempo riff. The zone you learn on. */
-  verdant:{ bpm:150, root:41.20, scale:'phrygian',
-    rhy:[2,0,1,1, 0,1,1,0, 2,0,1,1, 1,0,1,0,  2,0,1,1, 0,1,1,0, 2,0,1,0, 3,0,3,0],
-    deg:[0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 0,0,0,0, 3,0,3,0, 2,0,1,0],
-    lead:[0,-1,3,-1, 4,-1,3,2, 1,-1,0,-1, -1,-1,-1,-1],
-    kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,0,0,  1,0,0,1, 0,0,1,0, 1,0,1,0, 1,0,1,0],
-    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0]},
-  /* D# — the gallop. Fast, relentless, barely any rest in it. */
-  ashen:{ bpm:172, root:38.89, scale:'phryDom',
-    rhy:[2,0,1,1, 1,0,1,1, 1,0,1,1, 2,0,1,1,  2,0,1,1, 1,0,1,1, 3,0,1,1, 3,3,1,1],
-    deg:[0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,1,1,  0,0,0,0, 0,0,0,0, 4,0,4,4, 3,3,1,1],
-    lead:[0,1,4,-1, 5,4,1,0, 4,-1,5,-1, 6,5,4,-1],
-    kick:[1,0,1,1, 1,0,1,1, 1,0,1,1, 1,0,1,1,  1,0,1,1, 1,0,1,1, 1,1,1,1, 1,1,1,1],
-    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,1]},
-  /* D — half-time doom. Slow, enormous gaps, the ring is the riff. */
-  frost:{ bpm:126, root:36.71, scale:'aeolian',
-    rhy:[3,0,0,0, 0,0,1,0, 2,0,0,0, 1,0,1,0,  3,0,0,0, 0,0,1,1, 2,0,0,0, 2,0,1,0],
-    deg:[0,0,0,0, 0,0,0,0, 2,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0, 5,0,0,0, 3,0,2,0],
-    lead:[0,-1,-1,2, -1,3,-1,-1, 2,-1,0,-1, -1,-1,-1,-1],
-    kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 1,0,0,0,  1,0,0,0, 0,0,1,1, 1,0,0,0, 1,0,1,0],
-    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]},
-  /* C# — sludge. Dragging, dissonant, sits on the flat second. */
-  rotmire:{ bpm:112, root:34.65, scale:'phrygian',
-    rhy:[3,0,0,1, 0,0,1,0, 2,0,1,0, 0,1,0,0,  3,0,0,1, 0,1,0,0, 2,0,1,1, 1,0,1,0],
-    deg:[0,0,0,0, 0,0,1,0, 0,0,0,0, 1,1,0,0,  0,0,0,0, 0,0,0,0, 1,0,1,1, 2,0,1,0],
-    lead:[0,-1,1,-1, 0,-1,-1,-1, 3,-1,1,0, -1,-1,-1,-1],
-    kick:[1,0,0,1, 0,0,1,0, 1,0,1,0, 0,1,0,0,  1,0,0,1, 0,1,0,0, 1,0,1,1, 1,0,1,0],
-    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]},
-  /* C locrian — the fastest and the only one with no stable tonic. */
-  voidspire:{ bpm:188, root:32.70, scale:'locrian',
-    rhy:[2,1,1,1, 1,1,1,1, 2,1,1,1, 1,1,3,0,  2,1,1,1, 1,1,1,1, 3,0,3,0, 3,1,1,1],
-    deg:[0,0,0,0, 1,1,0,0, 0,0,0,0, 4,4,4,0,  0,0,0,0, 1,1,0,0, 4,0,3,0, 1,1,0,0],
-    lead:[0,1,3,4, 6,4,3,1, 0,-1,6,-1, 4,3,1,0],
-    kick:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1,  1,1,1,1, 1,1,1,1, 1,0,1,0, 1,1,1,1],
-    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,1]},
-};
-function noteHz(root, scaleName, deg, oct){
-  const sc = SCALES[scaleName] || SCALES.aeolian;
-  const n = ((deg % sc.length) + sc.length) % sc.length;
-  const o = Math.floor(deg/sc.length) + (oct||0);
-  return root * Math.pow(2, (sc[n] + o*12)/12);
-}
-
-/* ================================================================
    THE SCHEDULER
    setTimeout is far too jittery to place a sixteenth note. The clock is
    AudioContext.currentTime; a timer only wakes up often enough to queue
@@ -2880,7 +2956,11 @@ const MUS = {
   on:false, zone:null, song:null, step:0, next:0, timer:null,
   intensity:'explore', want:'explore', fade:0, started:false,
 };
-const MUS_MIX = {explore:0.30, combat:0.46, boss:0.58};
+const MUS_MIX = {explore:0.34, combat:0.50, boss:0.60};
+/* how present the drone is at each intensity. It never stops — it just gets
+   buried once there are guitars on top of it, which is what makes the fight
+   feel like it arrived somewhere rather than started from nothing. */
+const MUS_DRONE = {explore:0.34, combat:0.16, boss:0.10};
 function musicStart(){
   if(!S || !S.opts || S.opts.music===false) return;
   audioResume();
@@ -2892,10 +2972,12 @@ function musicStart(){
   MUS.step = 0;
   MUS.next = AC.currentTime + 0.12;
   MUS.on = true;
+  droneSet(MUS.song.root, true);
   musSetIntensity(MUS.want, true);
   MUS.timer = setInterval(musTick, 25);
 }
 function musicStop(fade){
+  if(BAND && AC) droneSet(BAND.droneRoot||41.2, false);
   if(musBus && AC) musBus.gain.linearRampToValueAtTime(0.0001, AC.currentTime + (fade||0.6));
   if(MUS.timer){ clearInterval(MUS.timer); MUS.timer=null; }
   MUS.on = false;
@@ -2907,6 +2989,12 @@ function musSetIntensity(k, now){
   musBus.gain.cancelScheduledValues(AC.currentTime);
   musBus.gain.setValueAtTime(musBus.gain.value, AC.currentTime);
   musBus.gain.linearRampToValueAtTime(vol, AC.currentTime + (now?0.05:1.4));
+  if(BAND && BAND.droneGain){
+    const dv = MUS_DRONE[k]==null ? 0.3 : MUS_DRONE[k];
+    BAND.droneGain.gain.cancelScheduledValues(AC.currentTime);
+    BAND.droneGain.gain.setValueAtTime(BAND.droneGain.gain.value, AC.currentTime);
+    BAND.droneGain.gain.linearRampToValueAtTime(dv, AC.currentTime + (now?0.2:2.0));
+  }
   MUS.intensity = k;
 }
 /* the zone changed: swap songs on the next bar so it does not sound broken */
@@ -2916,6 +3004,9 @@ function musSetZone(z){
   MUS.zone = z;
   MUS.song = SONGS[z] || SONGS.verdant;
   MUS.step = 0;
+  /* the drone slides to the new key rather than cutting, so travelling
+     between zones is a modulation instead of a splice */
+  droneSet(MUS.song.root, true);
 }
 function musTick(){
   if(!AC || !MUS.on || !BAND) return;
@@ -2938,49 +3029,154 @@ function musTick(){
     MUS.next += s16;
   }
 }
+/* ================================================================
+   THE SONGS
+
+   Two completely different pieces of music per zone, not one piece at
+   two volumes. EXPLORE is atmosphere: a drone, a swelling chord, three
+   drum hits in six seconds and the occasional struck thing somewhere
+   you cannot see. COMBAT is the riff. That contrast — near silence,
+   then a wall — is the whole reason a dungeon feels like a dungeon.
+
+   Tuned DOWN and slowed DOWN against the first pass. Weight should come
+   from the bottom octave and from what is left ringing, not from how
+   many notes get played per second.
+
+   Scales: phrygian and phrygian dominant put a flat second a semitone
+   off the root, which is the sound of something being wrong. Locrian
+   adds the flat fifth, so the Voidspire riff has no stable tonic to
+   resolve to at all.
+   ================================================================ */
+const SCALES = {
+  aeolian:  [0,2,3,5,7,8,10],
+  phrygian: [0,1,3,5,7,8,10],
+  phryDom:  [0,1,4,5,7,8,10],
+  locrian:  [0,1,3,5,6,8,10],
+  harmMin:  [0,2,3,5,7,8,11],
+};
+/* rhy: 0 rest · 1 palm mute · 2 accent · 3 LET RING */
+const SONGS = {
+  /* E — the one you learn on. Slow, open, more sad than threatening. */
+  verdant:{ bpm:96, root:41.20, scale:'phrygian',
+    amb:{ pulse:[0,11,20,26], tom:[11,26], far:[6,23], farF:[196,147],
+          pad:[[0,0,26],[16,2,14]], stab:[[8,0,10],[24,2,8]] },
+    rhy:[3,0,0,1, 0,1,0,0, 2,0,1,0, 0,0,1,0,  3,0,0,1, 0,1,0,1, 2,0,1,0, 3,0,0,0],
+    deg:[0,0,0,0, 0,0,0,0, 1,0,1,0, 0,0,0,0,  0,0,0,0, 0,0,0,0, 3,0,3,0, 2,0,0,0],
+    lead:[0,-1,-1,2, -1,-1,3,-1, 2,-1,0,-1, -1,-1,-1,-1],
+    kick:[1,0,0,1, 0,0,1,0, 1,0,0,0, 0,1,0,0,  1,0,0,1, 0,0,1,0, 1,0,1,0, 1,0,0,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0]},
+  /* D — heat. The gallop survives, but with air between the phrases. */
+  ashen:{ bpm:112, root:36.71, scale:'phryDom',
+    amb:{ pulse:[0,10,16,27], tom:[10,27], far:[5,21], farF:[165,110],
+          pad:[[0,0,24],[18,1,12]], stab:[[12,1,9],[28,0,6]] },
+    rhy:[2,0,1,1, 0,0,1,1, 2,0,1,0, 3,0,0,0,  2,0,1,1, 0,0,1,1, 3,0,0,0, 2,1,1,0],
+    deg:[0,0,0,0, 0,0,0,0, 1,0,1,0, 4,0,0,0,  0,0,0,0, 0,0,0,0, 5,0,0,0, 3,3,1,0],
+    lead:[0,-1,1,-1, 4,-1,-1,-1, 5,4,1,-1, 0,-1,-1,-1],
+    kick:[1,0,1,1, 0,0,1,1, 1,0,1,0, 1,0,0,0,  1,0,1,1, 0,0,1,1, 1,0,0,0, 1,1,1,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0]},
+  /* C — the slowest and the coldest. Almost all of this one is the ring. */
+  frost:{ bpm:84, root:32.70, scale:'aeolian',
+    amb:{ pulse:[0,14,24], tom:[14], far:[7,19,28], farF:[262,175,131],
+          pad:[[0,0,30],[16,5,14]], stab:[[10,0,12]] },
+    rhy:[3,0,0,0, 0,0,1,0, 2,0,0,0, 0,0,0,0,  3,0,0,0, 0,1,0,0, 2,0,0,1, 3,0,0,0],
+    deg:[0,0,0,0, 0,0,0,0, 2,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0, 5,0,0,0, 3,0,0,0],
+    lead:[0,-1,-1,-1, 2,-1,-1,-1, 3,-1,2,-1, 0,-1,-1,-1],
+    kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0,  1,0,0,0, 0,1,0,0, 1,0,0,1, 1,0,0,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]},
+  /* B — the lowest root in the game. Sludge: everything drags behind. */
+  rotmire:{ bpm:76, root:30.87, scale:'phrygian',
+    amb:{ pulse:[0,13,22], tom:[13,22], far:[8,26], farF:[123,92],
+          pad:[[0,0,28],[17,1,13]], stab:[[6,0,11],[22,1,9]] },
+    rhy:[3,0,0,1, 0,0,0,0, 2,0,1,0, 0,1,0,0,  3,0,0,1, 0,1,0,0, 2,0,1,1, 3,0,0,0],
+    deg:[0,0,0,0, 0,0,0,0, 1,0,1,0, 0,0,0,0,  0,0,0,0, 0,0,0,0, 1,0,1,1, 2,0,0,0],
+    lead:[0,-1,-1,1, -1,-1,0,-1, -1,3,-1,1, 0,-1,-1,-1],
+    kick:[1,0,0,1, 0,0,0,0, 1,0,1,0, 0,1,0,0,  1,0,0,1, 0,1,0,0, 1,0,1,1, 1,0,0,0],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]},
+  /* C# locrian — the fastest, and the only one that never resolves. */
+  voidspire:{ bpm:132, root:34.65, scale:'locrian',
+    amb:{ pulse:[0,9,16,25], tom:[9,25], far:[4,13,29], farF:[233,156,117],
+          pad:[[0,0,22],[16,4,14]], stab:[[12,4,8],[26,1,6]] },
+    rhy:[2,0,1,1, 1,0,1,0, 2,0,1,1, 3,0,0,0,  2,0,1,1, 1,0,1,1, 3,0,3,0, 2,1,1,1],
+    deg:[0,0,0,0, 1,0,1,0, 0,0,0,0, 4,0,0,0,  0,0,0,0, 1,0,1,1, 4,0,3,0, 1,1,0,0],
+    lead:[0,1,-1,4, -1,6,4,-1, 3,1,-1,0, -1,-1,6,-1],
+    kick:[1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,0,0,  1,0,1,1, 1,0,1,1, 1,0,1,0, 1,1,1,1],
+    snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,0,  0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,1]},
+};
+function noteHz(root, scaleName, deg, oct){
+  const sc = SCALES[scaleName] || SCALES.aeolian;
+  const n = ((deg % sc.length) + sc.length) % sc.length;
+  const o = Math.floor(deg/sc.length) + (oct||0);
+  return root * Math.pow(2, (sc[n] + o*12)/12);
+}
+
 function musStep(i, t, s16, sp){
-  const hot = MUS.intensity!=='explore';
-  const boss = MUS.intensity==='boss';
+  if(MUS.intensity==='explore') return stepAmbient(i, t, s16, sp);
+  return stepRiff(i, t, s16, sp, MUS.intensity==='boss');
+}
+/* ---- EXPLORE: atmosphere. Three drum hits in six seconds, a chord that
+   takes two bars to arrive, and something struck a long way off. ---- */
+function stepAmbient(i, t, s16, sp){
+  const A = sp.amb, root = sp.root;
+  if(A.pad) for(const [at,deg,len] of A.pad)
+    if(i===at) padChord(noteHz(root, sp.scale, deg, 1), t, s16*len, 1);
+  if(A.stab) for(const [at,deg,len] of A.stab)
+    if(i===at){
+      /* one chord, left to ring into the room. No fifth: a bare root and
+         octave is more ambiguous, and ambiguity is the point out here. */
+      const f = noteHz(root, sp.scale, deg, 1);
+      gtrChord(BAND.gtrL, f, hT(t), s16*len, false, hV(0.52), false);
+      gtrChord(BAND.gtrR, f, hT(t+0.018), s16*len, false, hV(0.48), false);
+      bassNote(f*0.5, t, s16*len*0.8, 0.7);
+    }
+  if(A.pulse.includes(i)){
+    if(A.tom && A.tom.includes(i)) drTom(hT(t), 96+((i*7)%40), hV(0.52));
+    else drKick(hT(t), hV(0.62));
+  }
+  /* the far hits are deliberately unreliable: a sound you can predict
+     stops being a place and becomes a loop */
+  if(A.far.includes(i) && Math.random()<0.55){
+    const k = A.far.indexOf(i);
+    farHit(hT(t, 0.05), (A.farF && A.farF[k]) || 160, hV(0.9, 0.4));
+  }
+  if(i===0 && Math.random()<0.4) drHat(t+s16*2, true, 0.12);
+}
+/* ---- COMBAT / BOSS: the riff ---- */
+function stepRiff(i, t, s16, sp, boss){
   const root = sp.root;
-  /* ---- guitars ---- */
   const r = sp.rhy[i];
   if(r){
     const f = noteHz(root, sp.scale, sp.deg[i], 1);
     const mute = r===1;
-    const dur = r===3 ? s16*6 : r===2 ? s16*2.4 : s16*1.6;
-    const vel = r===1 ? 0.78 : 1.0;
-    /* double-tracked: the same part played twice and panned apart. It is the
-       oldest trick in metal production and it is what makes one guitar
-       sound like a wall. */
-    gtrChord(BAND.gtrL, f, t,          dur, mute, vel);
-    gtrChord(BAND.gtrR, f, t + 0.011,  dur, mute, vel*0.96);
-    if(i%2===0 || r>1) bassNote(f*0.5, t, Math.min(dur, s16*3), r===1?0.8:1);
+    /* 3 is LET RING — the chord that holds while the room decays around
+       it, which is what stops this being a wall of sixteenths */
+    const dur = r===3 ? s16*11 : r===2 ? s16*3.2 : s16*1.7;
+    const vel = r===1 ? 0.74 : r===3 ? 1.0 : 0.95;
+    gtrChord(BAND.gtrL, f, hT(t),        dur, mute, hV(vel));
+    gtrChord(BAND.gtrR, f, hT(t+0.014),  dur, mute, hV(vel, 0.20));
+    if(i%2===0 || r>1) bassNote(f*0.5, hT(t,0.006), Math.min(dur, s16*4), r===1?0.8:1);
+    if(r===3) padChord(f, t, s16*12, 0.55);
   }
-  /* ---- drums ---- */
-  if(sp.kick[i]) drKick(t, i%8===0?1:0.86);
-  if(sp.snare[i]) drSnare(t, 0.95);
-  /* the hats only show up once the fight starts; in explore the kit is
-     bare, which is what leaves room for the riff */
-  if(hot && i%2===0) drHat(t, false, i%4===0?0.95:0.62);
-  if(boss && i%2===1) drHat(t, false, 0.4);
-  if(i===0) drCrash(t, hot?0.95:0.55);
+  if(sp.kick[i])  drKick(hT(t), hV(i%8===0?1:0.88));
+  if(sp.snare[i]) drSnare(hT(t), hV(0.95));
+  /* hats only once it is properly loud, and never on every eighth: a
+     constant tick is the single most sequenced-sounding thing a kit can do */
+  if(boss && i%2===0) drHat(hT(t,0.008), false, hV(i%4===0?0.85:0.5));
+  else if(i%4===0 && Math.random()<0.7) drHat(hT(t,0.008), false, hV(0.55));
+  if(i===0) drCrash(t, boss?0.95:0.68);
   if(boss && i===16) drCrash(t, 0.7);
-  /* double kick under the boss: the sixteenths between the written kicks */
-  if(boss && !sp.kick[i] && i%2===1) drKick(t, 0.55);
-  /* a tom fill into the top of the loop */
-  if(hot && i>=29){ drTom(t, [200,168,140][i-29], 0.7); }
-  /* ---- lead ---- */
-  if(hot && i%2===0){
-    const li = (i/2)|0;
-    const d = sp.lead[li % sp.lead.length];
-    if(d>=0){
+  if(boss && !sp.kick[i] && i%2===1) drKick(hT(t), hV(0.5));
+  /* tribal toms into the top of the loop rather than a drum-machine fill */
+  if(i>=28 && i%2===0) drTom(hT(t), [150,124,104][(i-28)/2|0]||104, hV(0.66));
+  /* lead: quarter notes, not eighths, and only on the boss does it double */
+  if(i%4===0){
+    const d = sp.lead[(i/2)|0 % sp.lead.length];
+    if(d!=null && d>=0){
       const oct = boss ? 3 : 2;
-      leadNote(noteHz(root, sp.scale, d, oct), t, s16*(boss?1.8:2.6), boss?0.95:0.72);
-      /* tremolo picking on the boss: the same note hammered in sixteenths */
-      if(boss) leadNote(noteHz(root, sp.scale, d, oct), t+s16, s16*1.2, 0.7);
+      leadNote(noteHz(root, sp.scale, d, oct), hT(t), s16*(boss?3.4:5.0), boss?0.9:0.6);
     }
   }
 }
+
 /* Driven from the game loop. Intensity follows the fight, not the zone:
    the band picks up when something is actually hunting you. */
 let _musT = 0;
