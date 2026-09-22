@@ -782,6 +782,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .dangerTrack{flex:1;height:5px;border-radius:3px;background:#161b29;overflow:hidden;}
 .dangerTrack > i{display:block;height:100%;border-radius:3px;}
 .zBtnRow{display:flex;gap:7px;margin-top:10px;}
+.zRoster{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:8px;}
+.zrLbl{font-size:8.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
+  color:var(--dim2);}
+.zrName{font-size:10px;font-weight:700;color:#ffd7ae;padding:2px 7px;border-radius:5px;
+  background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.34);}
 
 /* ============================================================
    LOOT REVEAL — card flip
@@ -1986,10 +1991,19 @@ const ZONES = [
     E('vh_crow','Rift Crow','flyer','#4a4a58','#23232e',13,0.6,0.95,1.7,'orbiter'),
     E('vh_sap','Sap Bloater','blob','#8fbf4a','#4e6b22',19,1.2,1.3,0.8,'bomber'),
     E('vh_stag','Antlered Stalker','beast','#a89060','#60502e',20,1.35,1.15,1.35,'charger'),
+    E('vh_hound','Thicket Hound','beast','#6a7a52','#3a4630',16,0.8,1.05,1.55,'charger'),
+    E('vh_moth','Gloom Moth','flyer','#c8b0e0','#6a5a8a',13,0.6,0.9,1.8,'orbiter',{shoot:1,ps:200,srng:190}),
+    E('vh_hopper','Bog Hopper','blob','#7aa85c','#3e5a28',18,1.1,1.2,1.15,'charger'),
+    E('vh_shade','Root Shade','ghost','#5a7a6a','#26382e',16,0.9,1.1,1.4,'chase'),
+    E('vh_grub','Loam Grub','worm','#9a8a62','#54492e',19,1.25,1.0,0.9,'chase'),
   ],
   elites:[
     E('vh_e1','Grovewarden','golem','#3f8c4a','#1d4a25',30,5.5,1.8,0.8,'chase',{rank:1}),
     E('vh_e2','Bramble Matron','spike','#7a5fb0','#3c2d60',28,4.6,1.65,1.05,'shooter',{rank:1,shoot:1,ps:280,srng:270}),
+    E('vh_e3','Stagmaw','beast','#c4a86a','#6e5c32',30,5.0,1.75,1.30,'charger',{rank:1,aff:['frenzied']}),
+    E('vh_e4','The Hollow Choir','ghost','#cfe8d0','#4a7a58',29,4.8,1.70,1.15,'shooter',{rank:1,shoot:1,ps:300,srng:280,aff:['warded']}),
+    E('vh_e5','Barkfather','golem','#6a5a34','#342c18',33,6.2,1.80,0.72,'chase',{rank:1,aff:['shielded']}),
+    E('vh_e6','Widow of the Vines','spike','#8a4a6a','#44203a',27,4.4,1.70,1.20,'shooter',{rank:1,shoot:1,ps:300,srng:260,aff:['vampiric']}),
   ],
   boss: E('vh_b','Alpha of the Hollow','beast','#d6c88a','#7a6a3a',46,26,2.4,1.05,'boss',
     {rank:2,patterns:['charge','howl','leapslam']}),
@@ -2010,10 +2024,19 @@ const ZONES = [
     E('aw_bomb','Pyroclast','blob','#ffd257','#c06010',19,1.1,2.1,0.95,'bomber'),
     E('aw_knight','Scorched Knight','knight','#9a6a3a','#4a2f18',22,2.2,1.6,1.0,'charger'),
     E('aw_vent','Vent Crawler','spike','#d0703a','#6a3418',16,0.9,1.1,1.4,'chase'),
+    E('aw_drake','Cinder Drake','flyer','#ff9a4a','#a04a10',17,1.2,1.4,1.7,'charger'),
+    E('aw_maw','Magma Maw','worm','#e04a22','#701806',22,1.7,1.45,1.05,'chase'),
+    E('aw_brute','Slagbrute','knight','#7a4a2a','#3a2010',25,2.4,1.55,0.95,'chase'),
+    E('aw_eye','Ashen Eye','eye','#ffb060','#8a4410',18,1.3,1.30,1.10,'shooter',{shoot:1,ps:340,srng:280}),
+    E('aw_wretch','Ash Wretch','spike','#8a7a6a','#403830',15,0.85,1.05,1.5,'chase'),
   ],
   elites:[
     E('aw_e1','Forgefiend','golem','#ff7a28','#8a2f08',32,7.5,2.1,0.85,'chase',{rank:1}),
     E('aw_e2','Cinder Archon','ghost','#ffd88a','#c06018',30,6.4,1.95,1.1,'shooter',{rank:1,shoot:1,ps:380,srng:310}),
+    E('aw_e3','Emberlord','beast','#ff6a2a','#8a2606',31,7.0,2.05,1.35,'charger',{rank:1,aff:['frenzied']}),
+    E('aw_e4','The Bellows','golem','#5a4030','#2a1c12',35,8.4,2.15,0.70,'chase',{rank:1,aff:['shielded']}),
+    E('aw_e5','Cinderwake','worm','#ffa040','#9a4408',30,6.8,2.00,1.15,'shooter',{rank:1,shoot:1,ps:400,srng:300,aff:['volatile']}),
+    E('aw_e6','Pyre Warden','knight','#c07a3a','#5e3410',29,6.6,2.10,1.10,'charger',{rank:1,aff:['vampiric']}),
   ],
   boss: E('aw_b','Magmaw, the Unbanked','worm','#ff5a1f','#8a1f04',52,42,3.0,0.95,'boss',
     {rank:2,patterns:['spiral','slam','eruption']}),
@@ -2034,10 +2057,19 @@ const ZONES = [
     E('fr_berg','Bergspawn','blob','#6ab8d8','#265a78',26,3.0,1.5,0.7,'splitter'),
     E('fr_bomb','Hoarfrost Bulb','blob','#c8ecff','#5a9ac0',20,1.5,2.4,0.95,'bomber'),
     E('fr_eye','Glacial Eye','eye','#5ad0ff','#1a5a80',19,2.0,1.6,1.15,'shooter',{shoot:1,ps:420,srng:340}),
+    E('fr_stalker','Rime Stalker','beast','#9ac8de','#3a6a82',19,1.7,1.50,1.60,'charger'),
+    E('fr_crawler','Glacier Crawler','spike','#b0dcf0','#3d7292',17,1.3,1.35,1.35,'chase'),
+    E('fr_wurm','Ice Wurm','worm','#7ac0e0','#265a7a',23,2.3,1.55,1.05,'shooter',{shoot:1,ps:380,srng:300}),
+    E('fr_thrall','Frozen Thrall','knight','#8aa8c0','#3a4e62',23,2.6,1.60,0.95,'chase'),
+    E('fr_mote','Frost Mote','flyer','#dff2ff','#8ab8d0',12,0.8,1.15,1.95,'orbiter'),
   ],
   elites:[
     E('fr_e1','Permafrost Tyrant','golem','#9ae8ff','#1f6a92',34,10,2.4,0.8,'chase',{rank:1}),
     E('fr_e2','Whitewitch','ghost','#e0f8ff','#5a9ac8',31,8.6,2.2,1.2,'shooter',{rank:1,shoot:1,ps:440,srng:360}),
+    E('fr_e3','Hoarfang','beast','#c8e8f8','#4a7e98',32,9.2,2.30,1.40,'charger',{rank:1,aff:['frenzied']}),
+    E('fr_e4','The Shatterer','golem','#a0c8e0','#345a76',36,11,2.45,0.72,'chase',{rank:1,aff:['volatile']}),
+    E('fr_e5','Pale Oracle','eye','#d8f2ff','#5f9ec0',30,8.8,2.25,1.10,'shooter',{rank:1,shoot:1,ps:460,srng:370,aff:['warded']}),
+    E('fr_e6','Glacierborn','blob','#86c8e4','#2f6a8c',34,10,2.35,0.78,'splitter',{rank:1,aff:['shielded']}),
   ],
   boss: E('fr_b','Hoarking Sereth','knight','#bfe9ff','#2a6a92',54,62,3.6,1.0,'boss',
     {rank:2,patterns:['blizzard','shatter','charge']}),
@@ -2058,10 +2090,19 @@ const ZONES = [
     E('rm_croc','Silt Crocodile','beast','#5a6a3a','#28301a',30,4.8,2.4,1.3,'charger'),
     E('rm_nest','Rotnest','blob','#8a6a2a','#42320f',28,4.2,1.7,0.5,'splitter'),
     E('rm_eye','Fenwatcher','eye','#c0ff4a','#4a6a10',20,2.8,2.0,1.15,'shooter',{shoot:1,ps:460,srng:360}),
+    E('rm_lurker','Silt Lurker','beast','#4e5e34','#232c18',27,4.0,2.20,1.35,'charger'),
+    E('rm_sunken','Sunken Husk','knight','#5a6a58','#242e24',24,3.4,2.05,1.00,'chase'),
+    E('rm_bloom','Rot Bloom','blob','#9ac83a','#48660e',21,2.6,2.60,1.00,'bomber'),
+    E('rm_wretch','Mire Wretch','ghost','#8aa860','#3e5028',20,2.7,2.00,1.30,'orbiter',{shoot:1,ps:420,srng:330}),
+    E('rm_serp','Fen Serpent','worm','#6a8a3a','#2e3e18',25,3.6,2.25,1.25,'chase'),
   ],
   elites:[
     E('rm_e1','Fenlord','blob','#9ad03a','#3a5a10',36,15,3.0,0.8,'chase',{rank:1}),
     E('rm_e2','Sporequeen','spike','#d07adf','#5a1f78',33,13,2.8,1.15,'shooter',{rank:1,shoot:1,ps:470,srng:380}),
+    E('rm_e3','The Drowned King','knight','#6a7e6a','#2a362a',35,15,3.10,1.10,'charger',{rank:1,aff:['vampiric']}),
+    E('rm_e4','Grand Fenwatcher','eye','#d4ff6a','#587a14',33,14,2.95,1.05,'shooter',{rank:1,shoot:1,ps:500,srng:390,aff:['warded']}),
+    E('rm_e5','Thornmother','spike','#b06a3a','#563018',34,14,2.90,1.15,'chase',{rank:1,aff:['frenzied']}),
+    E('rm_e6','Bogmaw','worm','#7a9a42','#36461c',36,16,3.05,1.00,'chase',{rank:1,aff:['shielded']}),
   ],
   boss: E('rm_b','Mother Rotmire','worm','#a8d84a','#3a5210',58,95,4.4,0.9,'boss',
     {rank:2,patterns:['spew','burrow','swarm']}),
@@ -2082,16 +2123,62 @@ const ZONES = [
     E('vs_worm','Spire Worm','worm','#b06ade','#4a1f78',26,7.0,3.1,1.3,'shooter',{shoot:1,ps:540,srng:380}),
     E('vs_bomb','Collapse Mote','blob','#ff6ac0','#7a1060',20,3.4,4.2,1.15,'bomber'),
     E('vs_seer','Fatebreaker','ghost','#d0c0ff','#5a4aa0',23,6.0,2.9,1.35,'orbiter',{shoot:1,ps:560,srng:420}),
+    E('vs_hound','Null Hound','beast','#7a68b0','#342a5e',20,4.8,2.75,1.75,'charger'),
+    E('vs_weaver','Rift Weaver','spike','#a878e8','#4e2a88',19,4.4,2.65,1.45,'shooter',{shoot:1,ps:540,srng:390}),
+    E('vs_maw','Spire Maw','worm','#8a5ac0','#3e2470',25,6.6,3.00,1.20,'chase'),
+    E('vs_unwrit','The Unwritten','ghost','#b8a8e0','#4a3c7e',21,5.2,2.80,1.50,'chase'),
+    E('vs_frag','Drifting Fragment','flyer','#cfb6ff','#6c52a8',14,2.6,2.10,2.10,'orbiter'),
   ],
   elites:[
     E('vs_e1','Herald of the Wound','knight','#c0a0ff','#4a2a9a',38,26,3.8,1.0,'charger',{rank:1}),
     E('vs_e2','Eye of Unmaking','eye','#ff4a7a','#8a0f30',36,23,3.6,1.1,'shooter',{rank:1,shoot:1,ps:600,srng:430}),
+    E('vs_e3','The Unnamed','ghost','#c0b0ff','#4a3a90',37,25,3.70,1.45,'charger',{rank:1,aff:['warded']}),
+    E('vs_e4','Spireborn Colossus','golem','#6858a0','#2c2450',40,29,3.95,0.68,'chase',{rank:1,aff:['shielded']}),
+    E('vs_e5','Fracture','spike','#d0a0ff','#5e3aa8',35,24,3.65,1.25,'shooter',{rank:1,shoot:1,ps:620,srng:400,aff:['volatile']}),
+    E('vs_e6','The Thing That Counts','eye','#ff6aa0','#8a1a48',36,26,3.80,1.05,'shooter',{rank:1,shoot:1,ps:640,srng:420,aff:['vampiric']}),
   ],
   boss: E('vs_b','THE RIFT ITSELF','eye','#ff3a6a','#5a0a20',64,180,5.2,0.95,'boss',
     {rank:2,patterns:['barrage','collapse','summon']}),
 },
 ];
 const ZONE_BY_ID = {}; ZONES.forEach(z=>ZONE_BY_ID[z.id]=z);
+
+/* ================================================================
+   ROSTER — which of the zone's residents turned up this run
+
+   A zone now has 15 regulars and 6 elites, but it does not field all of
+   them at once. Every time you enter it draws a SUBSET: nine or ten
+   regulars and three or four elites. Two runs through the same zone are
+   fought against different things.
+
+   This is why the pools were widened rather than just made longer. Six
+   elite camps drawing from two elite definitions meant meeting the same
+   two enemies three times each, every run; six definitions drawn three
+   or four at a time makes a camp a question again.
+   ================================================================ */
+let ROSTER = {enemies:[], elites:[], zone:null};
+function shuffled(a){
+  const r = a.slice();
+  for(let i=r.length-1;i>0;i--){ const j=Math.random()*(i+1)|0; const t=r[i]; r[i]=r[j]; r[j]=t; }
+  return r;
+}
+function rollRoster(){
+  const z = ZONE_BY_ID[S.zone];
+  ROSTER.zone = S.zone;
+  ROSTER.enemies = shuffled(z.enemies).slice(0, Math.random()<0.5 ? 9 : 10);
+  ROSTER.elites  = shuffled(z.elites ).slice(0, Math.random()<0.5 ? 3 : 4);
+}
+/* Fall back to the full pool if the roster has not been rolled for this
+   zone yet — a spawn before generation must never hand pick() an empty
+   array. */
+function rEnemies(){
+  return (ROSTER.zone===S.zone && ROSTER.enemies.length)
+    ? ROSTER.enemies : ZONE_BY_ID[S.zone].enemies;
+}
+function rElites(){
+  return (ROSTER.zone===S.zone && ROSTER.elites.length)
+    ? ROSTER.elites : ZONE_BY_ID[S.zone].elites;
+}
 
 /* ================================================================
    RELIC RECIPES — crafted uniques with real mechanical buffs
@@ -3938,6 +4025,16 @@ function makeFoe(def, rank, hx, hy){
   };
   if(def.ai==='boss') f.spd = 24+def.spd*22;
   f.affix = rollAffixes(f.rank);
+  /* A named elite keeps its signature. Rolling purely at random meant the
+     Whitewitch was a different fight every time you met her, which is the
+     opposite of learning a roster. Her other affixes still roll. */
+  if(def.aff && def.aff.length){
+    for(let i=def.aff.length-1;i>=0;i--){
+      const k = def.aff[i];
+      if(f.affix.indexOf(k)<0) f.affix.unshift(k);
+    }
+    f.affix = f.affix.slice(0, f.rank===2 ? 3 : 2);
+  }
   if(hasAffix(f,'shielded')){
     /* a flat fraction of its own pool, so a shield is always the same
        proportion of the fight rather than trivial on a boss */
@@ -3991,17 +4088,17 @@ function spawnPack(pk){
     /* A lone wanderer in the gaps between camps, so the walk has incident
        without the pile-on. Its pack holds exactly one member, so aggroPack has
        nobody to wake — a roamer can never drag a camp onto you. */
-    add(pick(z.enemies),0,0,0);
+    add(pick(rEnemies()),0,0,0);
     const f = pk.members[0];
     f.aggroR = 175; f.leashR = 900; f.roam = 1;
   } else if(pk.kind==='boss'){
     add(z.boss,2,0,0);
-    for(const [ox,oy] of ringPos(2,96)) add(pick(z.enemies),0,ox,oy);
+    for(const [ox,oy] of ringPos(2,96)) add(pick(rEnemies()),0,ox,oy);
   } else if(pk.kind==='elite'){
-    add(pick(z.elites),1,0,0);
-    for(const [ox,oy] of ringPos(rint(2,3),84)) add(pick(z.enemies),0,ox,oy);
+    add(pick(rElites()),1,0,0);
+    for(const [ox,oy] of ringPos(rint(2,3),84)) add(pick(rEnemies()),0,ox,oy);
   } else {
-    for(const [ox,oy] of ringPos(rint(3,5),74)) add(pick(z.enemies),0,ox,oy);
+    for(const [ox,oy] of ringPos(rint(3,5),74)) add(pick(rEnemies()),0,ox,oy);
   }
   applyCampArch(pk, z, add);
   pk.cleared = false; pk.respawn = 0;
@@ -4024,8 +4121,8 @@ function applyCampArch(pk, z, add){
   } else if(A==='siege'){
     /* a back line that holds its ground and a screen in front of it. You
        have to break the screen or flank, instead of walking up the middle. */
-    const shooters = z.enemies.filter(e=>e.shoot);
-    const back = shooters.length ? shooters : z.enemies;
+    const shooters = rEnemies().filter(e=>e.shoot);
+    const back = shooters.length ? shooters : rEnemies();
     for(let i=0;i<3;i++){
       const a2 = -1.57 + (i-1)*0.5;
       add(pick(back),0, Math.cos(a2)*150, Math.sin(a2)*150);
@@ -4035,14 +4132,14 @@ function applyCampArch(pk, z, add){
   } else if(A==='ritual'){
     /* a channeler buffing everything around it. Kill it first or fight the
        whole camp at 35% more damage. */
-    add(pick(z.enemies),0,0,0);
+    add(pick(rEnemies()),0,0,0);
     const c = pk.members[pk.members.length-1];
     c.ritual = 1; c.max *= 1.7; c.hp = c.max; c.spd *= 0.45; c.aggroR = 300;
     pk.ritualist = c;
   } else if(A==='nest'){
     /* a spawner that keeps feeding the fight until it is destroyed, so the
        camp punishes you for grinding the adds instead of the source */
-    add(pick(z.enemies),0,0,0);
+    add(pick(rEnemies()),0,0,0);
     const n = pk.members[pk.members.length-1];
     n.nest = 1; n.spd = 0; n.max *= 2.2; n.hp = n.max; n.r *= 1.35;
     /* first brood comes fast: a nest that sits quiet for three seconds after
@@ -4101,6 +4198,8 @@ function buildZoneWorld(){
   bossRef=null; nearChest=null;
   $('bossBar').classList.remove('on'); $('prompt').style.display='none';
 
+  /* the cast for this run, before a single camp is placed */
+  rollRoster();
   /* terrain first: every placement below has to dodge it */
   buildTerrain();
 
@@ -4343,7 +4442,7 @@ function spawnObjective(){
     }
     spot = spot || {x:WORLD.w*0.5, y:WORLD.h*0.35};
     pk.x=spot.x; pk.y=spot.y;
-    const f = makeFoe(pick(z.elites), 1, spot.x, spot.y);
+    const f = makeFoe(pick(rElites()), 1, spot.x, spot.y);
     f.pack = pk; pk.members.push(f); foes.push(f);
     f.isQuarry = 1; f.aggroR = 300; f.leashR = 1400;
     f.max *= 1.9; f.hp = f.max;
@@ -4359,14 +4458,14 @@ function spawnObjective(){
       }
       spot = spot || {x:rnd(300,WORLD.w-300), y:rnd(300,WORLD.h-300)};
       pk.x=spot.x; pk.y=spot.y;
-      const f = makeFoe(pick(z.enemies), 1, spot.x, spot.y);
+      const f = makeFoe(pick(rEnemies()), 1, spot.x, spot.y);
       f.pack = pk; pk.members.push(f); foes.push(f);
       f.isAnchor = 1; f.spd = 0; f.r *= 1.5;
       f.max *= 2.6; f.hp = f.max; f.aggroR = 330; f.affix = ['warded'];
       f.rareName = 'Rift Anchor';
       /* a couple of wardens, so an anchor is a fight and not a door */
       for(let k=0;k<2;k++){
-        const g = makeFoe(pick(z.enemies),0, spot.x+rnd(-70,70), spot.y+rnd(-70,70));
+        const g = makeFoe(pick(rEnemies()),0, spot.x+rnd(-70,70), spot.y+rnd(-70,70));
         g.pack = pk; pk.members.push(g); foes.push(g);
       }
     }
@@ -5653,7 +5752,7 @@ function bossAI(f,dt,nx,ny,d){
     if(f.patT<=0){
       const z=ZONE_BY_ID[S.zone];
       for(let i=0;i<4;i++){
-        const c=makeFoe(pick(z.enemies),0);
+        const c=makeFoe(pick(rEnemies()),0);
         const a=Math.random()*6.283;
         c.x=f.x+Math.cos(a)*60; c.y=f.y+Math.sin(a)*60;
         burst(c.x,c.y,z.accent,10,150,0.4,2.4);
@@ -9135,30 +9234,50 @@ const RIG_HI_ID = {
   vh_husk:'oozeSlime',      vh_crow:'flyerCorvid',   vh_sap:'oozeBulb',
   vh_stag:'wolfThornback',  vh_e1:'golemStone',      vh_e2:'arachSpider',
   vh_b:'wolfRevenant',
+  vh_hound:'wolfDire',      vh_moth:'flyerSwarm',    vh_hopper:'oozeBulb',
+  vh_shade:'wraithShade',   vh_grub:'serpGrub',
+  vh_e3:'wolfThornback',    vh_e4:'wraithWitch',     vh_e5:'golemStone',
+  vh_e6:'arachThorn',
   /* Ashen Waste */
   aw_imp:'arachShard',      aw_hound:'wolfDire',     aw_ashen:'wraithShade',
   aw_slag:'golemSlag',      aw_ember:'flyerSwarm',   aw_char:'oozeSlime',
   aw_salam:'serpGrub',      aw_bomb:'oozeBulb',      aw_knight:'humanPlate',
   aw_vent:'arachSpider',    aw_e1:'golemSlag',       aw_e2:'wraithWitch',
   aw_b:'serpWyrm',
+  aw_drake:'flyerCorvid',   aw_maw:'serpWyrm',       aw_brute:'humanPlate',
+  aw_eye:'eyeWatcher',      aw_wretch:'arachShard',
+  aw_e3:'wolfDire',         aw_e4:'golemSlag',       aw_e5:'serpWyrm',
+  aw_e6:'humanPlate',
   /* Frostbite Rift */
   fr_wraith:'wraithShade',  fr_golem:'golemRime',    fr_hound:'wolfDire',
   fr_shard:'arachShard',    fr_yeti:'wolfDire',      fr_seer:'humanSeer',
   fr_swarm:'flyerSwarm',    fr_berg:'oozeNest',      fr_bomb:'oozeBulb',
   fr_eye:'eyeWatcher',      fr_e1:'golemRime',       fr_e2:'wraithWitch',
   fr_b:'humanPlate',
+  fr_stalker:'wolfDire',    fr_crawler:'arachShard', fr_wurm:'serpWyrm',
+  fr_thrall:'humanDrowned', fr_mote:'flyerSwarm',
+  fr_e3:'wolfRevenant',     fr_e4:'golemRime',       fr_e5:'eyeWatcher',
+  fr_e6:'oozeNest',
   /* Rotmire Swamp */
   rm_toad:'oozeSlime',      rm_leech:'serpGrub',     rm_horror:'oozeSlime',
   rm_spore:'arachThorn',    rm_drown:'humanDrowned', rm_fly:'flyerSwarm',
   rm_witch:'wraithWitch',   rm_croc:'wolfThornback', rm_nest:'oozeNest',
   rm_eye:'eyeFen',          rm_e1:'oozeSlime',       rm_e2:'arachThorn',
   rm_b:'serpWyrm',
+  rm_lurker:'wolfThornback',rm_sunken:'humanDrowned',rm_bloom:'oozeBulb',
+  rm_wretch:'wraithShade',  rm_serp:'serpGrub',
+  rm_e3:'humanPlate',       rm_e4:'eyeFen',          rm_e5:'arachThorn',
+  rm_e6:'serpWyrm',
   /* Voidspire */
   vs_stalk:'wraithShade',   vs_shard:'arachShard',   vs_golem:'golemStone',
   vs_eye:'eyeWatcher',      vs_swarm:'flyerSwarm',   vs_knight:'humanPlate',
   vs_blob:'oozeNest',       vs_worm:'serpWyrm',      vs_bomb:'oozeBulb',
   vs_seer:'wraithWitch',    vs_e1:'humanPlate',      vs_e2:'eyeWatcher',
   vs_b:'eyeWatcher',
+  vs_hound:'wolfRevenant',  vs_weaver:'arachShard',  vs_maw:'serpWyrm',
+  vs_unwrit:'wraithShade',  vs_frag:'flyerSwarm',
+  vs_e3:'wraithWitch',      vs_e4:'golemStone',      vs_e5:'arachShard',
+  vs_e6:'eyeWatcher',
 };
 /* The purpose-built rigs cost roughly 3-4x the triangles of the shared ones at
    the SAME draw call, since each foe is one SkinnedMesh either way. Draw calls
@@ -11917,10 +12036,19 @@ function renderZones(){
         '<div class="zDesc">'+z.desc+'</div>'+
         '<div class="zStats">'+
           '<span>Level <b>'+z.lo+'–'+(z.hi>90?'∞':z.hi)+'</b></span>'+
-          '<span>Enemies <b>'+(z.enemies.length+z.elites.length+1)+'</b></span>'+
+          '<span>Bestiary <b>'+(z.enemies.length+z.elites.length+1)+'</b></span>'+
           '<span>Cleared <b>'+fmt(k)+'</b></span>'+
           '<span>Boss <b style="color:'+z.accent+'">'+z.boss.n+'</b></span>'+
         '</div>'+
+        /* Rotation you cannot see is rotation that might as well not be
+           happening. The zone you are standing in names the elites that
+           actually turned up; the others say how deep the pool is. */
+        (cur && ROSTER.zone===z.id && ROSTER.elites.length
+          ? '<div class="zRoster"><span class="zrLbl">Prowling now</span>'+
+            ROSTER.elites.map(e=>'<span class="zrName">'+e.n+'</span>').join('')+
+            '</div>'
+          : '<div class="zRoster"><span class="zrLbl">'+z.elites.length+
+            ' elites in the pool · 3–4 appear per run</span></div>')+
         '<div class="dangerRow"><span class="dLbl">Threat</span>'+
           '<div class="dangerTrack"><i style="width:'+Math.round(danger*100)+'%;background:'+dcol+'"></i></div>'+
           '<span class="dLbl" style="color:'+dcol+'">'+
