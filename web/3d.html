@@ -104,6 +104,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .hudRow{display:flex;align-items:center;gap:8px;}
 #hudZone{font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);}
 #hudKills{margin-left:auto;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;}
+/* the danger readout: what the bolt next to it actually bought you */
+#hudSurge{margin-top:3px;pointer-events:auto;}
+#hudSurgeTxt{font-size:9px;line-height:1.3;letter-spacing:.1px;color:var(--dim2);
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#hudSurgeTxt span{color:var(--dim2);margin:0 2px;}
+#hudSurgeTxt b{color:#ffd85e;font-weight:800;}
+#hudSurgeTxt i{font-style:normal;color:#ff9a8a;}
+#hudSurgeTxt em{font-style:normal;color:var(--xp);}
 #hudGold{font-size:12px;color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;}
 
 .bar{position:relative;height:9px;border-radius:5px;background:#1a1f30;overflow:hidden;
@@ -463,6 +471,30 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   background:rgba(255,255,255,.015);border-style:dashed;border-color:var(--line);
 }
 .gcell.slotEmpty::before,.gcell.slotEmpty::after{display:none;}
+/* compare arrow, top-left of a bag cell when Compare is on */
+.gcell .gcmp{
+  position:absolute;top:2px;left:3px;font-size:11px;font-weight:900;line-height:1;
+  text-shadow:0 1px 3px #000,0 0 5px rgba(0,0,0,.9);
+}
+.gcell .gcmp.up{color:var(--xp);}
+.gcell .gcmp.dn{color:var(--hp);}
+.gcell .gcmp.eq{color:var(--dim2);font-size:10px;}
+.chip.on{background:linear-gradient(180deg,#c99534,#9a6f1e);border-color:#e8b44a;color:#1a1408;}
+
+/* side-by-side comparison table in the item sheet */
+.cmpBlock{padding:8px 10px 10px;}
+.cmpTbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+.cmpTbl th{font-size:8.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dim2);text-align:right;padding:0 0 5px;}
+.cmpTbl th:first-child{text-align:left;}
+.cmpTbl td{font-size:11.5px;padding:2.5px 0;}
+.cmpTbl td.cl{color:var(--dim);text-align:left;}
+.cmpTbl td.cv{text-align:right;font-weight:700;color:var(--dim);padding-left:10px;width:19%;}
+.cmpTbl td.cv.cn{color:var(--txt);}
+.cmpTbl td.cd{text-align:right;font-weight:800;padding-left:10px;width:21%;}
+.cmpNote{font-size:10px;color:var(--dim2);line-height:1.5;margin-top:9px;
+  padding-top:8px;border-top:1px solid var(--line);}
+.cmpNote b{color:var(--txt);}
 
 /* ============================================================
    EQUIPMENT DOLL
@@ -825,6 +857,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
         <span id="hudGold">0g</span>
         <span id="hudKills">0 kills</span>
       </div>
+      <div class="hudRow" id="hudSurge" style="display:none;"><span id="hudSurgeTxt"></span></div>
     </div>
 
     <div id="bossBar">
@@ -862,6 +895,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
           <button class="chip" data-filter="weapon">Weapons</button>
           <button class="chip" data-filter="armor">Armor</button>
           <button class="chip" data-filter="trinket">Trinkets</button>
+          <button class="chip" id="chipCompare" title="Show how each item compares to what you have on">⇄ Compare</button>
           <span id="bagCount">0/40</span>
         </div>
         <div id="bagGrid"></div>
@@ -2429,7 +2463,9 @@ function drawGlow(x,y,col,size,alpha){
    clear until it respawns, so you choose your fights and get breathing
    room between them.
    ================================================================ */
-const WORLD = {w:1600, h:1900};
+/* Seed values only: buildZoneWorld() derives the real size from the screen
+   every time a zone is built. Change it THERE, not here. */
+const WORLD = {w:2400, h:2850};
 let cam = {x:0, y:0};
 let packs = [], props = [], chests = [], nearChest = null, nearObelisk = null;
 
@@ -2581,7 +2617,7 @@ const TERRAIN_STYLE = {
   verdant:  {rock:'#9ba49b', liquid:'#2f6f8a', spray:'#8fd6e8', wade:0.58, dps:0,     cross:'wood',  glow:0, gloss:0},
   ashen:    {rock:'#6e6560', liquid:'#ff6a22', spray:'#ffc46a', wade:0.74, dps:0.055, cross:'stone', glow:1, gloss:0},
   frost:    {rock:'#c6dcec', liquid:'#8fd0e8', spray:'#e8f6ff', wade:0.44, dps:0,     cross:'ice',   glow:0, gloss:1},
-  rotmire:  {rock:'#6d6a46', liquid:'#16200d', spray:'#9ab84f', wade:0.38, dps:0,     cross:'plank', glow:0, gloss:1},
+  rotmire:  {rock:'#6d6a46', liquid:'#1d3311', spray:'#9ab84f', wade:0.38, dps:0,     cross:'plank', glow:0, gloss:1},
   voidspire:{rock:'#7061a0', liquid:'#8b5cf6', spray:'#d8c2ff', wade:0.62, dps:0.030, cross:'stone', glow:1, gloss:0},
 };
 function terrStyle(){ return TERRAIN_STYLE[S.zone] || TERRAIN_STYLE.verdant; }
@@ -2713,7 +2749,7 @@ const TERRAIN_GEN = {
     tLiquid({y:riverY, step:58, r:[72,106], wob:0.0030, amp:62, spread:74});
     tCross([0.31,0.69], riverY, 0.0030, 62, 132, 360);
     tLand([[0.17,0.60],[0.82,0.55],[0.44,0.19],[0.62,0.86]], 'mesa', [132,186], [215,300], 4);
-    tBoulders(7, [38,62], [52,92]);
+    tBoulders(11, [38,62], [52,92]);
     return {lanes, y0:0.24, y1:0.62, laneHalf:132};
   },
 
@@ -2731,7 +2767,7 @@ const TERRAIN_GEN = {
     tCross([0.20,0.55,0.85], H_*0.70, 0.0034, 52, 118, 300);
     tCross([0.34,0.74],      H_*0.55, 0.0026, 70, 118, 300);
     tLand([[0.14,0.63],[0.86,0.60],[0.50,0.14],[0.30,0.86]], 'cone', [150,210], [150,215], 5);
-    tBoulders(9, [34,58], [44,86]);
+    tBoulders(14, [34,58], [44,86]);
     return {lanes, y0:0.22, y1:0.60, laneHalf:118};
   },
 
@@ -2746,7 +2782,7 @@ const TERRAIN_GEN = {
     tLiquid({y:meltY, step:50, r:[58,92], wob:0.0042, amp:84, spread:66});
     tCross([0.26,0.62], meltY, 0.0042, 84, 126, 330);
     tLand([[0.16,0.58],[0.84,0.62],[0.55,0.18],[0.38,0.87]], 'spire', [96,140], [330,470], 5);
-    tBoulders(8, [40,66], [60,120]);
+    tBoulders(12, [40,66], [60,120]);
     return {lanes, y0:0.26, y1:0.64, laneHalf:126};
   },
 
@@ -2787,7 +2823,7 @@ const TERRAIN_GEN = {
     tCross([0.40,0.80], H_*0.24, 0.0031, 58, 112, 290);
     tLand([[0.15,0.62],[0.85,0.58],[0.50,0.10],[0.34,0.88],[0.70,0.86]],
           'obelisk', [78,116], [380,540], 4);
-    tBoulders(8, [36,60], [70,150]);
+    tBoulders(12, [36,60], [70,150]);
     return {lanes, y0:0.28, y1:0.66, laneHalf:112};
   },
 };
@@ -3083,13 +3119,16 @@ function announceAggro(f){
 /* ---------- zone generation ---------- */
 function buildZoneWorld(){
   const z = ZONE_BY_ID[S.zone];
-  /* Double the linear size of the zone (4x the area) so camps have real
-     distance between them and the walk between fights is exploration, not a
-     hallway. */
   /* Sized off the SCREEN, not the zoomed world viewport — deriving it from W/H
-     meant zooming the camera in silently shrank every zone. */
-  WORLD.w = Math.round(clamp(SW*6.8, 2700, 4200));
-  WORLD.h = Math.round(clamp(SH*5.8, 3300, 5000));
+     meant zooming the camera in silently shrank every zone.
+     Now 50% longer on BOTH axes than the previous pass (x6.8/x5.8), which is
+     2.25x the area. Everything in the terrain generators is a fraction of
+     these so the layouts scale for free; the counts below — camps, roamers,
+     props, boulders — are what had to move with the area, or a bigger zone is
+     just an emptier one, which is how a big map ends up feeling worse than a
+     small one. */
+  WORLD.w = Math.round(clamp(SW*10.2, 4050, 6300));
+  WORLD.h = Math.round(clamp(SH*8.7,  4950, 7500));
   buildBackdrop();
 
   foes.length=0; packs.length=0; props.length=0; chests.length=0;
@@ -3106,11 +3145,19 @@ function buildZoneWorld(){
   cam.x = clamp(P.x-W/2, 0, Math.max(0,WORLD.w-W));
   cam.y = clamp(py(P.y)-H/2, 0, Math.max(0,py(WORLD.h)-H));
 
-  for(let i=0;i<420;i++){
+  /* The kits are three to four times the triangles of the four shapes they
+     replace. That is affordable on Sharp and Balanced and it is not on
+     Battery, so the BATTERY tier thins the scatter rather than downgrading
+     what each prop looks like — a sparser wood still reads as a wood; a wood
+     made of cones does not. */
+  const SCATTER = gfxTier==='low' ? 480 : gfxTier==='med' ? 760 : 950;
+  for(let i=0;i<SCATTER;i++){
     const roll = Math.random();
-    /* 0 rock · 1 crystal · 2 grass tuft · 3 tree — weighted so grass carpets the
-       ground and trees are landmarks */
-    const k = roll<0.20?0 : roll<0.27?1 : roll<0.88?2 : 3;
+    /* 0 rock · 1 crystal · 2 ground cover · 3 tree. The MIX is per zone: a bog
+       is mostly reeds and mangroves, a scorched basin is mostly ash and bare
+       obsidian. Same scatter, different place. */
+    const MX = (SCENERY[S.zone]||SCENERY.verdant).mix;
+    const k = roll<MX[0] ? 0 : roll<MX[0]+MX[1] ? 1 : roll<MX[0]+MX[1]+MX[2] ? 2 : 3;
     const x=rnd(24,WORLD.w-24), y=rnd(24,WORLD.h-24);
     /* scenery sprouting out of a cliff face is the tell that the terrain was
        bolted on afterwards, so props yield to it */
@@ -3123,9 +3170,12 @@ function buildZoneWorld(){
       k, a:rnd(0,6.283), s:rnd(0.85,1.15)});
   }
   /* reeds on the waterline, so the river has a bank instead of an edge */
+  let reedBudget = gfxTier==='low' ? 110 : 240;
   for(const wd of terrain.water){
+    if(reedBudget<=0) break;
     if(Math.random()<0.45) continue;
     const n = 2+(Math.random()*3|0);
+    reedBudget -= n;
     for(let i=0;i<n;i++){
       const a2=rnd(0,6.283), d=wd.r*rnd(0.86,1.12);
       const rx=wd.x+Math.cos(a2)*d, ry=wd.y+Math.sin(a2)*d;
@@ -3162,8 +3212,8 @@ function buildZoneWorld(){
   /* minD is the guaranteed gap between camps — roughly two screens, so
      pulling one can never bleed into its neighbour and you get real downtime
      between fights. fromPlayer keeps the entrance quiet. */
-  for(let i=0;i<7+z.tier;i++) packs.push(makePack('normal', place(620, 760)));
-  for(let i=0;i<3;i++)        packs.push(makePack('elite',  place(680, 1100)));
+  for(let i=0;i<14+z.tier*2;i++) packs.push(makePack('normal', place(620, 760)));
+  for(let i=0;i<6;i++)          packs.push(makePack('elite',  place(680, 1100)));
   /* boss sits as far from the entrance as the layout allows */
   let best=null, bd=-1;
   for(let t=0;t<240;t++){
@@ -3206,7 +3256,7 @@ function buildZoneWorld(){
     }
     return best || {x:WORLD.w/2, y:WORLD.h/2};
   };
-  const nRoam = 4+z.tier;
+  const nRoam = 8+z.tier*2;
   for(let i=0;i<nRoam;i++) packs.push(makePack('roam', placeRoamer()));
 
   for(const pk of packs) spawnPack(pk);
@@ -3221,7 +3271,7 @@ function buildZoneWorld(){
   }
   obelisk = {x:ox, y:oy, r:30, t:0, flare:0};
   spawnObjective();
-  toast(icoKeyHTML(objective.ico,0,'inl')+' '+objective.n);
+  toast(icoKeyHTML(objective.ico,0,'inl')+' '+objective.n, true);
   sceneReady = false;            /* scenery, ground and chests rebuild next frame */
 }
 /* Roamers ride the pack machinery for leashing and respawn, but they are not
@@ -3252,6 +3302,23 @@ function surgeGoldMul(){ return 1 + surge.lvl*0.30; }
 /* extra rarity pushes on every drop roll, and a flat bonus to the gear chance */
 function surgeLuck(){   return surge.lvl*0.34; }
 function surgeDropMul(){ return 1 + surge.lvl*0.22; }
+/* What a step of danger actually buys and costs, generated from the same
+   multipliers the game uses — so the readout can never drift from the maths.
+   `lvl` defaults to where you are; pass lvl+1 to preview the next step. */
+function surgeTerms(lvl){
+  const L = lvl==null ? surge.lvl : lvl;
+  const pc = v => (v>=0?'+':'')+Math.round(v*100)+'%';
+  return {
+    lvl:L,
+    cost:[['Enemy HP', pc(L*0.16)], ['Enemy dmg', pc(L*0.10)]],
+    gain:[['Gold', pc(L*0.30)], ['Drops', pc(L*0.22)], ['Rarity', pc(L*0.34)]],
+  };
+}
+function surgeLine(lvl){
+  const t = surgeTerms(lvl);
+  return t.cost.map(r=>r[0]+' '+r[1]).join(' · ') + '  ⟶  ' +
+         t.gain.map(r=>r[0]+' '+r[1]).join(' · ');
+}
 function raiseSurge(n, why){
   const before = surge.lvl;
   surge.lvl = Math.min(SURGE_MAX, surge.lvl + (n||1));
@@ -3406,16 +3473,20 @@ function fct(x,y,txt,cls){
 /* Capped at 3 and de-duplicated — boss "calls for aid" spam used to bury the
    whole arena (and the action buttons) under a stack of identical toasts. */
 let lastToastMsg='', lastToastEl=null, lastToastN=0;
-function toast(msg){
+/* `html` is opt-in. Every other caller passes a plain string and must keep
+   going through textContent; the objective banner is the one that carries a
+   drawn icon, and without this it printed the raw <img> tag on screen. */
+function toast(msg, html){
   const box = $('toasts');
-  if(msg===lastToastMsg && lastToastEl && lastToastEl.isConnected){
+  if(!html && msg===lastToastMsg && lastToastEl && lastToastEl.isConnected){
     lastToastN++; lastToastEl.textContent = msg+' ×'+(lastToastN+1); return;
   }
   while(box.children.length>=3) box.firstChild.remove();
   const t = document.createElement('div');
-  t.className='toast'; t.textContent = msg;
+  t.className='toast';
+  if(html) t.innerHTML = msg; else t.textContent = msg;
   box.appendChild(t);
-  lastToastMsg=msg; lastToastEl=t; lastToastN=0;
+  lastToastMsg=html?'':msg; lastToastEl=html?null:t; lastToastN=0;
   setTimeout(()=>{ t.remove(); if(lastToastEl===t){ lastToastMsg=''; lastToastEl=null; } }, 2450);
 }
 
@@ -4111,7 +4182,7 @@ function update(dt){
     /* resolve terrain BEFORE the world clamp, so a shove out of a cliff can
        never leave you parked outside the playable box */
     terrainPush(P, P.r);
-    P.x = clamp(P.x, 18, WORLD.w-18); P.y = clamp(P.y, 18, WORLD.h-18);
+    P.x = clamp(P.x, P.r+2, WORLD.w-P.r-2); P.y = clamp(P.y, P.r+2, WORLD.h-P.r-2);
     /* wake while wading, tinted to whatever you are standing in */
     const wading = inWater(P.x,P.y);
     if(parts.length<200 && wading && (ix||iy||terrain.style.dps) && Math.random()<dt*16)
@@ -4284,11 +4355,19 @@ function update(dt){
       continue;
     }
 
+    /* An enemy's reach IS its body: contact damage lands when the two discs
+       touch. Chasers used to run until the collision solver stopped them,
+       which put them inside the camera target — worst on elites and the
+       round ones, whose radius is large enough to swallow you. */
+    const reach = f.r + P.r + (f.rank===2 ? 8 : f.rank ? 5 : 3);
     if(ai==='chase' || ai==='splitter'){
-      f.x+=nx*sp*dt; f.y+=ny*sp*dt;
+      if(d > reach){ f.x+=nx*sp*dt; f.y+=ny*sp*dt; }
+      /* settled in: circle slowly rather than freeze, so a pack fans out
+         around you instead of stacking on the same point */
+      else { f.x += -ny*sp*0.26*dt; f.y += nx*sp*0.26*dt; }
     }
     else if(ai==='charger'){
-      if(f.st===0){ if(d>150){ f.x+=nx*sp*dt; f.y+=ny*sp*dt; } else { f.st=1; f.patT=0.5; f.tele=1; } }
+      if(f.st===0){ if(d>Math.max(150,reach)){ f.x+=nx*sp*dt; f.y+=ny*sp*dt; } else { f.st=1; f.patT=0.5; f.tele=1; } }
       else if(f.st===1){ f.patT-=dt; if(f.patT<=0){ f.st=2; f.patT=0.4; f.tele=0; f.cvx=nx*sp*3.4; f.cvy=ny*sp*3.4; } }
       else if(f.st===2){ f.patT-=dt; f.x+=f.cvx*dt; f.y+=f.cvy*dt; if(f.patT<=0){ f.st=3; f.patT=0.55; } }
       else { f.patT-=dt; if(f.patT<=0) f.st=0; }
@@ -4310,7 +4389,8 @@ function update(dt){
       if(f.def.shoot){ f.patT-=dt; if(f.patT<=0&&f.stun<=0){ f.patT=2.2; foeShoot(f,nx,ny); } }
     }
     else if(ai==='bomber'){
-      f.x+=nx*sp*dt; f.y+=ny*sp*dt;
+      /* the bomber is the one thing that SHOULD close all the way */
+      if(d > reach*0.85){ f.x+=nx*sp*dt; f.y+=ny*sp*dt; }
       if(d<52 && !f.fuse){ f.fuse=0.55; }
       if(f.fuse){ f.fuse-=dt; f.tele=1; if(f.fuse<=0){ detonate(f); f.hp=0; killFoe(f); continue; } }
     }
@@ -4334,7 +4414,7 @@ function update(dt){
     }
 
     /* contact damage */
-    if(ai!=='shooter' && d < f.r+P.r+2 && f.icd<=0 && !P.dead){
+    if(ai!=='shooter' && d < f.r+P.r+12 && f.icd<=0 && !P.dead){
       f.icd = 0.85; f.an.atk = 0;
       const bite = f.dmg*(f.rank===2?1.35:1)*(f.buffed?1.35:1);
       hurtPlayer(bite, f.lvl, f);
@@ -4359,7 +4439,10 @@ function update(dt){
       if(ad > arena){ const k = arena/ad; f.x = f.home.x+ax*k; f.y = f.home.y+ay*k; }
     }
     terrainPush(f, f.r);
-    f.x = clamp(f.x,-40,WORLD.w+40); f.y = clamp(f.y,-40,WORLD.h+40);
+    /* Clamped by the body's own RADIUS, not by a slack margin. The boundary
+       walls are built just outside the playable rect, so the old -40..w+40
+       let a foe stand half inside the wall mesh. */
+    f.x = clamp(f.x, f.r, WORLD.w-f.r); f.y = clamp(f.y, f.r, WORLD.h-f.r);
   }
 
   /* ---- soft separation ----
@@ -4379,6 +4462,23 @@ function update(dt){
       const aw = a.rank?0.22:1, bw = b.rank?0.22:1;
       a.x-=px*aw; a.y-=py*aw; b.x+=px*bw; b.y+=py*bw;
     }
+  }
+
+  /* ---- the player's own space ----
+     The stop-distance above governs the APPROACH; this is the backstop for
+     everything that arrives some other way — a completed charge, a knockback,
+     a spawn, a boss leap. The foe yields and the player never does: shoving
+     the camera target on contact is what made melee packs feel like being
+     pushed around the arena. */
+  if(P && !P.dead) for(const f of foes){
+    if(f.born < (f.warp||0.42)) continue;
+    const dx=f.x-P.x, dy=f.y-P.y, min=f.r+P.r, d2=dx*dx+dy*dy;
+    if(d2>=min*min) continue;
+    const d = Math.sqrt(d2);
+    if(d < 1e-3){ f.x += min; }
+    else { const k=(min-d)/d; f.x += dx*k; f.y += dy*k; }
+    terrainPush(f, f.r);
+    f.x = clamp(f.x, f.r, WORLD.w-f.r); f.y = clamp(f.y, f.r, WORLD.h-f.r);
   }
 
   /* ---- animation ----
@@ -4498,8 +4598,21 @@ function update(dt){
   if(nearChest){ pr.textContent = 'OPEN CHEST'; pr.style.display='block'; }
   else if(nearObelisk){
     const z = ZONE_BY_ID[S.zone];
-    pr.textContent = surge.lvl>=SURGE_MAX ? 'RIFT SATED'
-      : 'OFFER '+obeliskCost()+' '+MATS[z.mats[1]].n.toUpperCase();
+    if(surge.lvl>=SURGE_MAX) pr.textContent = 'RIFT SATED';
+    else {
+      /* name the price AND the deal, so feeding the obelisk is an informed
+         choice rather than a lever you pull to see what happens */
+      const nx2 = surgeTerms(surge.lvl+1), cu = surgeTerms(surge.lvl);
+      const d = (a,b2)=>{
+        const pa=parseInt(a[1]), pb=parseInt(b2[1]);
+        return a[0]+' +'+(pa-pb)+'%';
+      };
+      pr.innerHTML = 'OFFER '+obeliskCost()+' '+MATS[z.mats[1]].n.toUpperCase()+
+        '<span style="display:block;font-size:9px;font-weight:600;letter-spacing:.3px;'+
+        'margin-top:3px;color:var(--dim);">to DANGER '+nx2.lvl+' &middot; '+
+        '<span style="color:#ff9a8a">'+nx2.cost.map((r,i)=>d(r,cu.cost[i])).join(', ')+'</span>'+
+        ' &middot; <span style="color:var(--xp)">'+nx2.gain.map((r,i)=>d(r,cu.gain[i])).join(', ')+'</span></span>';
+    }
     pr.style.display='block';
   } else pr.style.display='none';
 
@@ -8234,6 +8347,554 @@ function PLAYER_PAL(cls){
 }
 
 /* ================================================================
+   SCENERY KITS — a set of props per zone, not one set recoloured
+
+   Every zone drew the same four objects: a dodecahedron rock, a cone
+   crystal, a cone tuft and a cylinder-plus-three-blobs tree, tinted by
+   the zone accent. Five zones, one kit — which is why they all read as
+   the same clearing in different lighting.
+
+   The cost problem this solves: detail normally means more meshes, and
+   more meshes means more DRAW CALLS, which is the thing that actually
+   hurts on integrated graphics. So each prop is authored as a parts
+   list and MERGED into a single vertex-coloured geometry, exactly the
+   way the creature rigs are. A fifteen-piece mangrove is then one
+   InstancedMesh and one draw call — the same as the four-piece tree it
+   replaces. Triangles go up; the number of things the CPU has to
+   dispatch does not.
+
+   Authoring space: y=0 is the ground, and 1 unit = the prop's own
+   radius, so a tree is written about 4.5 tall and scales with pr.r.
+   ================================================================ */
+
+/* Build one geometry out of {shape,w,h,d,w2,det,sy,rot,x,y,z,c} parts.
+   Same part vocabulary as the rigs, minus the skinning. */
+/* Deliberately NOT cached. buildZoneScene disposes every prop geometry and
+   material when the zone changes, so a cached one would come back destroyed
+   the second time you visited a zone. Merging four props costs microseconds
+   and only happens on travel. */
+function mergeProp(parts){
+  const geoms=[], cols=[];
+  for(const p of parts){
+    let q;
+    if(p.shape==='sphere')    q = new THREE.IcosahedronGeometry(p.w/2, p.det==null?0:p.det);
+    else if(p.shape==='cone') q = new THREE.ConeGeometry(p.w/2, p.h, p.seg||5);
+    else if(p.shape==='cyl')  q = new THREE.CylinderGeometry(p.w/2, (p.w2==null?p.w:p.w2)/2, p.h, p.seg||6);
+    else if(p.shape==='dod')  q = new THREE.DodecahedronGeometry(p.w/2, 0);
+    else if(p.shape==='tet')  q = new THREE.TetrahedronGeometry(p.w/2, 0);
+    else if(p.shape==='oct')  q = new THREE.OctahedronGeometry(p.w/2, p.det==null?0:p.det);
+    else                      q = new THREE.BoxGeometry(p.w, p.h, p.d==null?p.w:p.d);
+    if(p.sy) q.scale(1, p.sy, 1);
+    if(p.sx) q.scale(p.sx, 1, 1);
+    if(p.rot){ if(p.rot[0]) q.rotateX(p.rot[0]); if(p.rot[1]) q.rotateY(p.rot[1]);
+               if(p.rot[2]) q.rotateZ(p.rot[2]); }
+    q.translate(p.x||0, p.y||0, p.z||0);
+    geoms.push(q); cols.push(p.c);
+  }
+  let total=0, idxTotal=0;
+  for(const q of geoms){ total += q.attributes.position.count;
+    idxTotal += q.index ? q.index.count : q.attributes.position.count; }
+  const pos=new Float32Array(total*3), nor=new Float32Array(total*3),
+        col=new Float32Array(total*3), idx=new Uint32Array(idxTotal);
+  let o=0, io=0;
+  geoms.forEach((q,gi)=>{
+    const c = new THREE.Color(cols[gi]);
+    const pa=q.attributes.position.array, na=q.attributes.normal.array;
+    const cnt=q.attributes.position.count;
+    for(let i=0;i<cnt;i++){
+      pos[(o+i)*3]=pa[i*3]; pos[(o+i)*3+1]=pa[i*3+1]; pos[(o+i)*3+2]=pa[i*3+2];
+      nor[(o+i)*3]=na[i*3]; nor[(o+i)*3+1]=na[i*3+1]; nor[(o+i)*3+2]=na[i*3+2];
+      col[(o+i)*3]=c.r; col[(o+i)*3+1]=c.g; col[(o+i)*3+2]=c.b;
+    }
+    if(q.index){ const ia=q.index.array; for(let i=0;i<ia.length;i++) idx[io++]=ia[i]+o; }
+    else { for(let i=0;i<cnt;i++) idx[io++]=o+i; }
+    o += cnt; q.dispose();
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('normal',   new THREE.BufferAttribute(nor,3));
+  g.setAttribute('color',    new THREE.BufferAttribute(col,3));
+  g.setIndex(new THREE.BufferAttribute(idx,1));
+  return g;
+}
+/* one material per merged prop; all the colour lives in the geometry. Fresh
+   instances for the same disposal reason as above. */
+function propMat(){ return new THREE.MeshStandardMaterial({
+  vertexColors:true, roughness:0.95, metalness:0.02, flatShading:true}); }
+function propMatGlow(em){ return new THREE.MeshStandardMaterial({
+  vertexColors:true, roughness:0.45, metalness:0.12, flatShading:true,
+  emissive:new THREE.Color(em||'#241d33'), emissiveIntensity:1.0}); }
+
+/* ---------------- shared sub-builders ---------------- */
+/* a tapering, slightly crooked trunk: three segments that each lean a little,
+   which is the whole difference between a tree and a pipe */
+function trunkOf(t, h, r0, r1, c, lean){
+  const n=3, out=[];
+  let y=0, rr=r0;
+  for(let i=0;i<n;i++){
+    const seg=h/n, r2=r0+(r1-r0)*((i+1)/n);
+    out.push({shape:'cyl', w:rr*2, w2:r2*2, h:seg, seg:6,
+              rot:[0,0,lean*(i-1)*0.45], x:lean*i*0.10, y:y+seg*0.5, c});
+    y+=seg*0.94; rr=r2;
+  }
+  return out;
+}
+/* a canopy as overlapping lobes at different heights, lightest on top —
+   one blob is a lollipop, four reads as foliage */
+function canopyOf(cx, cy, cz, R, cMid, cLite, cDark){
+  return [
+    {shape:'sphere', w:R*2.0,  det:0, sy:0.82, x:cx, y:cy, z:cz, c:cMid},
+    {shape:'sphere', w:R*1.45, det:0, sy:0.86, x:cx+R*0.62, y:cy-R*0.22, z:cz+R*0.30, c:cDark},
+    {shape:'sphere', w:R*1.35, det:0, sy:0.86, x:cx-R*0.66, y:cy-R*0.16, z:cz-R*0.26, c:cDark},
+    {shape:'sphere', w:R*1.25, det:0, sy:0.90, x:cx+R*0.18, y:cy+R*0.52, z:cz-R*0.44, c:cLite},
+    {shape:'sphere', w:R*1.05, det:0, sy:0.90, x:cx-R*0.30, y:cy+R*0.44, z:cz+R*0.48, c:cLite},
+    {shape:'sphere', w:R*0.80, det:0, sy:0.92, x:cx+R*0.05, y:cy+R*0.86, z:cz+R*0.05, c:cLite},
+  ];
+}
+/* strata: pale bands wrapped round a boulder so it reads as sedimentary rock
+   rather than a lump of clay */
+function strataOf(R, H, c, n){
+  const out=[];
+  for(let i=0;i<(n||3);i++){
+    const t=(i+0.7)/((n||3)+0.6);
+    const rr=R*(1.02-Math.abs(t-0.5)*0.30);
+    out.push({shape:'cyl', w:rr*2, w2:rr*2, h:H*0.055, seg:7,
+              rot:[0.05*(i%2?1:-1),0,0.04*(i%2?-1:1)], y:H*t, c});
+  }
+  return out;
+}
+
+/* ---------------- TREES / LANDMARK PROPS ---------------- */
+const PROP = {};
+
+/* VERDANT — a broadleaf with exposed roots and a real crown */
+PROP.broadleaf = (V)=>{
+  const BARK=V.bark, BARKD=V.barkD, L=V.leaf, LL=V.leafL, LD=V.leafD;
+  const p = trunkOf(0, 2.5, 0.16, 0.10, BARK, 0.10);
+  /* root flare: five buttresses, which is what plants a tree in the ground */
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283;
+    p.push({shape:'cone', w:0.26, h:0.50, rot:[Math.cos(a)*0.55, -a, -Math.sin(a)*0.55],
+            x:Math.sin(a)*0.16, y:0.20, z:Math.cos(a)*0.16, c:BARKD});
+  }
+  /* two branches leaving the trunk, each ending in its own small lobe */
+  p.push({shape:'cyl', w:0.13, w2:0.07, h:0.90, rot:[0.25,0,-0.85], x:0.32, y:2.10, z:0.10, c:BARK});
+  p.push({shape:'cyl', w:0.12, w2:0.06, h:0.80, rot:[-0.30,0,0.80], x:-0.30, y:1.95, z:-0.10, c:BARK});
+  p.push(...canopyOf(0, 3.45, 0, 0.98, L, LL, LD));
+  p.push(...canopyOf(0.72, 2.80, 0.22, 0.44, L, LL, LD));
+  p.push(...canopyOf(-0.66, 2.66, -0.20, 0.40, LD, L, LD));
+  return p;
+};
+
+/* ASHEN — a burnt snag. No canopy at all: the silhouette is the point */
+PROP.snag = (V)=>{
+  const CHAR=V.bark, ASH=V.barkD, EMBER=V.glow;
+  const p = trunkOf(0, 2.6, 0.17, 0.06, CHAR, 0.22);
+  p.push({shape:'cone', w:0.13, h:0.55, rot:[0,0,0.30], x:0.14, y:2.75, c:CHAR});
+  /* broken limbs clawing outward, each snapped off at a different length */
+  const limbs=[[0.95,-1.15,0.20,1.05],[-0.80,1.05,-0.35,0.85],
+               [0.60,-0.70,1.40,0.70],[-0.55,0.75,1.10,0.60]];
+  limbs.forEach(([lx,rz,ry,len],i)=>{
+    p.push({shape:'cyl', w:0.13, w2:0.04, h:len, rot:[0.25,ry,rz],
+            x:lx*0.34, y:1.5+i*0.32, z:(i%2?0.16:-0.16), c:CHAR});
+    p.push({shape:'cone', w:0.07, h:0.20, rot:[0.25,ry,rz],
+            x:lx*0.62, y:1.5+i*0.32+len*0.34, z:(i%2?0.26:-0.26), c:ASH});
+  });
+  /* the fire is still in the base: embers glowing through the char */
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283;
+    p.push({shape:'sphere', w:0.13, det:0, x:Math.sin(a)*0.16, y:0.14+((i%3)*0.20),
+            z:Math.cos(a)*0.16, c:EMBER});
+  }
+  p.push({shape:'cyl', w:0.80, w2:0.52, h:0.16, seg:7, y:0.06, c:ASH});
+  return p;
+};
+
+/* FROST — a laden conifer. Snow load on every tier is what makes it cold */
+PROP.conifer = (V)=>{
+  const BARK=V.bark, NEEDLE=V.leaf, ND=V.leafD, SNOW=V.leafL;
+  const p = trunkOf(0, 1.10, 0.13, 0.10, BARK, 0.04);
+  const tiers=[[0.85,1.10,1.15],[1.55,0.92,1.00],[2.20,0.72,0.86],[2.80,0.50,0.70],[3.30,0.30,0.52]];
+  for(const [y,w,h] of tiers){
+    p.push({shape:'cone', w:w*2, h:h, seg:7, y:y+h*0.5, c: y>2.2?ND:NEEDLE});
+    /* the snow cap sits slightly proud and slightly lower than the tier top */
+    p.push({shape:'cone', w:w*1.72, h:h*0.46, seg:7, y:y+h*0.72, c:SNOW});
+  }
+  p.push({shape:'cone', w:0.30, h:0.50, seg:6, y:3.72, c:ND});
+  p.push({shape:'cone', w:0.20, h:0.30, seg:6, y:3.86, c:SNOW});
+  /* a drift banked against the windward side */
+  p.push({shape:'sphere', w:1.30, det:0, sy:0.28, x:0.22, y:0.06, z:0.18, c:SNOW});
+  p.push({shape:'sphere', w:0.80, det:0, sy:0.30, x:-0.34, y:0.05, z:-0.24, c:SNOW});
+  return p;
+};
+
+/* ROTMIRE — a mangrove on stilt roots, standing out of the water */
+PROP.mangrove = (V)=>{
+  const BARK=V.bark, BARKD=V.barkD, L=V.leaf, LL=V.leafL, LD=V.leafD, MOSS=V.glow;
+  const p = [];
+  /* the stilts ARE the silhouette: the trunk starts a metre off the ground */
+  for(let i=0;i<7;i++){
+    const a=i/7*6.283, r=0.62;
+    p.push({shape:'cyl', w:0.13, w2:0.09, h:1.35, rot:[Math.cos(a)*0.42, -a, -Math.sin(a)*0.42],
+            x:Math.sin(a)*r*0.5, y:0.62, z:Math.cos(a)*r*0.5, c:BARKD});
+    p.push({shape:'cone', w:0.15, h:0.22, rot:[3.1416,0,0],
+            x:Math.sin(a)*r, y:0.10, z:Math.cos(a)*r, c:BARKD});
+  }
+  p.push(...trunkOf(0, 1.55, 0.20, 0.12, BARK, 0.14).map(q=>({...q, y:q.y+1.20})));
+  /* a canopy that hangs rather than sits, plus moss beards off the branches */
+  p.push(...canopyOf(0, 3.15, 0, 0.92, L, LL, LD));
+  p.push(...canopyOf(-0.62, 2.85, 0.34, 0.44, LD, L, LD));
+  for(let i=0;i<6;i++){
+    const a=i/6*6.283+0.4;
+    p.push({shape:'cyl', w:0.075, w2:0.03, h:0.72, rot:[0,0,0],
+            x:Math.sin(a)*0.78, y:2.46, z:Math.cos(a)*0.78, c:MOSS});
+  }
+  return p;
+};
+
+/* VOIDSPIRE — not a tree. A fractured monolith with pieces hanging off it */
+PROP.monolith = (V)=>{
+  const ST=V.bark, STD=V.barkD, GL=V.glow, GL2=V.leafL;
+  const p = [
+    {shape:'cyl', w:0.86, w2:0.62, h:2.30, seg:6, rot:[0,0,0.05], y:1.15, c:ST},
+    {shape:'cyl', w:0.62, w2:0.38, h:1.05, seg:6, rot:[0,0.5,-0.10], y:2.70, c:ST},
+    {shape:'cone', w:0.44, h:0.72, seg:6, rot:[0,0,0.08], y:3.50, c:STD},
+    {shape:'cyl', w:1.06, w2:0.90, h:0.22, seg:7, y:0.10, c:STD},
+  ];
+  /* the split: a bright seam running the whole height */
+  for(let i=0;i<5;i++)
+    p.push({shape:'box', w:0.10, h:0.62, d:0.10, rot:[0,0.3,0.06], y:0.35+i*0.66, z:0.34-i*0.02, c:GL});
+  /* shards torn loose and held in the field around it */
+  const frag=[[0.92,1.55,0.30,0.30],[-0.86,2.05,-0.25,0.26],[0.70,2.70,-0.55,0.22],
+              [-0.62,1.05,0.62,0.24],[0.30,3.25,0.70,0.18]];
+  for(const [fx,fy,fz,fw] of frag){
+    p.push({shape:'oct', w:fw*2, det:0, x:fx, y:fy, z:fz, c:ST});
+    p.push({shape:'oct', w:fw*0.9, det:0, x:fx, y:fy, z:fz, c:GL2});
+  }
+  return p;
+};
+
+/* ---------------- BOULDERS ---------------- */
+PROP.boulder = (V)=>{
+  const R=V.rock, RD=V.rockD, RL=V.rockL, MOSS=V.leaf;
+  const p = [
+    {shape:'dod', w:1.90, y:0.62, c:R},
+    {shape:'dod', w:1.20, x:0.62, y:0.34, z:0.30, c:RD},
+    {shape:'dod', w:0.95, x:-0.58, y:0.30, z:-0.26, c:RD},
+    {shape:'dod', w:0.70, x:0.16, y:1.12, z:-0.22, c:RL},
+  ];
+  p.push(...strataOf(0.88, 1.15, RL, 3));
+  /* moss only on the top and the north face, which is where it grows */
+  p.push({shape:'sphere', w:1.30, det:0, sy:0.20, y:1.12, z:-0.10, c:MOSS});
+  p.push({shape:'sphere', w:0.52, det:0, sy:0.30, x:-0.50, y:0.72, z:-0.40, c:MOSS});
+  /* chips at the base, so it sits IN the ground rather than on it */
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283+0.7;
+    p.push({shape:'tet', w:0.36, rot:[a,a*2,a*0.5], x:Math.sin(a)*1.05, y:0.10, z:Math.cos(a)*1.05, c:RD});
+  }
+  return p;
+};
+PROP.obsidian = (V)=>{
+  const R=V.rock, RD=V.rockD, GL=V.glow;
+  const p = [
+    {shape:'oct', w:1.70, det:0, sy:1.15, rot:[0.2,0.4,0.15], y:0.72, c:R},
+    {shape:'oct', w:1.05, det:0, rot:[0.5,1.1,0.3], x:0.60, y:0.42, z:0.28, c:RD},
+    {shape:'oct', w:0.85, det:0, rot:[0.8,0.2,0.6], x:-0.55, y:0.38, z:-0.30, c:RD},
+    {shape:'cone', w:0.46, h:1.35, seg:5, rot:[0.18,0,0.24], x:0.18, y:1.25, c:R},
+    {shape:'cone', w:0.30, h:0.85, seg:5, rot:[-0.22,0,-0.35], x:-0.38, y:0.95, z:0.20, c:R},
+  ];
+  /* the heat has not gone out of it */
+  for(let i=0;i<6;i++){
+    const a=i/6*6.283;
+    p.push({shape:'box', w:0.09, h:0.42, d:0.09, rot:[0.2,a,0.15],
+            x:Math.sin(a)*0.60, y:0.30+((i%3)*0.26), z:Math.cos(a)*0.60, c:GL});
+  }
+  return p;
+};
+PROP.iceblock = (V)=>{
+  const R=V.rock, RD=V.rockD, RL=V.rockL, GL=V.glow;
+  const p = [
+    {shape:'box', w:1.65, h:1.10, d:1.45, rot:[0.06,0.4,0.05], y:0.52, c:R},
+    {shape:'box', w:1.05, h:0.72, d:0.95, rot:[0.10,1.1,-0.08], x:0.62, y:0.34, z:0.34, c:RD},
+    {shape:'box', w:0.85, h:1.25, d:0.80, rot:[-0.05,0.7,0.10], x:-0.48, y:0.62, z:-0.30, c:RL},
+    {shape:'box', w:0.60, h:0.55, d:0.58, rot:[0.3,0.2,0.2], x:0.10, y:1.20, z:-0.18, c:RL},
+  ];
+  /* the blue heart, and frost rime round the base */
+  p.push({shape:'oct', w:0.70, det:0, y:0.60, c:GL});
+  for(let i=0;i<6;i++){
+    const a=i/6*6.283;
+    p.push({shape:'cone', w:0.20, h:0.52, rot:[Math.cos(a)*0.35,0,-Math.sin(a)*0.35],
+            x:Math.sin(a)*0.80, y:0.18, z:Math.cos(a)*0.80, c:RL});
+  }
+  return p;
+};
+PROP.peatmound = (V)=>{
+  const R=V.rock, RD=V.rockD, MOSS=V.leaf, ML=V.leafL;
+  const p = [
+    {shape:'sphere', w:2.00, det:0, sy:0.52, y:0.30, c:R},
+    {shape:'sphere', w:1.20, det:0, sy:0.58, x:0.58, y:0.24, z:0.30, c:RD},
+    {shape:'sphere', w:0.95, det:0, sy:0.60, x:-0.54, y:0.22, z:-0.26, c:RD},
+    /* the mound is CAPPED in moss — that is what makes it peat and not rock */
+    {shape:'sphere', w:1.92, det:0, sy:0.26, y:0.50, c:MOSS},
+    {shape:'sphere', w:1.05, det:0, sy:0.28, x:0.52, y:0.42, z:0.28, c:ML},
+  ];
+  /* fungus round the skirt */
+  for(let i=0;i<4;i++){
+    const a=i/4*6.283+0.3, r=0.86;
+    p.push({shape:'cyl', w:0.10, w2:0.08, h:0.20, seg:4, x:Math.sin(a)*r, y:0.14, z:Math.cos(a)*r, c:ML});
+    p.push({shape:'sphere', w:0.26, det:0, sy:0.46, x:Math.sin(a)*r, y:0.26, z:Math.cos(a)*r, c:V.glow});
+  }
+  return p;
+};
+PROP.voidrock = (V)=>{
+  const R=V.rock, RD=V.rockD, GL=V.glow;
+  const p = [
+    {shape:'dod', w:1.60, y:0.66, c:R},
+    {shape:'dod', w:0.95, x:0.60, y:0.36, z:0.26, c:RD},
+    {shape:'dod', w:0.78, x:-0.52, y:0.32, z:-0.30, c:RD},
+  ];
+  /* pieces of it are no longer touching it */
+  const lift=[[0.30,1.62,0.20,0.46],[-0.46,1.95,-0.20,0.34],[0.14,2.32,0.34,0.24]];
+  for(const [lx,ly,lz,lw] of lift){
+    p.push({shape:'dod', w:lw*2, rot:[lx,ly,lz], x:lx, y:ly, z:lz, c:R});
+    p.push({shape:'oct', w:lw*0.6, det:0, x:lx, y:ly, z:lz, c:GL});
+  }
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283;
+    p.push({shape:'box', w:0.08, h:0.36, d:0.08, rot:[0.2,a,0.1],
+            x:Math.sin(a)*0.55, y:0.40, z:Math.cos(a)*0.55, c:GL});
+  }
+  return p;
+};
+
+/* ---------------- CRYSTALS / VENTS / SMALL LANDMARKS ---------------- */
+PROP.crystal = (V)=>{
+  const GL=V.glow, C=V.rockL, CD=V.rock;
+  const p = [{shape:'cyl', w:0.90, w2:0.66, h:0.24, seg:7, y:0.10, c:CD}];
+  const sh=[[0,0,1.85,0.44,0,0],[0.36,0.14,1.15,0.30,0.22,0.30],
+            [-0.32,-0.18,0.95,0.26,-0.18,-0.26],[0.10,-0.38,0.70,0.20,0.30,-0.10]];
+  for(const [sx,sz,h,w,rx,rz] of sh){
+    p.push({shape:'cone', w:w*2, h, seg:5, rot:[rx,0,rz], x:sx, y:h*0.48+0.14, z:sz, c:C});
+    p.push({shape:'cone', w:w*1.0, h:h*0.62, seg:5, rot:[rx,0,rz], x:sx, y:h*0.42+0.14, z:sz, c:GL});
+  }
+  return p;
+};
+PROP.fumarole = (V)=>{
+  const R=V.rock, RD=V.rockD, GL=V.glow;
+  const p = [
+    {shape:'cone', w:1.50, h:1.05, seg:7, y:0.50, c:R},
+    {shape:'cone', w:1.05, h:0.66, seg:7, y:0.95, c:RD},
+    {shape:'cyl',  w:0.52, w2:0.44, h:0.30, seg:7, y:1.16, c:'#100a08'},
+    {shape:'cyl',  w:0.42, w2:0.36, h:0.14, seg:7, y:1.26, c:GL},
+  ];
+  /* spatter round the rim, and a crack running down the cone */
+  for(let i=0;i<6;i++){
+    const a=i/6*6.283;
+    p.push({shape:'tet', w:0.28, rot:[a,a,0], x:Math.sin(a)*0.72, y:0.18, z:Math.cos(a)*0.72, c:RD});
+  }
+  p.push({shape:'box', w:0.10, h:0.90, d:0.10, rot:[0.15,0.4,0.10], y:0.52, z:0.42, c:GL});
+  return p;
+};
+PROP.icicleCluster = (V)=>{
+  const C=V.rockL, GL=V.glow, RD=V.rock;
+  const p = [{shape:'sphere', w:1.10, det:0, sy:0.34, y:0.14, c:RD}];
+  const sh=[[0,0,2.05,0.36],[0.34,0.16,1.35,0.24],[-0.30,-0.20,1.10,0.22],
+            [0.16,-0.36,0.80,0.18],[-0.36,0.30,0.62,0.15]];
+  for(const [sx,sz,h,w] of sh){
+    p.push({shape:'cone', w:w*2, h, seg:6, rot:[sz*0.30,0,-sx*0.30], x:sx, y:h*0.5+0.10, z:sz, c:C});
+    p.push({shape:'cone', w:w*0.95, h:h*0.55, seg:6, rot:[sz*0.30,0,-sx*0.30], x:sx, y:h*0.42+0.10, z:sz, c:GL});
+  }
+  return p;
+};
+PROP.fungus = (V)=>{
+  const STEM=V.rockL, CAP=V.glow, CAPD=V.leafD, GILL=V.leafL;
+  const p = [];
+  const caps=[[0,0,1.05,0.92],[0.42,0.22,0.68,0.60],[-0.38,-0.26,0.52,0.48]];
+  for(const [sx,sz,h,w] of caps){
+    p.push({shape:'cyl', w:w*0.34, w2:w*0.26, h, seg:6, x:sx, y:h*0.5, z:sz, c:STEM});
+    p.push({shape:'sphere', w:w*1.5, det:0, sy:0.42, x:sx, y:h*0.98, z:sz, c:CAP});
+    p.push({shape:'cyl', w:w*1.30, w2:w*1.30, h:0.06, seg:8, x:sx, y:h*0.88, z:sz, c:GILL});
+    /* spots, which is what makes a dome read as a mushroom cap */
+    for(let i=0;i<2;i++){
+      const a=i/2*6.283+sx;
+      p.push({shape:'tet', w:w*0.30, rot:[a,a,0],
+              x:sx+Math.sin(a)*w*0.44, y:h*1.06, z:sz+Math.cos(a)*w*0.44, c:CAPD});
+    }
+  }
+  return p;
+};
+PROP.riftshard = (V)=>{
+  const C=V.rockL, GL=V.glow, RD=V.rock;
+  const p = [{shape:'oct', w:0.80, det:0, sy:0.5, y:0.12, c:RD}];
+  /* the pieces FLOAT, in a ring, tipped every which way */
+  const sh=[[0,0.95,0,0.50,0],[0.44,1.55,0.18,0.34,0.7],[-0.40,1.30,-0.22,0.30,1.4],
+            [0.22,2.05,-0.30,0.24,2.1],[-0.26,0.62,0.40,0.22,2.8]];
+  for(const [sx,sy,sz,w,rr] of sh){
+    p.push({shape:'oct', w:w*2, det:0, sy:1.5, rot:[rr*0.4,rr,rr*0.2], x:sx, y:sy, z:sz, c:C});
+    p.push({shape:'oct', w:w*0.9, det:0, sy:1.5, rot:[rr*0.4,rr,rr*0.2], x:sx, y:sy, z:sz, c:GL});
+  }
+  p.push({shape:'box', w:0.07, h:1.70, d:0.07, y:1.05, c:GL});
+  return p;
+};
+
+/* ---------------- GROUND COVER ---------------- */
+/* Blades, not a cone. Six of them fanned out reads as a tuft; one cone reads
+   as a traffic pylon, which is what the old one looked like up close. */
+PROP.tuft = (V)=>{
+  const A=V.leaf, B=V.leafD, C=V.leafL;
+  const p=[];
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283+0.4, len=0.78+((i*5)%3)*0.30, lean=0.30+((i*3)%3)*0.14;
+    p.push({shape:'cone', w:0.17, h:len, seg:4,
+            rot:[Math.cos(a)*lean, -a, -Math.sin(a)*lean],
+            x:Math.sin(a)*0.16, y:len*0.42, z:Math.cos(a)*0.16,
+            c: i%3===0 ? C : i%3===1 ? A : B});
+  }
+  return p;
+};
+PROP.ashtuft = (V)=>{
+  const A=V.leafD, B=V.rockD, GL=V.glow;
+  const p=[];
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283+0.3, len=0.62+((i*7)%3)*0.24;
+    p.push({shape:'cone', w:0.13, h:len, seg:4, rot:[Math.cos(a)*0.55, -a, -Math.sin(a)*0.55],
+            x:Math.sin(a)*0.18, y:len*0.38, z:Math.cos(a)*0.18, c: i%2?A:B});
+  }
+  p.push({shape:'sphere', w:0.62, det:0, sy:0.22, y:0.05, c:B});
+  p.push({shape:'sphere', w:0.16, det:0, y:0.10, c:GL});
+  return p;
+};
+PROP.snowgrass = (V)=>{
+  const A=V.leaf, B=V.leafD, S=V.leafL;
+  const p=[];
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283+0.5, len=0.68+((i*5)%3)*0.22;
+    p.push({shape:'cone', w:0.14, h:len, seg:4, rot:[Math.cos(a)*0.42, -a, -Math.sin(a)*0.42],
+            x:Math.sin(a)*0.15, y:len*0.40, z:Math.cos(a)*0.15, c: i%2?A:B});
+  }
+  /* the snow that collected in it */
+  p.push({shape:'sphere', w:0.76, det:0, sy:0.26, y:0.10, c:S});
+  return p;
+};
+PROP.reed = (V)=>{
+  const A=V.leaf, B=V.leafD, HEAD=V.bark;
+  const p=[];
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283+0.2, len=1.18+((i*7)%3)*0.44, lean=0.14+((i*3)%3)*0.10;
+    const cx=Math.sin(a)*0.14, cz=Math.cos(a)*0.14;
+    p.push({shape:'cyl', w:0.075, w2:0.045, h:len, seg:4,
+            rot:[Math.cos(a)*lean, 0, -Math.sin(a)*lean], x:cx, y:len*0.5, z:cz, c: i%2?A:B});
+    /* the seed head is what makes it a reed and not long grass */
+    if(i%2===0) p.push({shape:'cyl', w:0.16, w2:0.10, h:0.30, seg:4,
+            rot:[Math.cos(a)*lean, 0, -Math.sin(a)*lean],
+            x:cx+Math.sin(a)*len*lean*0.5, y:len*1.02, z:cz+Math.cos(a)*len*lean*0.5, c:HEAD});
+  }
+  return p;
+};
+PROP.voidfrond = (V)=>{
+  const A=V.leaf, B=V.leafD, GL=V.glow;
+  const p=[];
+  for(let i=0;i<5;i++){
+    const a=i/5*6.283+0.3, len=0.85+((i*5)%3)*0.30;
+    p.push({shape:'cone', w:0.15, h:len, seg:4, rot:[Math.cos(a)*0.50, -a, -Math.sin(a)*0.50],
+            x:Math.sin(a)*0.16, y:len*0.40, z:Math.cos(a)*0.16, c: i%2?A:B});
+    /* every other frond carries a mote at the tip */
+    if(i%2===0) p.push({shape:'tet', w:0.20, rot:[a,a,0], x:Math.sin(a)*(0.16+len*0.42),
+            y:len*0.80, z:Math.cos(a)*(0.16+len*0.42), c:GL});
+  }
+  return p;
+};
+
+/* ---------------- the kits ----------------
+   `mix` re-weights what the scatter rolls: a swamp is mostly reeds, a
+   scorched basin is mostly ash with the odd snag. Scale is in units of the
+   prop's own radius. */
+const SCENERY = {
+  verdant:{
+    pal:{bark:'#5a4227', barkD:'#3a2a18', leaf:'#2f7a3e', leafL:'#4fae5a', leafD:'#1d5228',
+         rock:'#7d8478', rockD:'#555c52', rockL:'#9aa294', glow:'#8be08f'},
+    tree:'broadleaf', rock:'boulder', crys:'crystal', turf:'tuft',
+    scale:{tree:1.05, rock:0.80, crys:1.00, turf:1.05},
+    mix:[0.19, 0.06, 0.62, 0.13],
+  },
+  ashen:{
+    pal:{bark:'#2e2320', barkD:'#191210', leaf:'#5a4436', leafL:'#8a6a4a', leafD:'#3a2c22',
+         rock:'#4a4340', rockD:'#2a2523', rockL:'#6d6560', glow:'#ff7a2a'},
+    tree:'snag', rock:'obsidian', crys:'fumarole', turf:'ashtuft',
+    scale:{tree:1.00, rock:0.80, crys:1.05, turf:1.05},
+    mix:[0.26, 0.12, 0.54, 0.08],
+  },
+  frost:{
+    pal:{bark:'#3d3a44', barkD:'#26242c', leaf:'#2d6a62', leafL:'#eaf6ff', leafD:'#1d4a48',
+         rock:'#8fb0c6', rockD:'#5d7c92', rockL:'#cfe6f4', glow:'#7fd8ff'},
+    tree:'conifer', rock:'iceblock', crys:'icicleCluster', turf:'snowgrass',
+    scale:{tree:1.05, rock:0.82, crys:0.95, turf:1.00},
+    mix:[0.22, 0.10, 0.56, 0.12],
+  },
+  rotmire:{
+    pal:{bark:'#4a3a26', barkD:'#2c2216', leaf:'#4d7a2e', leafL:'#86b04a', leafD:'#2c4a1c',
+         rock:'#5c5a3c', rockD:'#3a3826', rockL:'#7d7a52', glow:'#c0ff5a'},
+    tree:'mangrove', rock:'peatmound', crys:'fungus', turf:'reed',
+    scale:{tree:1.05, rock:0.84, crys:1.00, turf:1.10},
+    mix:[0.17, 0.11, 0.60, 0.12],
+  },
+  voidspire:{
+    pal:{bark:'#4a3f6e', barkD:'#2a2344', leaf:'#6a4aa8', leafL:'#c9b0ff', leafD:'#3d2a6a',
+         rock:'#57496f', rockD:'#33294a', rockL:'#7f6ea8', glow:'#b98cff'},
+    tree:'monolith', rock:'voidrock', crys:'riftshard', turf:'voidfrond',
+    scale:{tree:1.05, rock:0.82, crys:1.00, turf:1.00},
+    mix:[0.21, 0.13, 0.55, 0.11],
+  },
+};
+function sceneryKit(){ return SCENERY[S.zone] || SCENERY.verdant; }
+/* What settles on top of the rock. Snow, ash, moss, sludge or rift-light is
+   the fastest read of what kind of place this is, and the cliffs were the
+   largest thing on screen carrying none of it. */
+const ZONE_CAP = {
+  verdant:  {c:'#3f7d3c', a:0.55, glow:0},
+  ashen:    {c:'#221b18', a:0.62, glow:0},
+  frost:    {c:'#eaf6ff', a:0.78, glow:0},
+  rotmire:  {c:'#4e6a2a', a:0.58, glow:0},
+  voidspire:{c:'#b98cff', a:0.42, glow:1},
+};
+/* One merged, vertex-coloured cliff: bedded strata, a weathered cap and two
+   broken-off masses. Authored in the unit space the instancer already uses
+   (y from -1 to 1, radius 1), so it drops straight into the existing
+   placement and still costs exactly one draw call. */
+function cliffGeo(stone, cap, glow){
+  const LITE = shade(stone, 0.16), DARK = shade(stone, -0.20);
+  const p = [
+    {shape:'dod', w:2.00, c:stone},
+    {shape:'dod', w:1.05, rot:[0.4,0.7,0.2], x: 0.62, y:-0.30, z: 0.30, c:DARK},
+    {shape:'dod', w:0.88, rot:[0.2,1.3,0.5], x:-0.60, y:-0.42, z:-0.26, c:DARK},
+    {shape:'dod', w:0.70, rot:[0.6,0.3,0.9], x: 0.22, y: 0.58, z:-0.34, c:LITE},
+  ];
+  /* bedding planes: pale horizontal bands are what say "rock" rather than
+     "lump", and they cost four flattened cylinders */
+  for(let i=0;i<4;i++){
+    const t=-0.62+i*0.40, rr=0.99-Math.abs(t)*0.22;
+    p.push({shape:'cyl', w:rr*2, w2:rr*2, h:0.055, seg:8,
+            rot:[0.03*(i%2?1:-1),0,0.025*(i%2?-1:1)], y:t, c: i%2?LITE:DARK});
+  }
+  /* the cap, and a little of it spilling down the shaded face */
+  p.push({shape:'sphere', w:1.62, det:0, sy:0.30, y:0.74, c:cap});
+  p.push({shape:'sphere', w:0.78, det:0, sy:0.36, x:-0.34, y:0.46, z:-0.30, c:cap});
+  p.push({shape:'sphere', w:0.52, det:0, sy:0.40, x: 0.42, y:0.40, z: 0.28, c:cap});
+  if(glow) for(let i=0;i<4;i++){
+    const a=i/4*6.283;
+    p.push({shape:'box', w:0.08, h:0.90, d:0.08, rot:[0.1,a,0.06],
+            x:Math.sin(a)*0.72, y:-0.10, z:Math.cos(a)*0.72, c:cap});
+  }
+  return mergeProp(p);
+}
+/* the geometry for one slot of the current zone's kit, built once and cached */
+function kitGeo(slot){
+  const K = sceneryKit();
+  const name = K[slot];
+  return mergeProp(PROP[name](K.pal));
+}
+
+/* ================================================================
    ZONE SCENERY — instanced, rebuilt when the zone changes
    ================================================================ */
 function buildZoneScene(){
@@ -8259,46 +8920,28 @@ function buildZoneScene(){
     im.frustumCulled = false;
     t.scene.add(im); t.props.push(im);
   };
-  const rockMat = new THREE.MeshStandardMaterial({color:shade(z.ground,0.22), roughness:1, flatShading:true});
-  addInst(new THREE.DodecahedronGeometry(1,0), rockMat, byKind[0], (pr,m,q,v,sc)=>{
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0), pr.a);
-    v.set(pr.x, pr.r*0.45, pr.y); sc.set(pr.r, pr.r*0.72*pr.s, pr.r);
-    m.compose(v,q,sc);
-  });
-  const crysMat = new THREE.MeshStandardMaterial({color:z.accent, roughness:0.35,
-    metalness:0.25, flatShading:true, emissive:new THREE.Color(shade(z.accent,-0.55))});
-  addInst(new THREE.ConeGeometry(0.42,1.9,5), crysMat, byKind[1], (pr,m,q,v,sc)=>{
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0), pr.a);
-    v.set(pr.x, pr.r*0.95*pr.s, pr.y); sc.set(pr.r, pr.r*pr.s, pr.r);
-    m.compose(v,q,sc);
-  });
-  const grassMat = new THREE.MeshStandardMaterial({color:shade(z.accent,-0.30),
-    roughness:1, flatShading:true, side:THREE.DoubleSide});
-  addInst(new THREE.ConeGeometry(0.5,1.5,4), grassMat, byKind[2], (pr,m,q,v,sc)=>{
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0), pr.a);
-    v.set(pr.x, pr.r*0.7, pr.y); sc.set(pr.r*0.9, pr.r*1.5, pr.r*0.9);
-    m.compose(v,q,sc);
-  });
-  const trunkMat = new THREE.MeshStandardMaterial({color:shade(z.ground,-0.5), roughness:1, flatShading:true});
-  /* trunk tall and thick enough to read, canopy lifted clear of it — with the
-     canopy at r*2.7 and radius r*1.5 it swallowed the trunk entirely and every
-     tree looked like a green boulder sitting on the ground */
-  addInst(new THREE.CylinderGeometry(0.16,0.26,3.4,6), trunkMat, byKind[3], (pr,m,q,v,sc)=>{
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0), pr.a);
-    v.set(pr.x, pr.r*1.7, pr.y); sc.set(pr.r, pr.r, pr.r);
-    m.compose(v,q,sc);
-  });
-  const leafMat = new THREE.MeshStandardMaterial({color:z.accent, roughness:0.95, flatShading:true});
-  addInst(new THREE.IcosahedronGeometry(1.0,0), leafMat, byKind[3], (pr,m,q,v,sc)=>{
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0), pr.a*1.7);
-    v.set(pr.x, pr.r*4.1, pr.y); sc.set(pr.r*1.15, pr.r*1.05, pr.r*1.15);
-    m.compose(v,q,sc);
-  });
-  addInst(new THREE.IcosahedronGeometry(1.0,0), leafMat, byKind[3], (pr,m,q,v,sc)=>{
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0), pr.a*2.9);
-    v.set(pr.x+pr.r*0.35, pr.r*3.3, pr.y-pr.r*0.25); sc.set(pr.r*0.8, pr.r*0.72, pr.r*0.8);
-    m.compose(v,q,sc);
-  });
+  /* ---- the zone's scenery kit ----
+     Four merged, vertex-coloured geometries, one instanced draw each. The
+     six generic meshes they replace cost six draws for four objects; these
+     cost four draws for four objects with ten times the parts. */
+  const KIT = sceneryKit(), YAX = new THREE.Vector3(0,1,0);
+  const putProp = (slot, kind, mat)=>{
+    if(!byKind[kind].length) return;
+    const g = kitGeo(slot), s0 = KIT.scale[slot];
+    addInst(g, mat, byKind[kind], (pr,m,q,v,sc)=>{
+      q.setFromAxisAngle(YAX, pr.a);
+      v.set(pr.x, 0, pr.y);
+      const k2 = pr.r*s0;
+      sc.set(k2, k2*pr.s, k2);
+      m.compose(v,q,sc);
+    });
+  };
+  putProp('rock', 0, propMat());
+  /* the crystal slot is the zone's one glowing landmark, so it gets the
+     emissive material and the zone's own accent as its ambient bounce */
+  putProp('crys', 1, propMatGlow(shade(z.accent,-0.62)));
+  putProp('turf', 2, propMat());
+  putProp('tree', 3, propMat());
 
   /* ---- terrain ----
      Cliffs and boulders are chunky dodecahedra sunk into the ground so the
@@ -8320,9 +8963,10 @@ function buildZoneScene(){
      alone left the whole ridge the same green as the grass, so it read as a
      lumpy lawn; mixing toward neutral stone is what makes it read as rock. */
   const STONE = mix(shade(z.ground, 0.55), terrain.style.rock, 0.62);
-  const cliffMat = new THREE.MeshStandardMaterial({
-    color:STONE, roughness:1, flatShading:true});
-  addInst(new THREE.DodecahedronGeometry(1,0), cliffMat, cliffs, (c,m,q,v,sc)=>{
+  const CAP = ZONE_CAP[S.zone] || ZONE_CAP.verdant;
+  const capCol = mix(STONE, CAP.c, CAP.a);
+  const cliffMat = CAP.glow ? propMatGlow(shade(CAP.c,-0.68)) : propMat();
+  addInst(cliffGeo(STONE, capCol, CAP.glow), cliffMat, cliffs, (c,m,q,v,sc)=>{
     q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
     /* sunk by a third of its height: a disc the collider treats as radius r
        has to look at least that wide where the player actually walks */
@@ -8375,14 +9019,25 @@ function buildZoneScene(){
     v.set(c.x, c.h*0.62-12, c.y); sc.set(c.r*0.42, c.h*0.30, c.r*0.42);
     m.compose(v,q,sc);
   });
-  const spireMat = new THREE.MeshStandardMaterial({
-    color:shade(STONE, 0.10), roughness:0.7, flatShading:true});
-  addInst(new THREE.ConeGeometry(1, 1, 6), spireMat, byShape.spire, (c,m,q,v,sc)=>{
+  /* A shard field of identical cones is a picket fence. Three splinters of
+     different heights, leaning apart, break the repeat without breaking the
+     one-draw rule. */
+  const spireMat = CAP.glow ? propMatGlow(shade(CAP.c,-0.70)) : propMat();
+  const SPC = shade(STONE, 0.10), SPD = shade(STONE, -0.14);
+  const spireG = mergeProp([
+    {shape:'cone', w:2.00, h:1.00, seg:6, y:0.5, c:SPC},
+    {shape:'cone', w:1.05, h:0.66, seg:5, rot:[0.10,0,0.22], x: 0.52, y:0.33, z: 0.22, c:SPD},
+    {shape:'cone', w:0.80, h:0.48, seg:5, rot:[-0.14,0,-0.28], x:-0.48, y:0.24, z:-0.20, c:SPD},
+    {shape:'cone', w:0.54, h:0.30, seg:5, rot:[0.20,0,0.10], x: 0.10, y:0.15, z:-0.50, c:SPC},
+    {shape:'sphere', w:1.30, det:0, sy:0.20, y:0.04, c:SPD},
+    {shape:'cone', w:0.70, h:0.44, seg:6, y:0.86, c:mix(SPC, CAP.c, CAP.a*0.7)},
+  ]);
+  addInst(spireG, spireMat, byShape.spire, (c,m,q,v,sc)=>{
     q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.a);
     /* leaned a little off vertical so a shard field is jagged, not a picket fence */
     const lean = (c.s-1)*0.55;
     q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), lean));
-    v.set(c.x, c.h*0.48-14, c.y); sc.set(c.r*1.1, c.h, c.r*1.1);
+    v.set(c.x, -14, c.y); sc.set(c.r*1.1, c.h, c.r*1.1);
     m.compose(v,q,sc);
   });
   const slabMat = new THREE.MeshStandardMaterial({
@@ -8415,18 +9070,24 @@ function buildZoneScene(){
   const lit = terrain.style.glow, gloss = terrain.style.gloss;
   /* Mixed only lightly toward the ground colour. At 0.72 the bog came out the
      same green as the bank and the whole swamp vanished. */
+  /* OPAQUE. depthWrite stays off so the discs never z-fight, but at 0.90
+     alpha every overlap blended twice and the seam between two discs was
+     visible as a darker oval — which is why the bog read as a pile of
+     puddles rather than one body of water. Alpha 1 replaces instead of
+     accumulating, so the sheet is seamless whatever the overlap. */
   const waterMat = new THREE.MeshStandardMaterial({
     color:mix(z.ground, terrain.style.liquid, lit?0.96:0.90),
     roughness:lit?0.5 : gloss?0.12 : 0.22,
     metalness:lit?0 : gloss?0.60 : 0.15,
     emissive:new THREE.Color(lit ? shade(terrain.style.liquid,-0.25) : '#000000'),
-    transparent:true, opacity:lit?0.95:0.90, depthWrite:false, flatShading:true});
+    transparent:true, opacity:1.0, depthWrite:false, flatShading:true});
   const waterGeo = new THREE.CircleGeometry(1, 14);
   waterGeo.rotateX(-Math.PI/2);
   /* damp shore under the waterline, drawn first and slightly lower */
   const shoreMat = new THREE.MeshStandardMaterial({
-    color:mix(z.ground, terrain.style.liquid, 0.42), roughness:1, flatShading:true,
-    transparent:true, opacity:0.85, depthWrite:false});
+    color:shade(mix(z.ground, terrain.style.liquid, 0.42), -0.24),
+    roughness:1, flatShading:true,
+    transparent:true, opacity:1.0, depthWrite:false});
   addInst(waterGeo, shoreMat, terrain.shore||[], (c,m,q,v,sc)=>{
     q.identity(); v.set(c.x, 0.7, c.y); sc.set(c.r, 1, c.r);
     m.compose(v,q,sc);
@@ -8434,6 +9095,20 @@ function buildZoneScene(){
   addInst(waterGeo, waterMat, terrain.water, (c,m,q,v,sc)=>{
     q.setFromAxisAngle(new THREE.Vector3(0,1,0), 0);
     v.set(c.x, 1.6, c.y); sc.set(c.r, 1, c.r);
+    m.compose(v,q,sc);
+  });
+  /* A shallow inset, inside each disc so it can never create a seam of its
+     own. One extra draw buys the surface a middle as well as an edge —
+     without it a river is a single flat colour from bank to bank. */
+  const shallowMat = new THREE.MeshStandardMaterial({
+    color:mix(mix(z.ground, terrain.style.liquid, lit?0.96:0.90),
+              terrain.style.spray, lit?0.30:0.34),
+    roughness:waterMat.roughness*0.8, metalness:waterMat.metalness,
+    emissive:new THREE.Color(lit ? shade(terrain.style.liquid,-0.10) : '#000000'),
+    transparent:true, opacity:1.0, depthWrite:false, flatShading:true});
+  addInst(waterGeo, shallowMat, terrain.water, (c,m,q,v,sc)=>{
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0), c.x*0.01);
+    v.set(c.x, 2.3, c.y); sc.set(c.r*0.62, 1, c.r*0.62);
     m.compose(v,q,sc);
   });
 
@@ -8942,6 +9617,28 @@ function drawPlates(){
       const tw = hctx.measureText(nm).width;
       let bx = sp.x - tw/2 - 7;
       for(let k=f.affix.length-1;k>=0;k--){ plateAffixBadge(hctx, f.affix[k], bx, sp.y-7.5, 4.2); bx -= 11; }
+
+      /* ...and the NAMES underneath, each in its own colour. A badge tells
+         you the thing has a modifier; only the word tells you which one, and
+         learning five glyphs by trial and error is not a mechanic. */
+      hctx.font = '700 8px system-ui,-apple-system,sans-serif';
+      const names = f.affix.map(k=>AFFIX[k].n);
+      const SEP = 7;
+      let total = 0;
+      for(const n2 of names) total += hctx.measureText(n2).width;
+      total += SEP*(names.length-1);
+      let ax = sp.x - total/2;
+      const ay = sp.y + bh + 17;
+      for(let k=0;k<names.length;k++){
+        const wpx = hctx.measureText(names[k]).width;
+        hctx.textAlign = 'left';
+        hctx.lineWidth = 2.5; hctx.strokeStyle = 'rgba(4,6,12,.92)';
+        hctx.strokeText(names[k], ax, ay);
+        hctx.fillStyle = AFFIX[f.affix[k]].col;
+        hctx.fillText(names[k], ax, ay);
+        ax += wpx + SEP;
+      }
+      hctx.textAlign = 'center';
     }
   }
   hctx.restore();
@@ -9074,6 +9771,17 @@ function syncHud(){
     : icoKeyHTML('ui:purge',0,'inl')+' '+campsCleared()+'/'+campTotal();
   if(surge.lvl>0) line = icoKeyHTML('ui:surge',4,'inl')+surge.lvl+'&nbsp; '+line;
   $('hudKills').innerHTML = line;
+  /* Spell out what the bolt bought. "Rift danger 3" on its own tells you
+     nothing about whether staying is worth it. */
+  const hs = $('hudSurge');
+  if(surge.lvl>0){
+    const t = surgeTerms();
+    hs.style.display = '';
+    $('hudSurgeTxt').innerHTML =
+      '<b>⚡'+t.lvl+'</b> '+
+      t.cost.map(r=>'<i>'+r[0]+' '+r[1]+'</i>').join(' ') + ' <span>⟶</span> ' +
+      t.gain.map(r=>'<em>'+r[0]+' '+r[1]+'</em>').join(' ');
+  } else hs.style.display = 'none';
   $('hudZone').textContent = ZONE_BY_ID[S.zone].n;
   if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max,
     Math.ceil(clamp(bossRef.hp/bossRef.max,0,1)*100)+'%'); }
@@ -9247,32 +9955,137 @@ let modalUid=null;
 function closeModal(){ $('modalWrap').classList.remove('open'); modalUid=null; }
 $('modalWrap').addEventListener('click', e=>{ if(e.target.id==='modalWrap') closeModal(); });
 
+/* ================================================================
+   IS IT BETTER? — answered by SIMULATION, not by a weighting table
+
+   The old chip scored a trinket as "stronger" from raw affix rolls, so a
+   Strength ring beat an Intellect one on a wand build. Any fix built out of
+   per-class stat weights would need a table to maintain and would still be
+   guessing.
+
+   It does not need one. computeStats() ALREADY knows which stat matters:
+   d.mainStat reads d[WEAPONS[weapon.arch].stat], so intellect drives damage
+   while you hold a wand and does nothing at all while you hold an axe. So:
+   clone the loadout, apply the swap, re-run computeStats, and compare the
+   OUTPUTS. Strength on a mage then shows +0% damage because it genuinely is
+   +0% damage — no table, and it stays correct when a stat or weapon is added.
+
+   Two numbers come back, not one word. An item really can be more damage and
+   less survivability at once; collapsing that into "stronger" is what made
+   the old verdict wrong even when the arithmetic was right.
+   ================================================================ */
+function statsIf(mutate){
+  const savedEq = S.equip, savedD = D;
+  const eq = Object.assign({}, S.equip);
+  mutate(eq);
+  S.equip = eq;
+  let out;
+  try { out = computeStats(); }
+  finally { S.equip = savedEq; D = savedD; }
+  return out;
+}
+/* Armour is worth nothing on its own — it is worth the extra damage you can
+   soak. Folding it and health into one effective-health number is what makes
+   "+40 armour" and "+180 health" comparable at all. */
+function effHp(d){
+  const L = Math.max(1, zoneLvl());
+  const red = clamp(d.armor/(d.armor + 46 + 13*L), 0, 0.76);
+  return d.maxHp/(1-red);
+}
+/* Which slot would this item actually go into? For a ring that means the one
+   you would really give up — the weaker of the two, established by removing
+   each in turn and seeing which loss hurts less. */
+function slotForItem(it){
+  if(it.kind==='weapon')  return 'weapon';
+  if(it.kind==='offhand') return 'offhand';
+  if(it.slot!=='ring')    return it.slot;
+  if(!S.equip.ring1) return 'ring1';
+  if(!S.equip.ring2) return 'ring2';
+  const base = effHp(D) + D.dps*9;
+  const loss = k => { const w = statsIf(eq=>{ eq[k]=null; });
+                      return base - (effHp(w) + w.dps*9); };
+  return loss('ring1') <= loss('ring2') ? 'ring1' : 'ring2';
+}
+function itemCompare(it){
+  const slot = slotForItem(it);
+  const cur  = S.equip[slot] || null;
+  const now  = D;
+  const nxt  = statsIf(eq=>{
+    eq[slot] = it;
+    /* mirror the real equip rules, or a two-hander looks like a free upgrade
+       because the offhand it displaces is still counted */
+    if(slot==='weapon' && WEAPONS[it.arch] && WEAPONS[it.arch].two) eq.offhand = null;
+    if(slot==='offhand'){
+      const w = eq.weapon;
+      if(w && WEAPONS[w.arch] && WEAPONS[w.arch].two) eq.weapon = null;
+    }
+  });
+  const e0 = effHp(now), e1 = effHp(nxt);
+  const dpsPct = now.dps>0 ? (nxt.dps-now.dps)/now.dps*100 : (nxt.dps>0?100:0);
+  const ehpPct = e0>0     ? (e1-e0)/e0*100 : 0;
+  /* Offence weighted slightly over survival: you clear faster, and clearing
+     faster is itself defensive. Not a stat weighting — a preference between
+     two already-correct numbers. */
+  const score = dpsPct + ehpPct*0.8;
+  return {slot, cur, now, nxt, dpsPct, ehpPct, score,
+          dDps:nxt.dps-now.dps, dEhp:Math.round(e1-e0), e0, e1};
+}
+const _pctTxt = v => (v>=0?'+':'') + (Math.abs(v)<0.05 ? '0' : v.toFixed(Math.abs(v)<10?1:0)) + '%';
 function compareHtml(it){
-  if(it.kind==='weapon'){
-    const cur = S.equip.weapon;
-    const a = itemDps(it), b = cur? itemDps(cur):0;
-    if(!cur) return '<span class="cmp better">EMPTY SLOT</span>';
-    const d = a-b, pct = b? Math.round(d/b*100):100;
-    return '<span class="cmp '+(d>=0?'better':'worse')+'">'+(d>=0?'+':'')+pct+'% DPS vs equipped</span>';
-  }
-  if(it.kind==='trinket'){
-    const slot = it.slot==='ring'?'ring1':it.slot;
-    const cur = S.equip[slot];
-    if(!cur) return '<span class="cmp better">EMPTY SLOT</span>';
-    /* no single headline stat on a trinket — score roll quality, tier and ilvl */
-    const score = x => x.affixes.reduce((a,f)=>a+f.roll,0) + x.rar*0.5 + x.ilvl*0.04;
-    const d = score(it)-score(cur);
-    return '<span class="cmp '+(d>=0?'better':'worse')+'">'+
-      (d>=0?'stronger':'weaker')+' than equipped</span>';
-  }
-  if(it.armor){
-    const slot = it.slot==='ring'?'ring1':it.slot;
-    const cur = S.equip[slot];
-    const a = it.armor*(1+it.plus*0.06), b = cur&&cur.armor? cur.armor*(1+cur.plus*0.06):0;
-    const d = Math.round(a-b);
-    return '<span class="cmp '+(d>=0?'better':'worse')+'">'+(d>=0?'+':'')+d+' armor vs equipped</span>';
-  }
-  return '';
+  if(it.kind==='charm') return '';
+  const c = itemCompare(it);
+  const cls = v => v>0.05 ? 'better' : v<-0.05 ? 'worse' : '';
+  const verdict = !c.cur ? 'EMPTY SLOT'
+    : c.score >  2 ? 'UPGRADE'
+    : c.score < -2 ? 'DOWNGRADE'
+    : 'SIDEGRADE';
+  const vcls = !c.cur ? 'better' : c.score>2 ? 'better' : c.score<-2 ? 'worse' : '';
+  return '<span class="cmp '+vcls+'">'+verdict+'</span>'+
+    '<span class="cmp '+cls(c.dpsPct)+'" style="margin-left:5px;">'+_pctTxt(c.dpsPct)+' dmg</span>'+
+    '<span class="cmp '+cls(c.ehpPct)+'" style="margin-left:5px;">'+_pctTxt(c.ehpPct)+' survive</span>';
+}
+/* the compact arrow the backpack grid uses when Compare is on */
+function compareMark(it){
+  if(it.kind==='charm') return '';
+  const c = itemCompare(it);
+  if(!c.cur)          return '<span class="gcmp up">★</span>';
+  if(c.score >  2)    return '<span class="gcmp up">▲</span>';
+  if(c.score < -2)    return '<span class="gcmp dn">▼</span>';
+  return '<span class="gcmp eq">=</span>';
+}
+/* the side-by-side the modal shows when Compare is on */
+function compareTable(it){
+  const c = itemCompare(it);
+  const R = (label, a, b, fmt2, invert) => {
+    const d = b-a, good = invert ? d<0 : d>0;
+    const cls = Math.abs(d) < 0.005 ? 'dim2' : good ? 'xp' : 'hp';
+    return '<tr><td class="cl">'+label+'</td><td class="cv">'+fmt2(a)+'</td>'+
+      '<td class="cv cn" style="color:var(--'+cls+')">'+fmt2(b)+'</td>'+
+      '<td class="cd" style="color:var(--'+cls+')">'+
+      (Math.abs(d)<0.005 ? '—' : (d>0?'+':'')+fmt2(d)) +'</td></tr>';
+  };
+  const n0 = v=>Math.round(v).toString(), n1 = v=>v.toFixed(1);
+  const a = c.now, b = c.nxt;
+  let rows = R('Damage / sec', a.dps, b.dps, n0)
+           + R('Effective HP', c.e0, c.e1, n0)
+           + R('Max health',   a.maxHp, b.maxHp, n0)
+           + R('Armor',        a.armor, b.armor, n0)
+           + R('Crit chance',  a.critC, b.critC, n1)
+           + R('Crit damage',  a.critD, b.critD, n0)
+           + R('Move speed',   a.movSpd, b.movSpd, n1);
+  /* the four core stats, but only the ones that actually moved */
+  for(const st of STATS)
+    if(Math.abs(b[st.k]-a[st.k]) > 0.001) rows += R(st.n, a[st.k], b[st.k], n0);
+  const mainK = (S.equip.weapon && WEAPONS[S.equip.weapon.arch])
+    ? WEAPONS[S.equip.weapon.arch].stat : 'str';
+  const mainN = (STATS.find(x=>x.k===mainK)||{n:'Strength'}).n;
+  return '<div class="detBlock cmpBlock">'+
+    '<table class="cmpTbl"><thead><tr><th></th>'+
+      '<th>'+(c.cur ? 'Equipped' : 'Empty')+'</th><th>This</th><th>Δ</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table>'+
+    '<div class="cmpNote">Your '+(WEAPONS[(S.equip.weapon||{}).arch]||{n:'fists'}).n+
+      ' scales with <b>'+mainN+'</b> — every number above is what the swap would '+
+      'really do, not a guess from the stat names.</div></div>';
 }
 function openItemModal(uid){
   const f = findItem(uid); if(!f) return;
@@ -9289,7 +10102,10 @@ function openItemModal(uid){
     '<div class="detIc">'+icoHTML(it)+'</div>'+
     '<div><div class="detName">'+it.name+(it.plus?' +'+it.plus:'')+'</div>'+
     '<div class="detSub">'+R.name+' · '+itemSub(it)+' · iLvl '+it.ilvl+'</div>'+
-    '<div style="margin-top:5px;">'+compareHtml(it)+'</div></div></div>';
+    '<div style="margin-top:5px;">'+(f.where==='bag'?compareHtml(it):'')+'</div></div></div>';
+
+  /* the full side-by-side, for bag items, when Compare is on */
+  if(f.where==='bag' && bagCompare) h += compareTable(it);
 
   let blk = '';
   if(A){
@@ -9386,6 +10202,10 @@ $('modalBody').addEventListener('click', e=>{
    BACKPACK PANEL
    ================================================================ */
 let bagFilter='all';
+/* Compare mode is sticky and saved: it is a way of reading the bag, not a
+   one-off action, and having to re-enable it every time you opened a panel
+   would defeat the point. */
+let bagCompare = false;
 function bagCell(it){
   const glow = it.rar>=3 ? ' g'+it.rar : '';
   return '<div class="gcell rar'+it.rar+glow+'" data-uid="'+it.uid+'">'+
@@ -9393,9 +10213,15 @@ function bagCell(it){
     '<span class="gl">'+it.ilvl+'</span>'+
     (it.plus?'<span class="gp">+'+it.plus+'</span>':'')+
     (it.new?'<span class="gn"></span>':'')+
+    (bagCompare ? compareMark(it) : '')+
   '</div>';
 }
 function renderBag(){
+  /* restore the saved toggle the first time the panel draws */
+  if(S.opts && S.opts.cmp!=null && bagCompare!==!!S.opts.cmp){
+    bagCompare = !!S.opts.cmp;
+    $('chipCompare').classList.toggle('on', bagCompare);
+  }
   const grid = $('bagGrid');
   let items = S.bag.slice();
   if(bagFilter!=='all') items = items.filter(i=>{
@@ -9424,6 +10250,14 @@ document.querySelectorAll('[data-filter]').forEach(b=>{
     document.querySelectorAll('[data-filter]').forEach(x=>x.classList.remove('sel'));
     b.classList.add('sel'); bagFilter=b.dataset.filter; renderBag();
   });
+});
+$('chipCompare').addEventListener('click',()=>{
+  bagCompare = !bagCompare;
+  $('chipCompare').classList.toggle('on', bagCompare);
+  if(S.opts) S.opts.cmp = bagCompare;
+  renderBag();
+  if(modalUid!=null) openItemModal(modalUid);   /* keep an open sheet in step */
+  sfx('buy'); saveGame();
 });
 $('btnSortBag').addEventListener('click',()=>{
   S.bag.sort((a,b)=> b.rar-a.rar || b.ilvl-a.ilvl || a.kind.localeCompare(b.kind));
