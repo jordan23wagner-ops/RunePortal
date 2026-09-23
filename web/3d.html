@@ -683,6 +683,36 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 /* ============================================================
    MODAL / ITEM DETAIL
    ============================================================ */
+/* ---- the seal card ---- */
+.sealHead{display:flex;gap:12px;align-items:center;margin-bottom:12px;
+  padding-bottom:11px;border-bottom:1px solid var(--line);}
+.sealIc img{width:46px;height:46px;image-rendering:auto;}
+.sealName{font-size:17px;font-weight:900;letter-spacing:.2px;color:var(--zc,#e6ecf6);}
+.sealSub{font-size:10px;font-weight:800;letter-spacing:2.6px;color:var(--dim);margin-top:2px;}
+.sealGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
+.sealStat{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  padding:7px 4px;text-align:center;}
+.sealStat b{display:block;font-size:15px;font-weight:900;font-variant-numeric:tabular-nums;}
+.sealStat span{display:block;font-size:8.5px;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--dim);margin-top:2px;}
+.sealLbl{font-size:9.5px;font-weight:800;letter-spacing:1.7px;text-transform:uppercase;
+  color:var(--dim);margin-bottom:6px;}
+.sealCharge{background:linear-gradient(135deg,rgba(143,227,255,.10),rgba(143,227,255,.02));
+  border:1px solid rgba(143,227,255,.28);border-radius:10px;padding:10px 11px;margin-bottom:10px;}
+.chargePips{display:flex;gap:5px;margin-bottom:7px;}
+.chargePips i{flex:1;height:5px;border-radius:3px;background:rgba(143,227,255,.14);}
+.chargePips i.on{background:#8fe3ff;box-shadow:0 0 7px rgba(143,227,255,.6);}
+.sealNote{font-size:10px;line-height:1.45;color:var(--dim);}
+/* a zone you have not opened yet */
+.zoneCard.shut .zIn{opacity:.62;}
+.zLock{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;
+  letter-spacing:.3px;color:var(--dim);margin-top:6px;}
+.zLock b{color:#8fe3ff;font-variant-numeric:tabular-nums;}
+.wayRow{display:flex;align-items:center;gap:5px;margin-top:6px;}
+.wayRow .wp{width:13px;height:13px;border-radius:3px;border:1px solid rgba(143,227,255,.35);
+  background:rgba(143,227,255,.08);}
+.wayRow .wp.on{background:#8fe3ff;border-color:#8fe3ff;box-shadow:0 0 6px rgba(143,227,255,.65);}
+.wayRow span{font-size:10px;color:var(--dim);letter-spacing:.2px;}
 #modalWrap{
   position:absolute;inset:0;z-index:60;display:none;
   align-items:flex-end;justify-content:center;
@@ -1107,7 +1137,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     <button class="tab" data-tab="pGear"><span class="ic" data-ico="ui:hero"></span>Hero<span class="dot"></span></button>
     <button class="tab" data-tab="pSkill"><span class="ic" data-ico="ui:lattice"></span>Skills<span class="dot"></span></button>
     <button class="tab" data-tab="pCraft"><span class="ic" data-ico="ui:forge"></span>Forge</button>
-    <button class="tab" data-tab="pZone"><span class="ic" data-ico="ui:rift"></span>Rifts</button>
+    <button class="tab" data-tab="pZone"><span class="ic" data-ico="ui:rift"></span>Rifts<span class="dot"></span></button>
     <button class="tab" data-tab="pMenu"><span class="ic" data-ico="ui:camp"></span>Camp</button>
   </div>
 
@@ -1750,6 +1780,19 @@ const ICO_DRAW = {
   u_surge(g,rc){
     _p(g,[40,2, 18,30, 30,30, 22,60, 48,24, 34,24], rc);
   },
+  /* the way onward: a keystone, and the arch it belongs in */
+  u_waystone(g,rc){
+    _p(g,[32,4, 52,19, 46,53, 18,53, 12,19], rc);
+    _p(g,[32,13, 44,24, 40,45, 24,45, 20,24], 'rgba(255,255,255,.3)', null);
+    _p(g,[32,21, 38,32, 32,43, 26,32], '#12161f', null);
+  },
+  u_gate(g,rc){
+    _bar(g,8,18,10,42, IC.steelD);
+    _bar(g,46,18,10,42, IC.steelD);
+    _p(g,[4,20, 32,4, 60,20, 60,26, 4,26], IC.steel);
+    _p(g,[23,28, 41,28, 37,58, 27,58], rc);
+    _c(g,32,38,5.5, 'rgba(255,255,255,.45)', null);
+  },
   /* affixes */
   u_shielded(g,rc){ _p(g,[32,6, 52,15, 48,40, 32,56, 16,40, 12,15], rc);
                     _p(g,[32,14, 44,20, 41,38, 32,48, 23,38, 20,20],
@@ -2299,6 +2342,10 @@ function freshState(cls){
        the numbers would run away inside an hour. */
     charms:[null,null,null],
     zone:'verdant', zoneKills:{}, crafted:[],
+    /* the waystone gate: keystones held per zone, the dry streak that makes
+       the next one likelier, which zones you have opened, and the charge you
+       carry for going deeper */
+    way:{}, pity:{}, open:{verdant:1}, charge:0, chargeTier:0,
     opts:{sfx:true,haptic:true,autoAim:true,gfx:'high',music:true,musVol:0.8},
     sp:1, skills:{},
     meta:{kills:0,deaths:0,items:0,salvaged:0,best:0,chests:0},
@@ -2333,6 +2380,11 @@ function loadGame(){
     if(S.sp==null) S.sp=S.lvl||1;
     if(!S.skills) S.skills={};
     if(!S.seen) S.seen={};
+    if(!S.way) S.way={};
+    if(!S.pity) S.pity={};
+    if(!S.open) S.open={verdant:1};
+    if(S.charge==null) S.charge=0;
+    if(S.chargeTier==null) S.chargeTier=0;
     return true;
   }catch(e){ return false; }
 }
@@ -2520,6 +2572,9 @@ function computeStats(){
     if(O.magicDmg && d.wpnCls==='magic') d.allDmg += O.magicDmg*100;
     if(off.arch==='shield') d.block = 0.14;
   }
+  /* Rift Charge rides on top of everything, including the level scaling -
+     it is a reward for where you are, not a stat you built */
+  if(S.charge>0){ d.allDmg += chargeDmg(); d.luck += chargeLuck(); }
   d.critC = clamp(d.critC,0,75);
   d.moveSpeed = 168*(1+d.movSpd/100);
   d.uniq = uniq;
@@ -2575,6 +2630,7 @@ function payMats(cost){
 function bagAdd(it){
   if(S.bag.length>=TUNE.bagMax) return false;
   S.bag.push(it); S.meta.items++;
+  if(run){ run.items++; if(it.rar>run.best) run.best=it.rar; }
   if(it.rar>S.meta.best) S.meta.best=it.rar;
   return true;
 }
@@ -3390,6 +3446,29 @@ const SFX = {
                 [784,1047,1319].forEach((f,i)=>tone(f,0.24,'triangle',0.09,null,0.08+i*0.055)); },
   portal:()=>{ tone(120,0.9,'sawtooth',0.12,760); noise(0.7,0.10,1800);
                clang(660,0.8,0.08,0.2); },
+  /* a keystone: stone struck once, ringing above the mix so it cuts through
+     whatever the band is doing when it lands */
+  wayDrop:()=>{ crack(0.26,2200); clang(880,0.45,0.10,0.03);
+                clang(1320,0.38,0.07,0.10); tone(196,0.5,'triangle',0.09,294,0.02); },
+  /* the third one. The gate takes the charge and holds it. */
+  gateLit:()=>{ if(!BAND) bandInit();
+                if(BAND){ const t=AC.currentTime;
+                  [0,4,7].forEach((d,i)=>{ const f=noteHz(82.4,'harmMin',d,0);
+                    gtrChord(BAND.gtrL, f, t+i*0.09, 1.4, false, 0.95);
+                    gtrChord(BAND.gtrR, f, t+i*0.10, 1.4, false, 0.95); });
+                  drCrash(t,0.9); drKick(t,1); }
+                [659,988,1319].forEach((f,i)=>tone(f,0.4,'triangle',0.10,null,0.10+i*0.07)); },
+  /* stepping through. The one chord in this game that RESOLVES - everything
+     else is phrygian or locrian and deliberately unsettled, so a plain major
+     lands as relief rather than as a cadence you stopped noticing. */
+  seal:  ()=>{ if(!BAND) bandInit();
+               if(BAND){ const t=AC.currentTime;
+                 gtrChord(BAND.gtrL, 65.41, t, 2.6, false, 1.0);
+                 gtrChord(BAND.gtrR, 98.00, t+0.04, 2.6, false, 1.0);
+                 padChord(130.81, t+0.05, 3.2, 0.9);
+                 padChord(164.81, t+0.12, 3.0, 0.7);
+                 drCrash(t,1); drKick(t,1); }
+               tone(130.81,1.6,'sine',0.16); noise(0.9,0.12,900); },
   obelisk:()=>{ if(!BAND) bandInit();
                 if(BAND){ const t=AC.currentTime;
                   gtrChord(BAND.gtrL, 43.65, t, 1.2, false, 1.0, false);
@@ -3519,6 +3598,10 @@ function drawGlow(x,y,col,size,alpha){
 const WORLD = {w:2400, h:2850};
 let cam = {x:0, y:0};
 let packs = [], props = [], chests = [], nearChest = null, nearObelisk = null;
+let gate = null, nearGate = null;
+/* what this visit to the zone amounted to, for the summary card on the way
+   out. Reset by buildZoneWorld, which is also what resets the surge. */
+let run = {kills:0, elites:0, alphas:0, best:0, items:0, t:0};
 
 /* ================================================================
    TERRAIN
@@ -4324,7 +4407,8 @@ function buildZoneWorld(){
 
   for(const pk of packs) spawnPack(pk);
   objective = rollObjective();
-  surge = {lvl:0, t:0};
+  surge = {lvl:0, t:0, peak:0};
+  run = {kills:0, elites:0, alphas:0, best:0, items:0, t:0};
   /* nudged off dead centre onto standable ground, since the centre of a zone
      is exactly where a ridge or a bog is most likely to be */
   let ox = WORLD.w*0.5, oy = WORLD.h*0.5;
@@ -4333,6 +4417,18 @@ function buildZoneWorld(){
     ox = WORLD.w*0.5+Math.cos(a2)*d; oy = WORLD.h*0.5+Math.sin(a2)*d;
   }
   obelisk = {x:ox, y:oy, r:30, t:0, flare:0};
+  /* The gate goes near where you came IN, not out at the far edge. You want
+     to walk past the dead arch on your way out of the entrance, go and earn
+     it, and come back - the walk back is the part that reads as leaving. */
+  let gx = P.x, gy = P.y - 420;
+  for(let t2=0;t2<240;t2++){
+    const a3 = rnd(0,6.283), d3 = rnd(360,600);
+    const tx = clamp(P.x+Math.cos(a3)*d3, 200, WORLD.w-200);
+    const ty = clamp(P.y+Math.sin(a3)*d3, 200, WORLD.h-200);
+    if(!terrainBlocked(tx,ty,110) && !inWater(tx,ty)){ gx=tx; gy=ty; break; }
+  }
+  gate = {x:gx, y:gy, r:34, t:0, flare:0,
+          ry:Math.atan2(P.x-gx, P.y-gy)};
   spawnObjective();
   toast(icoKeyHTML(objective.ico,0,'inl')+' '+objective.n, true);
   sceneReady = false;            /* scenery, ground and chests rebuild next frame */
@@ -4358,7 +4454,7 @@ let objective = null;
    And it pays in LOOT, not just gold: raising the stakes without raising the
    drop quality is the exact trap that made surges feel like a punishment. */
 const SURGE_EVERY = 150, SURGE_AUTO_MAX = 1, SURGE_MAX = 6;
-let surge = {lvl:0, t:0};
+let surge = {lvl:0, t:0, peak:0};
 function surgeHpMul(){  return 1 + surge.lvl*0.16; }
 function surgeDmgMul(){ return 1 + surge.lvl*0.10; }
 function surgeGoldMul(){ return 1 + surge.lvl*0.30; }
@@ -4386,6 +4482,9 @@ function raiseSurge(n, why){
   const before = surge.lvl;
   surge.lvl = Math.min(SURGE_MAX, surge.lvl + (n||1));
   if(surge.lvl===before) return false;
+  /* the tithe pays on the HIGHEST danger you held, not the one you happen to
+     be standing in - so pushing the obelisk before you leave is banked */
+  surge.peak = Math.max(surge.peak||0, surge.lvl);
   for(const f of foes){
     const frac = f.hp/f.max;
     f.max *= 1.16; f.hp = f.max*Math.min(1, frac+0.10); f.dmg *= 1.10;
@@ -4417,6 +4516,200 @@ function useObelisk(){
   raiseSurge(1, 'offering accepted');
   saveGame();
 }
+
+/* ================================================================
+   WAYSTONES + THE RIFT GATE
+
+   The way onward is a DROP, not a level check. Three of a zone's keystones
+   light its gate; walking through seals the zone, pays a tithe scaled by the
+   danger you chose to buy, and opens the next tier. Nothing forces you
+   through it — the keystone unlocks the option and you leave when you like.
+
+   The rates are priced against what a zone actually hands you: six elite
+   camps and one alpha, all of which respawn on a timer. A flat 1/100 on
+   elites reads reasonable as a number and is about 67 minutes of sweeping in
+   practice - and a third of players would STILL be going at that point. The
+   pity counter is what bounds that tail: every elite or alpha that comes up
+   empty makes the next one likelier, so a bad streak ends instead of
+   compounding into the thing that closes the tab.
+   ================================================================ */
+const WAY_NEED  = 3;
+const WAY_ODDS  = {2:0.34, 1:0.05};   /* alpha | elite */
+const WAY_CHEST = 0.025;
+const WAY_PITY  = 0.02;               /* per empty elite/alpha, resets on drop */
+const WAY_NAME  = {verdant:'Verdant Keystone', ashen:'Ashen Keystone',
+  frost:'Frostbound Keystone', rotmire:'Rotmire Keystone', voidspire:'Void Keystone'};
+function wayHeld(z){ return S.way[z||S.zone]||0; }
+function wayPity(z){ return S.pity[z||S.zone]||0; }
+function wayLabel(z){ return WAY_NAME[z||S.zone] || 'Keystone'; }
+function nextZone(id){
+  const i = ZONES.findIndex(z=>z.id===(id||S.zone));
+  return (i>=0 && i+1<ZONES.length) ? ZONES[i+1] : null;
+}
+function zoneOpen(id){ return id==='verdant' || !!(S.open&&S.open[id]); }
+/* Once the way onward is open there is nothing left to farm here, so the drop
+   stops rather than quietly burning rolls on something you cannot spend. */
+function wayWanted(){
+  const nx = nextZone();
+  if(nx && zoneOpen(nx.id)) return false;
+  return wayHeld() < WAY_NEED;
+}
+/* still worth SHOWING: true right through 3/3, false only once the way
+   onward is actually open and there is nothing left to track */
+function wayShow(){
+  const nx = nextZone();
+  return !(nx && zoneOpen(nx.id));
+}
+function wayChance(rank){
+  const base = WAY_ODDS[rank];
+  if(base==null) return 0;
+  return Math.min(1, base + wayPity()*WAY_PITY);
+}
+function rollWaystone(rank){
+  if(!wayWanted()) return false;
+  const z = S.zone;
+  if(Math.random() < wayChance(rank)){
+    S.way[z] = wayHeld(z)+1; S.pity[z] = 0;
+    wayFound(); return true;
+  }
+  S.pity[z] = wayPity(z)+1;
+  return false;
+}
+/* A chest keystone is a bonus, not a rung on the pity ladder: it neither
+   reads the counter nor advances it, so a lucky chest can never dilute the
+   protection a bad elite streak has built up. */
+function rollWaystoneChest(){
+  if(!wayWanted() || Math.random() >= WAY_CHEST) return false;
+  S.way[S.zone] = wayHeld()+1;
+  wayFound(); return true;
+}
+function wayFound(){
+  const n = wayHeld(), full = n>=WAY_NEED;
+  toast(icoKeyHTML('ui:waystone',3,'inl')+' '+wayLabel()+' '+n+'/'+WAY_NEED+
+    (full?' &middot; THE GATE IS LIT':''), true);
+  sfx(full?'gateLit':'wayDrop');
+  shake = Math.max(shake, full?12:6); buzz(full?110:50);
+  if(gate) gate.flare = 1;
+  markZoneAlert();
+  saveGame();
+}
+function markZoneAlert(){
+  const t = document.querySelector('[data-tab="pZone"]');
+  if(t) t.classList.add('alert');
+}
+
+/* ---- Rift Charge ----
+   What sealing actually BUYS you, and the reason forward beats sideways: it
+   only survives a step DEEPER. Walk back to easier ground and it is gone. */
+const CHARGE_MAX = 5;
+function chargeDmg(){  return (S.charge||0)*8;  }
+function chargeLuck(){ return (S.charge||0)*10; }
+
+function useGate(){
+  if(!gate) return;
+  const nx = nextZone();
+  /* already opened: the gate is a shortcut now, not a lock */
+  if(nx && zoneOpen(nx.id)){ sfx('portal'); travelTo(nx.id, true); return; }
+  if(wayHeld() < WAY_NEED){
+    toast('The gate is dark &middot; '+wayLabel()+' '+wayHeld()+'/'+WAY_NEED, true);
+    sfx('no'); return;
+  }
+  sealZone();
+}
+
+/* The ledger closes here. Everything this visit was worth gets counted once,
+   paid once, and shown once - which is the whole difference between leaving
+   and a zone simply ending. */
+function sealZone(){
+  const z = ZONE_BY_ID[S.zone], nx = nextZone();
+  const peak = surge.peak||0;
+  S.way[S.zone] = Math.max(0, wayHeld()-WAY_NEED);
+  gate.flare = 1.6;
+  ring(gate.x, gate.y, '#8fe3ff', 20, 300, 0.8);
+  burst(gate.x, gate.y, '#cfefff', 40, 340, 0.9, 4);
+  shake = Math.max(shake, 16); buzz(160);
+  sfx('seal');
+
+  /* ---- the tithe. Danger you BOUGHT is what scales it, so the obelisk and
+     the gate are the same decision seen from two ends. ---- */
+  const tithe = [];
+  const pay = (k,q)=>{ if(q<=0) return; addMat(k,q); tithe.push([k,q]); };
+  pay(z.mats[0], 8 + peak*4);
+  pay(z.mats[1], 4 + peak*2);
+  pay(z.cat,     1 + peak);
+  const gold = Math.round((140 + peak*110) * z.tier * (1+D.goldF/100));
+  gainGold(gold);
+
+  /* one guaranteed piece at the next tier's level, floored at Rare. A floor
+     is not a jackpot: the roll can still beat it, and usually does not. */
+  const ilvl = clamp(Math.round((nx?nx.lo:z.hi) + rnd(0,2)), 1, 99);
+  const rar  = Math.max(2, rollRarity(z.tier+1, 2+peak*0.3, D.luck));
+  const kind = ['weapon','armor','offhand','trinket'][rint(0,3)];
+  const prize = rollItem({kind, ilvl, rar});
+  const tookPrize = bagAdd(prize);
+
+  S.charge = Math.min(CHARGE_MAX, (S.charge||0)+1);
+  S.chargeTier = Math.max(S.chargeTier||0, z.tier);
+  if(nx) S.open[nx.id] = 1;
+  S.meta.sealed = (S.meta.sealed||0)+1;
+  computeStats();
+  renderZones(); renderBag(); saveGame();
+  showSealCard(z, nx, peak, tithe, gold, prize, tookPrize);
+}
+
+function showSealCard(z, nx, peak, tithe, gold, prize, tookPrize){
+  const mm = Math.floor(run.t/60), ss = Math.floor(run.t%60);
+  const stat = (k,v)=>'<div class="sealStat"><b>'+v+'</b><span>'+k+'</span></div>';
+  let h = '<div class="sealHead" style="--zc:'+z.accent+'">'+
+    '<div class="sealIc">'+icoKeyHTML('ui:gate',3)+'</div><div>'+
+    '<div class="sealName">'+z.n+'</div>'+
+    '<div class="sealSub">SEALED</div></div></div>';
+
+  h += '<div class="sealGrid">'+
+    stat('Kills', fmt(run.kills)) + stat('Elites', run.elites) +
+    stat('Alphas', run.alphas) +
+    stat('Camps', campsCleared()+'/'+campTotal()) +
+    stat('Peak Threat', '⚡'+peak) +
+    stat('Time', mm+':'+String(ss).padStart(2,'0')) + '</div>';
+
+  h += '<div class="detBlock"><div class="sealLbl">Rift Tithe</div>'+
+    tithe.map(([k,q])=>'<div class="dRow"><span class="dk">'+
+      icoKeyHTML('mat:'+k,0,'inl')+MATS[k].n+'</span>'+
+      '<span class="dv pos">+'+q+'</span></div>').join('')+
+    '<div class="dRow"><span class="dk">'+icoKeyHTML('ui:gold',0,'inl')+
+      'Gold</span><span class="dv pos">+'+fmt(gold)+'</span></div></div>';
+
+  h += '<div class="detBlock"><div class="sealLbl">Passage Prize</div>'+
+    '<div class="detHead rar'+prize.rar+'" style="margin:0;">'+
+    '<div class="detIc">'+icoHTML(prize)+'</div><div>'+
+    '<div class="detName">'+prize.name+'</div>'+
+    '<div class="detSub">'+RARITY[prize.rar].name+' &middot; ilvl '+prize.ilvl+
+    (tookPrize?'':' &middot; <span style="color:var(--hp)">BACKPACK FULL</span>')+
+    '</div></div></div>'+
+    (run.best>0 ? '<div class="dRow" style="margin-top:6px;"><span class="dk">Best find here</span>'+
+      '<span class="dv" style="color:'+RARITY[run.best].col+'">'+RARITY[run.best].name+
+      '</span></div>' : '')+'</div>';
+
+  h += '<div class="sealCharge"><div class="sealLbl">Rift Charge &nbsp;'+
+    '<b style="color:#8fe3ff">'+S.charge+'/'+CHARGE_MAX+'</b></div>'+
+    '<div class="chargePips">'+
+    Array.from({length:CHARGE_MAX},(_,i)=>'<i class="'+(i<S.charge?'on':'')+'"></i>').join('')+
+    '</div><div class="sealNote">+'+chargeDmg()+'% damage &middot; +'+chargeLuck()+
+    '% luck. Held only while you go deeper &mdash; turn back and it is gone.</div></div>';
+
+  h += '<div class="modalBtns">';
+  if(nx) h += '<button class="btn pri wide" data-seal="'+nx.id+'">Enter '+nx.n+'</button>'+
+              '<button class="btn" data-act="close">Stay</button>';
+  else   h += '<button class="btn pri wide" data-act="close">The rift holds. For now.</button>';
+  h += '</div>';
+
+  $('modalBody').innerHTML = h;
+  $('modalWrap').classList.add('open');
+}
+$('modalBody').addEventListener('click', e=>{
+  const b = e.target.closest('[data-seal]'); if(!b) return;
+  closeModal(); travelTo(b.dataset.seal, true);
+});
 
 function rollObjective(){
   const z = ZONE_BY_ID[S.zone];
@@ -4730,6 +5023,8 @@ function killFoe(f){
 
   objectiveKill(f);
   kills++; S.meta.kills++;
+  run.kills++;
+  if(f.rank===2) run.alphas++; else if(f.rank===1) run.elites++;
   S.zoneKills[S.zone] = (S.zoneKills[S.zone]||0)+1;
   gainXp(TUNE.eXp(f.lvl, f.rank));
   rollDrops(f);
@@ -4822,6 +5117,9 @@ function rollDrops(f){
   if(rank===2){ addMat(z.cat,1); feedMat(z.cat,1);
     drops.push({x:f.x,y:f.y,t:'mat',k:z.cat,v:1,life:0,vx:0,vy:-40}); }
 
+  /* ---- the way onward. Only elites and the alpha carry it. ---- */
+  if(rank>=1) rollWaystone(rank);
+
   /* gear */
   /* Quantity is close to where it was — it was the QUALITY curve that made
      the bag fill with blues. Drown the player in commons, not in epics. */
@@ -4858,6 +5156,7 @@ function openChest(){
   c.open = true; c.openT = 0;
   S.meta.chests++;
   const z = ZONE_BY_ID[S.zone];
+  rollWaystoneChest();
   const got = [];
   /* 1-2 equipment items, never more. Gold, materials and the rest of the haul
      below are untouched — a chest should feel worth the walk without being a
@@ -5002,7 +5301,8 @@ window.addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='q') useSkill();
   if(e.key.toLowerCase()==='e') doDash();
   if(e.key.toLowerCase()==='r') usePotion();
-  if(e.key.toLowerCase()==='f'){ if(nearChest) openChest(); else if(nearObelisk) useObelisk(); }
+  if(e.key.toLowerCase()==='f'){ if(nearGate) useGate(); else if(nearChest) openChest();
+                                 else if(nearObelisk) useObelisk(); }
 });
 window.addEventListener('keyup',e=>{
   keys[e.key.toLowerCase()]=0;
@@ -5029,7 +5329,8 @@ bindHold($('btnAtk'), ()=>{atkHeld=true;}, ()=>{atkHeld=false;});
 bindHold($('btnSkill'), useSkill);
 bindHold($('btnDash'),  doDash);
 bindHold($('btnPot'),   usePotion);
-const usePrompt = ()=>{ if(nearChest) openChest(); else if(nearObelisk) useObelisk(); };
+const usePrompt = ()=>{ if(nearGate) useGate(); else if(nearChest) openChest();
+                        else if(nearObelisk) useObelisk(); };
 $('prompt').addEventListener('click', usePrompt);
 $('prompt').addEventListener('touchstart', e=>{e.preventDefault(); usePrompt();},{passive:false});
 
@@ -5651,15 +5952,45 @@ function update(dt){
     if(c.open){ c.openT = Math.min(1, (c.openT||0) + dt*2.6); continue; }
     if(Math.hypot(P.x-c.x, P.y-c.y) < 56) nearChest = c;
   }
-  /* one prompt, two uses: a chest if you are on one, otherwise the obelisk */
+  /* The gate outranks both: it is the only one of the three that ends the
+     visit, so it must never be shadowed by an obelisk parked next to it. */
+  nearGate = null;
+  if(gate){
+    gate.t += dt;
+    gate.flare = Math.max(0, gate.flare - dt*1.4);
+    if(Math.hypot(P.x-gate.x, P.y-gate.y) < 86) nearGate = gate;
+  }
+  run.t += dt;
+  /* one prompt, three uses: the gate, then a chest, then the obelisk */
   nearObelisk = null;
-  if(!nearChest && obelisk){
+  if(!nearChest && !nearGate && obelisk){
     obelisk.t += dt;
     obelisk.flare = Math.max(0, obelisk.flare - dt*1.6);
     if(Math.hypot(P.x-obelisk.x, P.y-obelisk.y) < 72) nearObelisk = obelisk;
   }
   const pr = $('prompt');
-  if(nearChest){ pr.textContent = 'OPEN CHEST'; pr.style.display='block'; }
+  if(nearGate){
+    const nx = nextZone(), lit = wayHeld()>=WAY_NEED,
+          opened = nx && zoneOpen(nx.id);
+    if(opened){
+      pr.innerHTML = 'STEP THROUGH'+
+        '<span style="display:block;font-size:9px;font-weight:600;letter-spacing:.3px;'+
+        'margin-top:3px;color:var(--dim);">to '+nx.n.toUpperCase()+'</span>';
+    } else if(lit){
+      pr.innerHTML = 'SEAL THE RIFT'+
+        '<span style="display:block;font-size:9px;font-weight:600;letter-spacing:.3px;'+
+        'margin-top:3px;color:var(--xp);">'+
+        (nx ? 'opens '+nx.n.toUpperCase() : 'the rift holds')+
+        ' &middot; tithe at DANGER '+(surge.peak||0)+'</span>';
+    } else {
+      pr.innerHTML = 'THE GATE IS DARK'+
+        '<span style="display:block;font-size:9px;font-weight:600;letter-spacing:.3px;'+
+        'margin-top:3px;color:var(--dim);">'+wayLabel().toUpperCase()+' '+
+        wayHeld()+'/'+WAY_NEED+' &middot; alphas and elites carry them</span>';
+    }
+    pr.style.display='block';
+  }
+  else if(nearChest){ pr.textContent = 'OPEN CHEST'; pr.style.display='block'; }
   else if(nearObelisk){
     const z = ZONE_BY_ID[S.zone];
     if(surge.lvl>=SURGE_MAX) pr.textContent = 'RIFT SATED';
@@ -10258,6 +10589,56 @@ function buildZoneScene(){
     t.scene.add(og); t.obelisk = og;
   }
 
+  /* ---- the rift gate ----
+     Two pillars, a lintel with three keystone sockets, and a veil between
+     them. The sockets are the readout: you can count from across the zone
+     how many you are carrying, so the thing you are working toward is
+     visible from the place you are working. */
+  if(t.gate){ t.scene.remove(t.gate); t.gate = null; }
+  if(gate){
+    const gg = new THREE.Group();
+    gg.position.set(gate.x, 0, gate.y);
+    gg.rotation.y = gate.ry || 0;
+    const stone = new THREE.MeshStandardMaterial({
+      color:mix(shade(z.ground,0.34), '#6f6b84', 0.55), roughness:1, flatShading:true});
+    const sock = [];
+    const put=(geo,mat,x,y,zz)=>{ const m=new THREE.Mesh(geo,mat);
+      m.position.set(x||0,y||0,zz||0); m.castShadow=true; m.receiveShadow=true;
+      gg.add(m); return m; };
+    put(new THREE.CylinderGeometry(74,88,13,8), stone, 0, 6, 0);
+    for(const sx of [-56, 56]){
+      put(new THREE.BoxGeometry(26,88,28), stone, sx, 56, 0);
+      put(new THREE.BoxGeometry(34,14,36), stone, sx, 105, 0);
+    }
+    put(new THREE.BoxGeometry(170,22,32), stone, 0, 120, 0);
+    /* Three sockets, one per keystone, sitting ON TOP of the lintel. They
+       were on its front face first, which is the single surface a top-down
+       camera never sees - from above the whole readout was two faint slivers
+       behind the beam. Each one carries its own shaft of light so the count
+       survives being read from the far side of the zone. */
+    for(let i2=0;i2<WAY_NEED;i2++){
+      const m = new THREE.Mesh(new THREE.OctahedronGeometry(15,0),
+        new THREE.MeshStandardMaterial({color:'#8fe3ff', roughness:0.3,
+          flatShading:true, emissive:new THREE.Color('#0b4f6c')}));
+      m.position.set((i2-1)*50, 143, 0);
+      const sh = new THREE.Mesh(new THREE.CylinderGeometry(3, 14, 70, 6, 1, true),
+        new THREE.MeshBasicMaterial({color:'#bff0ff', transparent:true, opacity:0,
+          depthWrite:false, blending:THREE.AdditiveBlending}));
+      sh.position.set((i2-1)*50, 184, 0);
+      gg.add(m); gg.add(sh); m.userData.shaft = sh; sock.push(m);
+    }
+    const veil = new THREE.Mesh(new THREE.PlaneGeometry(104,102),
+      new THREE.MeshBasicMaterial({color:'#8fe3ff', transparent:true, opacity:0.05,
+        side:THREE.DoubleSide, depthWrite:false, blending:THREE.AdditiveBlending}));
+    veil.position.set(0, 58, 0); gg.add(veil);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(6, 32, 210, 8, 1, true),
+      new THREE.MeshBasicMaterial({color:'#bff0ff', transparent:true, opacity:0,
+        depthWrite:false, blending:THREE.AdditiveBlending}));
+    beam.position.y = 158; gg.add(beam);
+    gg.userData = {sock, veil, beam};
+    t.scene.add(gg); t.gate = gg;
+  }
+
   /* ---- chests ----
      A single emissive box was the whole model, which is why they looked worse
      than everything around them. Now that a chest is a rare find it has to
@@ -10581,6 +10962,26 @@ function render(){
     shard.scale.setScalar(1 + obelisk.flare*0.5);
   }
 
+  if(t.gate && gate){
+    const {sock, veil, beam} = t.gate.userData;
+    const held = wayHeld(), lit = held>=WAY_NEED || !wayWanted();
+    for(let i2=0;i2<sock.length;i2++){
+      const on = i2 < held || !wayWanted();
+      const m = sock[i2];
+      m.rotation.y = gate.t*0.8 + i2;
+      m.position.y = 143 + (on ? Math.sin(gate.t*1.6+i2)*4 : 0);
+      m.userData.shaft.material.opacity = on ? 0.20+gate.flare*0.4 : 0;
+      /* an empty socket is a dead grey stone, not a dim blue one - the
+         difference has to survive being looked at from 900 units away */
+      m.material.color.set(on ? '#8fe3ff' : '#39424f');
+      m.material.emissive.set(on ? '#0b4f6c' : '#0a0d12');
+      m.scale.setScalar(on ? 1 + gate.flare*0.6 : 0.78);
+    }
+    veil.material.opacity = (lit ? 0.26 + Math.sin(gate.t*1.1)*0.06 : 0.035)
+      + gate.flare*0.45;
+    beam.material.opacity = lit ? 0.10 + gate.flare*0.5 : gate.flare*0.2;
+  }
+
   /* ---- chests ----
      An opened chest STAYS, lid swung back and beacon dead. Popping it out of
      existence threw away the one bit of evidence that you found something. */
@@ -10780,6 +11181,19 @@ function drawMinimap(){
     hctx.fillRect(ox+c.x*s-1.5, oy+c.y*s-1.5, 3.5, 3.5); }
   /* objective targets get their own marker: a hunt you cannot locate is a
      sweep of the whole zone, which is exactly the tedium this replaces */
+  /* the gate outranks the obelisk on the minimap for the same reason it
+     outranks it on the prompt: it is the one marker that ends the visit */
+  if(gate){
+    const lit = wayHeld()>=WAY_NEED || !wayWanted();
+    hctx.globalAlpha = 1;
+    hctx.fillStyle = lit ? '#8fe3ff' : '#4d5a68';
+    const gx2 = ox+gate.x*s, gy2 = oy+gate.y*s;
+    hctx.fillRect(gx2-4.6, gy2-4.6, 3.2, 9.2);
+    hctx.fillRect(gx2+1.4, gy2-4.6, 3.2, 9.2);
+    hctx.fillRect(gx2-4.6, gy2-5.8, 9.2, 2.6);
+    if(lit){ hctx.strokeStyle='rgba(255,255,255,.8)'; hctx.lineWidth=1;
+             hctx.strokeRect(gx2-4.6, gy2-5.8, 9.2, 11); }
+  }
   if(obelisk){
     hctx.globalAlpha = 1;
     hctx.fillStyle = '#c084fc';
@@ -11122,19 +11536,29 @@ function syncHud(){
     ? icoKeyHTML(objective.ico,0,'inl')+' '+(objective.done ? objective.n+' ✓'
         : objective.n+' '+objective.got+'/'+objective.need)
     : icoKeyHTML('ui:purge',0,'inl')+' '+campsCleared()+'/'+campTotal();
+  /* the keystone tally sits AHEAD of the objective once the gate is the
+     thing you are working toward, and drops off entirely once it is open */
+  if(wayShow()) line = icoKeyHTML('ui:waystone',wayHeld()>=WAY_NEED?4:3,'inl')+
+    wayHeld()+'/'+WAY_NEED+'&nbsp; '+line;
   if(surge.lvl>0) line = icoKeyHTML('ui:surge',4,'inl')+surge.lvl+'&nbsp; '+line;
   $('hudKills').innerHTML = line;
   /* Spell out what the bolt bought. "Rift danger 3" on its own tells you
      nothing about whether staying is worth it. */
   const hs = $('hudSurge');
+  let sl = '';
   if(surge.lvl>0){
     const t = surgeTerms();
-    hs.style.display = '';
-    $('hudSurgeTxt').innerHTML =
-      '<b>⚡'+t.lvl+'</b> '+
+    sl = '<b>⚡'+t.lvl+'</b> '+
       t.cost.map(r=>'<i>'+r[0]+' '+r[1]+'</i>').join(' ') + ' <span>⟶</span> ' +
       t.gain.map(r=>'<em>'+r[0]+' '+r[1]+'</em>').join(' ');
-  } else hs.style.display = 'none';
+  }
+  /* Charge belongs on the same line as danger: both are things you are
+     carrying that change the numbers, and both are lost by leaving wrong */
+  if(S.charge>0) sl += (sl?' <span>·</span> ':'')+
+    '<b style="color:#8fe3ff">◈'+S.charge+'</b> <em>Dmg +'+chargeDmg()+
+    '%</em> <em>Luck +'+chargeLuck()+'%</em>';
+  if(sl){ hs.style.display=''; $('hudSurgeTxt').innerHTML = sl; }
+  else hs.style.display = 'none';
   $('hudZone').textContent = ZONE_BY_ID[S.zone].n;
   if(bossRef){ setBar('bossHp', bossRef.hp/bossRef.max,
     Math.ceil(clamp(bossRef.hp/bossRef.max,0,1)*100)+'%'); }
@@ -12025,7 +12449,10 @@ function renderZones(){
     const danger = clamp((z.lo - S.lvl)/12 + 0.25 + (z.tier-1)*0.06, 0.05, 1);
     const dcol = danger>0.75?'#e0455a':danger>0.45?'#fb923c':'#4ade80';
     const k = S.zoneKills[z.id]||0;
-    return '<div class="zoneCard'+(cur?' cur':'')+'">'+
+    const open = zoneOpen(z.id);
+    /* what it takes to open this one: the keystones of the zone BEFORE it */
+    const prev = i>0 ? ZONES[i-1] : null;
+    return '<div class="zoneCard'+(cur?' cur':'')+(open?'':' shut')+'">'+
       '<div class="zBg" style="background:linear-gradient(135deg,'+z.sky+','+z.sky2+')"></div>'+
       '<div class="zIn">'+
         '<div style="display:flex;align-items:baseline;gap:8px;">'+
@@ -12059,9 +12486,24 @@ function renderZones(){
             icoKeyHTML('mat:'+z.mats[1],0,'inl')+MATS[z.mats[1]].n+' · '+
             icoKeyHTML('mat:'+z.cat,0,'inl')+MATS[z.cat].n+'</span>'+
         '</div>'+
+        /* the keystone track, shown on the zone you are IN (what you are
+           collecting) and on the zone you have not opened (what it costs) */
+        (cur && wayShow()
+          ? '<div class="wayRow">'+
+            Array.from({length:WAY_NEED},(_,j)=>
+              '<div class="wp'+(j<wayHeld()?' on':'')+'"></div>').join('')+
+            '<span>'+wayLabel()+' '+wayHeld()+'/'+WAY_NEED+
+            (wayHeld()>=WAY_NEED?' &middot; gate lit':' &middot; alphas &amp; elites')+'</span></div>'
+          : '')+
+        (!open && prev
+          ? '<div class="zLock">'+icoKeyHTML('ui:waystone',3,'inl')+
+            'Sealed &middot; seal '+prev.n+' to open &nbsp;<b>'+
+            (S.way[prev.id]||0)+'/'+WAY_NEED+'</b></div>'
+          : '')+
         '<div class="zBtnRow">'+
-          '<button class="btn '+(cur?'':'pri')+' wide" data-zone="'+z.id+'" '+(cur?'disabled':'')+'>'+
-            (cur?'You are here':'Travel')+'</button>'+
+          '<button class="btn '+(cur||!open?'':'pri')+' wide" data-zone="'+z.id+'" '+
+            (cur||!open?'disabled':'')+'>'+
+            (cur?'You are here':open?'Travel':'Sealed')+'</button>'+
         '</div>'+
       '</div></div>';
   }).join('');
@@ -12070,14 +12512,32 @@ $('zoneList').addEventListener('click', e=>{
   const b = e.target.closest('[data-zone]'); if(!b||b.disabled) return;
   travelTo(b.dataset.zone);
 });
-function travelTo(id){
+function travelTo(id, sealed){
+  const z = ZONE_BY_ID[id];
+  if(!zoneOpen(id)){
+    toast('The way to '+z.n+' is sealed'); sfx('no'); return;
+  }
+  /* Charge survives a step DEEPER and nothing else. This one rule is what
+     makes "next zone" strictly better than "any zone". */
+  if(S.charge>0){
+    if(z.tier > (S.chargeTier||0)) S.chargeTier = z.tier;
+    else { S.charge = 0; S.chargeTier = 0; toast('Rift Charge fades'); }
+  }
   S.zone = id;
   kills=0;
   clearFeed();
   computeStats();
-  P.hp=D.maxHp; P.mp=D.maxMp; P.dead=false;
+  /* A sealed exit heals you whole. Walking out through the menu tops you up
+     to half and no further - travel used to be a free full heal, which is
+     exactly why leaving never cost anything. */
+  if(sealed){ P.hp=D.maxHp; P.mp=D.maxMp; }
+  else {
+    P.hp = Math.min(D.maxHp, Math.max(P.hp, D.maxHp*0.5));
+    P.mp = Math.min(D.maxMp, Math.max(P.mp, D.maxMp*0.5));
+  }
+  P.dead=false;
   buildZoneWorld();
-  toast('Entering '+ZONE_BY_ID[id].n);
+  toast('Entering '+z.n);
   sfx('portal');
   musSetZone(id);
   if(S.opts.music!==false && !MUS.on) musicStart();
@@ -12246,7 +12706,8 @@ function showTab(t){
     if(t==='pBag'){ renderBag(); document.querySelector('[data-tab="pBag"]').classList.remove('alert'); }
     if(t==='pGear') renderGear();
     if(t==='pCraft') renderCraft();
-    if(t==='pZone') renderZones();
+    if(t==='pZone'){ renderZones();
+      document.querySelector('[data-tab="pZone"]').classList.remove('alert'); }
     if(t==='pSkill') renderSkills();
     if(t==='pMenu') renderMenu();
     saveGame();
