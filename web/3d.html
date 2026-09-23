@@ -1187,7 +1187,7 @@ body.testmode #hud{padding-top:16px;}
     <button class="tab" data-tab="pSkill"><span class="ic" data-ico="ui:lattice"></span>Skills<span class="dot"></span></button>
     <button class="tab" data-tab="pCraft"><span class="ic" data-ico="ui:forge"></span>Forge</button>
     <button class="tab" data-tab="pZone"><span class="ic" data-ico="ui:rift"></span>Rifts<span class="dot"></span></button>
-    <button class="tab" data-tab="pMenu"><span class="ic" data-ico="ui:camp"></span>Camp</button>
+    <button class="tab" data-tab="pMenu"><span class="ic" data-ico="ui:camp"></span>Camp<span class="dot"></span></button>
   </div>
 
   <!-- ===================== OVERLAYS ===================== -->
@@ -1287,6 +1287,10 @@ setTimeout(function(){
    installed home-screen app be permanently LIVE while a browser tab is
    TEST; the last choice is remembered so a plain reload stays put.
    ================================================================ */
+/* Neither of us could tell which build was actually running on the phone,
+   which is how a stale cache went unnoticed for two deploys. Now it is on
+   screen in Camp and in the console. Bump it with anything worth shipping. */
+const BUILD = '2026.09.23-5 landscape+update';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -11794,8 +11798,57 @@ function syncPotBtn(){
    ================================================================ */
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   addEventListener('load', ()=>{
-    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    navigator.serviceWorker.register('/sw.js').then(reg=>{
+      /* A worker sitting in "waiting" means a newer build is already
+         downloaded and is being held back until every tab closes. On an
+         installed app that can be days. Say so and offer the restart. */
+      const offer = ()=>{ if(reg.waiting) updateReady(); };
+      offer();
+      reg.addEventListener('updatefound', ()=>{
+        const w = reg.installing;
+        if(w) w.addEventListener('statechange', ()=>{
+          if(w.state==='installed' && navigator.serviceWorker.controller) updateReady();
+        });
+      });
+      /* checking on launch is what makes a background refresh land at all */
+      reg.update().catch(()=>{});
+    }).catch(()=>{});
   });
+}
+let _updateOffered = false;
+function updateReady(){
+  if(_updateOffered) return;
+  _updateOffered = true;
+  toast('A newer build is ready — Camp ▸ Check for Update');
+  markCampAlert();
+}
+function markCampAlert(){
+  const t = document.querySelector('[data-tab="pMenu"]');
+  if(t) t.classList.add('alert');
+}
+/* An installed app has no address bar, so there is no hard refresh. This is
+   it: drop every cache, tell the worker to stand down, and reload on a URL
+   the HTTP cache has never seen. */
+async function forceUpdate(){
+  toast('Fetching the latest build…');
+  try{
+    if('caches' in window){
+      for(const k of await caches.keys()) await caches.delete(k);
+    }
+    if(navigator.serviceWorker){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const r of regs){
+        if(r.waiting) r.waiting.postMessage('skipWaiting');
+        try{ await r.update(); }catch(e){}
+      }
+      if(navigator.serviceWorker.controller)
+        navigator.serviceWorker.controller.postMessage('purge');
+    }
+  }catch(e){}
+  await new Promise(r=>setTimeout(r, 500));
+  /* the query string carries the profile AND busts the document cache, so
+     the reload cannot be answered from anything held locally */
+  location.replace(location.pathname + '?' + MODE + '&v=' + Date.now());
 }
 /* Storage the browser may evict is storage that eats a save file. A home
    screen web app is already exempt from Safari's seven-day sweep, but
@@ -12969,7 +13022,14 @@ function renderMenu(){
       (IS_TEST?'#ffb020':'#8fe3ff')+'">'+MODE.toUpperCase()+'</b></div>'+
     '<div class="kv"><span>Slot</span><b>'+SAVE_KEY+'</b></div>'+
     '<div class="kv"><span>Class</span><b>'+({melee:'Vanguard',range:'Warden',magic:'Riftbinder'}[S.cls])+'</b></div>'+
-    '<div class="kv"><span>Progress saves automatically</span><b>✓</b></div></div>'+
+    '<div class="kv"><span>Progress saves automatically</span><b>✓</b></div>'+
+    '<div class="kv"><span>Build</span><b style="font-variant-numeric:tabular-nums;">'+
+      BUILD+'</b></div></div>'+
+    '<button class="btn sm" id="btnUpdate" style="width:100%;margin-top:8px;">'+
+      'Check for Update</button>'+
+    '<div class="warn" style="margin-top:7px;">An installed app has no reload '+
+      'button. This clears the cache and pulls the current build — your save is '+
+      'not touched.</div>'+
     '<div class="devGrid" style="margin-top:8px;">'+
       '<button class="btn sm" id="btnExport">Export to File</button>'+
       '<button class="btn sm" id="btnImport">Import from File</button>'+
@@ -13015,6 +13075,7 @@ function renderMenu(){
     });
   });
 
+  $('btnUpdate').addEventListener('click', ()=>{ sfx('buy'); saveGame(); forceUpdate(); });
   $('btnExport').addEventListener('click', ()=>{ exportSave(); sfx('buy'); });
   $('btnImport').addEventListener('click', ()=> $('fileIn').click());
 
@@ -13167,7 +13228,8 @@ function showTab(t){
     if(t==='pZone'){ renderZones();
       document.querySelector('[data-tab="pZone"]').classList.remove('alert'); }
     if(t==='pSkill') renderSkills();
-    if(t==='pMenu') renderMenu();
+    if(t==='pMenu'){ renderMenu();
+      document.querySelector('[data-tab="pMenu"]').classList.remove('alert'); }
     saveGame();
   }
 }
@@ -13258,7 +13320,13 @@ function fitViewport(){
   resizeCanvas();
 }
 window.addEventListener('resize', ()=>fitViewport());
-window.addEventListener('orientationchange', ()=>setTimeout(fitViewport,150));
+/* iOS ANIMATES the rotation, and fires resize partway through it, so a
+   single re-measure lands on an interim size and the canvas is left stretched
+   until something else nudges it. Re-measuring across the whole animation is
+   cheap and makes the final one authoritative. */
+window.addEventListener('orientationchange', ()=>{
+  [80,250,450,700,1100].forEach(ms=>setTimeout(fitViewport, ms));
+});
 if(window.visualViewport) window.visualViewport.addEventListener('resize', ()=>fitViewport());
 /* the in-app browser's chrome can settle after load without firing resize */
 [120,400,1200].forEach(ms=>setTimeout(()=>fitViewport(), ms));

@@ -13,7 +13,7 @@
 
    Bump CACHE_V on release. Old caches are dropped on activate.
    ================================================================ */
-const CACHE_V = 'riftfall-v2';
+const CACHE_V = 'riftfall-v3';
 const SHELL = [
   '/3d.html',
   '/manifest.webmanifest',
@@ -49,22 +49,27 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  /* THE background refresh has to be declared out here, and held open with
+     waitUntil. It used to live inside respondWith's promise: the moment that
+     resolved with the cached copy the browser was free to terminate the
+     worker, and it did - usually before the fetch had written anything back.
+     So the cache never updated and every single launch served the same stale
+     build, no matter how many times the app was closed and reopened. */
+  const fresh = fetch(req).then(res => {
+    if (res && res.ok && res.type === 'basic') {
+      const copy = res.clone();
+      return caches.open(CACHE_V).then(c => c.put(req, copy)).then(() => res);
+    }
+    return res;
+  }).catch(() => null);
+  e.waitUntil(fresh);
+
   e.respondWith((async () => {
     /* ignoreSearch: the game is reached as /3d.html?live from the
        installed app and /3d.html?test from a browser tab. Matching on
        the full URL would miss the cached document for both - i.e. for
        every URL that is actually used. */
     const cached = await caches.match(req, {ignoreSearch:true});
-
-    /* refresh in the background; the result lands for next launch */
-    const fresh = fetch(req).then(res => {
-      if (res && res.ok && res.type === 'basic') {
-        const copy = res.clone();
-        caches.open(CACHE_V).then(c => c.put(req, copy));
-      }
-      return res;
-    }).catch(() => null);
-
     if (cached) return cached;
 
     const res = await fresh;
@@ -80,7 +85,15 @@ self.addEventListener('fetch', e => {
   })());
 });
 
-/* lets the page ask for an immediate takeover after an update */
+/* lets the page ask for an immediate takeover, or for the whole cache to be
+   dropped - the escape hatch behind the Check for Update button, since an
+   installed app has no address bar and therefore no hard refresh */
 self.addEventListener('message', e => {
-  if (e.data === 'skipWaiting') self.skipWaiting();
+  if (e.data === 'skipWaiting') return self.skipWaiting();
+  if (e.data === 'purge') {
+    e.waitUntil((async () => {
+      for (const k of await caches.keys()) await caches.delete(k);
+      for (const c of await self.clients.matchAll()) c.postMessage('purged');
+    })());
+  }
 });
