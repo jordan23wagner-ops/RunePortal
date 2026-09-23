@@ -997,6 +997,14 @@ body.testmode #hud{padding-top:16px;}
   .pHead{padding-top:calc(8px + var(--safe-t));}
   .pFoot{padding-bottom:10px;}
 
+  /* The HUD sits inside #stage, so it already clears the rail - but only by
+     the 8px of padding, which puts the zone name hard against the divider and
+     reads as a clipped first letter. */
+  #hud{padding-left:15px;padding-right:15px;}
+  /* A health bar spanning 870px reads as a loading bar, not as health. Cap it
+     and let the rest of the row have the space. */
+  #hudBars{max-width:min(52%, 460px);}
+
   /* controls tuck into the corners of the wider field */
   #actions{right:16px;bottom:16px;}
   #prompt{bottom:84px;}
@@ -1019,6 +1027,7 @@ body.testmode #hud{padding-top:16px;}
   .tab{padding:8px 2px;font-size:8px;}
   .tab .ic{font-size:18px;}
   #hud{padding-top:calc(3px + var(--safe-t));}
+  #hudBars{max-width:min(46%, 380px);}
   .actBtn{width:50px;height:50px;font-size:18px;}
   .actBtn.big{width:62px;height:62px;font-size:22px;}
   #actions{gap:8px;}
@@ -4445,7 +4454,13 @@ function buildZoneWorld(){
   buildTerrain();
 
   /* enter from the south edge */
-  P.x = WORLD.w*0.5; P.y = WORLD.h - 190;
+  /* 190 put you close enough to the southern boundary that the dark edge wall
+     and the fogged ground past it filled the bottom of the frame the moment a
+     zone loaded - a quarter of the screen in landscape. Half the vertical view
+     is ~420 units in portrait and ~230 once the rig scales down, so 560 keeps
+     the boundary just out of shot in both without moving the entrance
+     meaningfully. */
+  P.x = WORLD.w*0.5; P.y = WORLD.h - 560;
   cam.x = clamp(P.x-W/2, 0, Math.max(0,WORLD.w-W));
   cam.y = clamp(py(P.y)-H/2, 0, Math.max(0,py(WORLD.h)-H));
 
@@ -11022,13 +11037,35 @@ const _v3 = new THREE.Vector3(), _v3b = new THREE.Vector3();
 /* Pulled well back so you can read the field around you, and tilted closer to
    overhead — just enough angle to keep the 3D forms legible. CAM_BACK/CAM_H is
    the tilt: 0.55 is ~29 degrees off vertical. */
+/* ---- camera rig ----
+   The rig was pinned to a fixed height, pull-back and 34-degree vertical FOV,
+   which meant the vertical world extent was 845 units WHATEVER the viewport
+   height. Portrait renders that over ~860px (about 1 unit per pixel); turn the
+   phone sideways and the same 845 units render over 430px, so everything
+   halves and the hero becomes a ten-pixel speck.
+
+   Scaling the whole rig by viewport height keeps units-per-pixel roughly
+   constant, so rotating buys you WIDTH rather than a smaller character.
+   Height and pull-back scale together, which moves the camera along its own
+   sight line and leaves the 3/4 pitch angle exactly as it was.
+
+   Clamped at 1 so portrait - the framing everything was tuned against - can
+   only ever be left alone, never zoomed out. */
+/* 812, not 860: SH is the ARENA height, and the tab bar takes ~48px off the
+   bottom in portrait. Referencing the viewport instead put portrait at k=0.94
+   and quietly zoomed in the one framing that was already correct. */
+const CAM_REF_H = 812;
 const CAM_H = 975, CAM_BACK = 536;
+function camK(){ return clamp(SH/CAM_REF_H, 0.55, 1); }
 /* The ground footprint this framing covers, reused by the minimap window.
    The camera's tilt fixes the DEPTH it sees, but the width it sees grows with
    the viewport's aspect - so in landscape a fixed VIEW_W drew a window far
    narrower than what is actually on screen. */
-const VIEW_H = 845, VIEW_W_REF = 700, ASPECT_REF = 430/760;
-function viewW(){ return VIEW_W_REF * ((SW/SH) / ASPECT_REF); }
+const VIEW_H_REF = 845, VIEW_W_REF = 700, ASPECT_REF = 430/760;
+/* both extents ride the same scale as the rig, so the minimap viewport
+   rectangle keeps matching what is actually on screen */
+function viewH(){ return VIEW_H_REF * camK(); }
+function viewW(){ return VIEW_W_REF * ((SW/SH) / ASPECT_REF) * camK(); }
 
 function render(){
   const t = init3D();
@@ -11039,7 +11076,8 @@ function render(){
   const shx = shake>0.2 ? rnd(-shake,shake)*0.6 : 0;
   const shz = shake>0.2 ? rnd(-shake,shake)*0.6 : 0;
   _v3.set(P.x+shx, 0, P.y+shz);
-  t.cam.position.set(_v3.x, CAM_H, _v3.z + CAM_BACK);
+  const ck = camK();
+  t.cam.position.set(_v3.x, CAM_H*ck, _v3.z + CAM_BACK*ck);
   t.cam.lookAt(_v3.x, 14, _v3.z - 4);
 
   /* shadow camera rides with the player so a 1024 map stays sharp */
@@ -11391,7 +11429,7 @@ function drawMinimap(){
   }
   hctx.globalAlpha=0.9;
   hctx.strokeStyle='rgba(255,255,255,.35)'; hctx.lineWidth=1;
-  const vw = viewW(), vh = VIEW_H;
+  const vw = viewW(), vh = viewH();
   hctx.strokeRect(ox+(P.x-vw/2)*s, oy+(P.y-vh/2)*s, vw*s, vh*s);
   hctx.fillStyle='#ffffff';
   hctx.beginPath(); hctx.arc(ox+P.x*s, oy+P.y*s, 2.6, 0, 6.283); hctx.fill();
