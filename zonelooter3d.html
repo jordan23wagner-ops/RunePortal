@@ -10594,23 +10594,32 @@ function buildZoneScene(){
      them. The sockets are the readout: you can count from across the zone
      how many you are carrying, so the thing you are working toward is
      visible from the place you are working. */
-  if(t.gate){ t.scene.remove(t.gate); t.gate = null; }
+  if(t.gate){
+    t.scene.remove(t.gate);
+    t.gate.traverse(o=>{ if(o.isMesh){ o.geometry.dispose(); o.material.dispose(); } });
+    t.gate = null;
+  }
   if(gate){
     const gg = new THREE.Group();
     gg.position.set(gate.x, 0, gate.y);
     gg.rotation.y = gate.ry || 0;
-    const stone = new THREE.MeshStandardMaterial({
-      color:mix(shade(z.ground,0.34), '#6f6b84', 0.55), roughness:1, flatShading:true});
+    /* The arch's six stone pieces never move and share one colour, so they
+       are ONE merged geometry and one draw call - the same trick every prop
+       in the scenery kit uses. Built as six separate meshes first, which
+       measured at 15 draw calls for 172 triangles: precisely the wrong way
+       round for an integrated GPU, where calls are the expensive axis and
+       triangles are nearly free. */
+    const stoneCol = mix(shade(z.ground,0.34), '#6f6b84', 0.55);
+    const body = new THREE.Mesh(mergeProp([
+      {shape:'cyl', w:148, w2:176, h:13, seg:8, y:6,          c:stoneCol},
+      {shape:'box', w:26,  h:88,  d:28, x:-56, y:56,          c:stoneCol},
+      {shape:'box', w:34,  h:14,  d:36, x:-56, y:105,         c:stoneCol},
+      {shape:'box', w:26,  h:88,  d:28, x:56,  y:56,          c:stoneCol},
+      {shape:'box', w:34,  h:14,  d:36, x:56,  y:105,         c:stoneCol},
+      {shape:'box', w:170, h:22,  d:32, y:120,                c:stoneCol},
+    ]), propMat());
+    body.castShadow = true; body.receiveShadow = true; gg.add(body);
     const sock = [];
-    const put=(geo,mat,x,y,zz)=>{ const m=new THREE.Mesh(geo,mat);
-      m.position.set(x||0,y||0,zz||0); m.castShadow=true; m.receiveShadow=true;
-      gg.add(m); return m; };
-    put(new THREE.CylinderGeometry(74,88,13,8), stone, 0, 6, 0);
-    for(const sx of [-56, 56]){
-      put(new THREE.BoxGeometry(26,88,28), stone, sx, 56, 0);
-      put(new THREE.BoxGeometry(34,14,36), stone, sx, 105, 0);
-    }
-    put(new THREE.BoxGeometry(170,22,32), stone, 0, 120, 0);
     /* Three sockets, one per keystone, sitting ON TOP of the lintel. They
        were on its front face first, which is the single surface a top-down
        camera never sees - from above the whole readout was two faint slivers
