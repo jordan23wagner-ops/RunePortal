@@ -7,6 +7,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RIFTFALL">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- iOS ignores the manifest's icons for the home screen and takes this one
+     instead, so it is not redundant with the manifest entries below it. -->
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png">
 <title>RIFTFALL</title>
 <style>
 /* ============================================================
@@ -11585,6 +11591,27 @@ function syncPotBtn(){
   const n = (S.pots.pot_s||0)+(S.pots.pot_m||0)+(S.pots.pot_l||0);
   $('potQty').textContent = n;
   $('btnPot').classList.toggle('off', n===0);
+}
+
+/* ================================================================
+   INSTALLABILITY
+
+   Registered after load so fetching the worker never competes with the
+   first frame. Everything here fails silently on purpose: opened from a
+   file:// path there is no service-worker scope at all, and that is the
+   normal case for local testing rather than an error worth surfacing.
+   ================================================================ */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  });
+}
+/* Storage the browser may evict is storage that eats a save file. A home
+   screen web app is already exempt from Safari's seven-day sweep, but
+   asking makes the guarantee explicit on Android too. Declined is fine. */
+if(navigator.storage && navigator.storage.persist){
+  navigator.storage.persisted().then(has=>{ if(!has) navigator.storage.persist(); })
+    .catch(()=>{});
 }
 
 /* ================================================================

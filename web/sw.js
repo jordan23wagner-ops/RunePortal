@@ -1,0 +1,82 @@
+/* ================================================================
+   RIFTFALL service worker
+
+   The whole game is one HTML file with no external requests, so offline
+   play is a single cached document. That makes the strategy simple and
+   the failure modes few.
+
+   Strategy: cache-first for the shell, with a background refresh. You get
+   an instant launch off the cache every time, and a newer build is picked
+   up on the NEXT launch rather than being swapped in underneath a run in
+   progress - reloading a player mid-fight to deliver a patch is worse
+   than being one launch behind.
+
+   Bump CACHE_V on release. Old caches are dropped on activate.
+   ================================================================ */
+const CACHE_V = 'riftfall-v1';
+const SHELL = [
+  '/3d.html',
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-512-maskable.png',
+  '/apple-touch-icon.png',
+  '/favicon-64.png',
+];
+
+self.addEventListener('install', e => {
+  /* addAll rejects the whole install if any one entry 404s, which would
+     leave the app with no cache at all. Each is added on its own so a
+     missing icon costs an icon, not offline play. */
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE_V);
+    await Promise.all(SHELL.map(u => c.add(u).catch(() => {})));
+    self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE_V).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  e.respondWith((async () => {
+    const cached = await caches.match(req);
+
+    /* refresh in the background; the result lands for next launch */
+    const fresh = fetch(req).then(res => {
+      if (res && res.ok && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE_V).then(c => c.put(req, copy));
+      }
+      return res;
+    }).catch(() => null);
+
+    if (cached) return cached;
+
+    const res = await fresh;
+    if (res) return res;
+
+    /* offline, uncached, and a navigation: hand back the game rather than
+       the browser's dinosaur - any in-app link should still land somewhere */
+    if (req.mode === 'navigate') {
+      const shell = await caches.match('/3d.html');
+      if (shell) return shell;
+    }
+    return new Response('Offline', { status: 503, statusText: 'Offline' });
+  })());
+});
+
+/* lets the page ask for an immediate takeover after an update */
+self.addEventListener('message', e => {
+  if (e.data === 'skipWaiting') self.skipWaiting();
+});
