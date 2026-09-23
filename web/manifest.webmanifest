@@ -3,17 +3,37 @@
   "short_name": "RIFTFALL",
   "description": "A zone-looter ARPG. Seal the rift, carry the charge, go deeper.",
   "id": "/3d.html",
-  "start_url": "/3d.html",
+  "start_url": "/3d.html?live",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["fullscreen", "standalone"],
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
   "orientation": "portrait",
   "background_color": "#0b0d14",
   "theme_color": "#0b0d14",
-  "categories": ["games"],
+  "categories": [
+    "games"
+  ],
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

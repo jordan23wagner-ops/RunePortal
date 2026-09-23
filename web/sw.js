@@ -13,7 +13,7 @@
 
    Bump CACHE_V on release. Old caches are dropped on activate.
    ================================================================ */
-const CACHE_V = 'riftfall-v1';
+const CACHE_V = 'riftfall-v2';
 const SHELL = [
   '/3d.html',
   '/manifest.webmanifest',
@@ -50,7 +50,11 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;
 
   e.respondWith((async () => {
-    const cached = await caches.match(req);
+    /* ignoreSearch: the game is reached as /3d.html?live from the
+       installed app and /3d.html?test from a browser tab. Matching on
+       the full URL would miss the cached document for both - i.e. for
+       every URL that is actually used. */
+    const cached = await caches.match(req, {ignoreSearch:true});
 
     /* refresh in the background; the result lands for next launch */
     const fresh = fetch(req).then(res => {
@@ -69,7 +73,7 @@ self.addEventListener('fetch', e => {
     /* offline, uncached, and a navigation: hand back the game rather than
        the browser's dinosaur - any in-app link should still land somewhere */
     if (req.mode === 'navigate') {
-      const shell = await caches.match('/3d.html');
+      const shell = await caches.match('/3d.html', {ignoreSearch:true});
       if (shell) return shell;
     }
     return new Response('Offline', { status: 503, statusText: 'Offline' });

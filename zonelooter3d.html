@@ -689,6 +689,40 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 /* ============================================================
    MODAL / ITEM DETAIL
    ============================================================ */
+/* ---- TEST profile chrome ----
+   Loud on purpose. The one failure this has to prevent is grinding an hour
+   in the wrong profile, so the marker is fixed, always on top, and survives
+   every panel and modal in the game. */
+#testBar{position:fixed;top:0;left:0;right:0;height:var(--tb,18px);z-index:9000;
+  pointer-events:none;display:flex;align-items:center;justify-content:center;
+  gap:8px;font:800 9px/1 system-ui,sans-serif;letter-spacing:2.2px;
+  color:#1a1008;text-transform:uppercase;
+  background:repeating-linear-gradient(135deg,#ffb020 0 12px,#1a1008 12px 24px);
+  box-shadow:0 1px 0 rgba(0,0,0,.5);}
+#testBar span{background:#ffb020;padding:2px 9px;border-radius:0 0 5px 5px;}
+body.testmode{--tb:18px;}
+body.testmode #app{border:1px solid rgba(255,176,32,.5);}
+body.testmode .pHead{padding-top:calc(8px + var(--safe-t) + 16px);}
+body.testmode #hud{padding-top:16px;}
+/* ---- dev panel ---- */
+.devWrap{border:1px solid rgba(255,176,32,.32);border-radius:11px;padding:10px;
+  background:linear-gradient(135deg,rgba(255,176,32,.08),rgba(255,176,32,.02));}
+.devGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+.devGrid.three{grid-template-columns:repeat(3,1fr);}
+.devBtn{appearance:none;border:1px solid var(--line2);background:var(--panel);
+  color:var(--txt);border-radius:8px;padding:9px 6px;font:700 11px system-ui,sans-serif;
+  cursor:pointer;text-align:center;}
+.devBtn:active{transform:translateY(1px);}
+.devBtn.on{background:#ffb020;border-color:#ffb020;color:#1a1008;}
+.devLbl{font:800 9px system-ui;letter-spacing:1.6px;text-transform:uppercase;
+  color:var(--dim);margin:10px 0 6px;}
+.modeRow{display:flex;gap:7px;margin-bottom:8px;}
+.modeRow .mb{flex:1;padding:11px 6px;border-radius:10px;border:1px solid var(--line2);
+  background:var(--panel);text-align:center;cursor:pointer;}
+.modeRow .mb b{display:block;font-size:12px;font-weight:900;letter-spacing:.4px;}
+.modeRow .mb span{display:block;font-size:9px;color:var(--dim);margin-top:2px;}
+.modeRow .mb.cur{border-color:#8fe3ff;background:rgba(143,227,255,.10);}
+.modeRow .mb.cur.test{border-color:#ffb020;background:rgba(255,176,32,.12);}
 /* ---- the seal card ---- */
 .sealHead{display:flex;gap:12px;align-items:center;margin-bottom:12px;
   padding-bottom:11px;border-bottom:1px solid var(--line);}
@@ -1149,6 +1183,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
   <!-- ===================== OVERLAYS ===================== -->
   <div id="modalWrap"><div id="modal"><div class="grab"></div><div id="modalBody"></div></div></div>
+  <input type="file" id="fileIn" accept="application/json,.json" style="display:none">
 
   <div id="lootWrap"><div id="lootInner">
     <div id="lootTitle">Loot Recovered</div>
@@ -1229,7 +1264,43 @@ setTimeout(function(){
    Standalone. Save key: riftfall_save   (never touches runeportal_save)
    ================================================================ */
 
-const SAVE_KEY = 'riftfall_save';
+/* ================================================================
+   PROFILES — LIVE and TEST
+
+   Two isolated save slots that never share a key. LIVE is the character
+   you keep; TEST is the one you throw at a new build. A wipe, a schema
+   change or a dev-panel cheat in one cannot reach the other.
+
+   LIVE deliberately keeps the ORIGINAL key, so a character that already
+   exists migrates by doing nothing at all.
+
+   Mode comes from the URL first (?test / ?live), which is what lets the
+   installed home-screen app be permanently LIVE while a browser tab is
+   TEST; the last choice is remembered so a plain reload stays put.
+   ================================================================ */
+const SAVE_BASE = 'riftfall_save';
+const MODE_KEY  = 'riftfall_mode';
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+function resolveMode(){
+  const q = (location.search||'') + (location.hash||'');
+  if(/[?&#](test|dev)\b/i.test(q)){ lsSet(MODE_KEY,'test'); return 'test'; }
+  if(/[?&#]live\b/i.test(q)){       lsSet(MODE_KEY,'live'); return 'live'; }
+  return lsGet(MODE_KEY)==='test' ? 'test' : 'live';
+}
+const MODE     = resolveMode();
+const IS_TEST  = MODE === 'test';
+const SAVE_KEY = IS_TEST ? SAVE_BASE+':test' : SAVE_BASE;
+const ARCH_KEY = SAVE_KEY + ':archive';
+function slotKey(mode){ return mode==='test' ? SAVE_BASE+':test' : SAVE_BASE; }
+function switchMode(to){
+  lsSet(MODE_KEY, to);
+  /* carry the choice in the URL too, so a home-screen launch that restores
+     the last page does not silently land in the other profile */
+  const u = location.pathname + '?' + to;
+  location.replace(u);
+}
 const SAVE_VER = 1;
 
 /* ---------- utility ---------- */
@@ -2374,7 +2445,12 @@ function loadGame(){
     const raw = localStorage.getItem(SAVE_KEY);
     if(!raw) return false;
     const o = JSON.parse(raw);
-    if(!o || !o.s || o.s.ver!==SAVE_VER) return false;
+    if(!o || !o.s) return false;
+    /* A save from an older schema used to be dropped on the floor - loadGame
+       returned false, the intro ran, and the first autosave overwrote it.
+       Now it is parked under its own key first, so a version bump can never
+       be the thing that loses a character you had been playing for weeks. */
+    if(o.s.ver!==SAVE_VER){ archiveSave(raw, o.s.ver); return false; }
     S = o.s; uidSeq = o.uid||1;
     /* forward-fill any missing keys */
     if(!S.opts) S.opts={sfx:true,haptic:true,autoAim:true,gfx:'high',music:true,musVol:0.8};
@@ -2394,7 +2470,80 @@ function loadGame(){
     return true;
   }catch(e){ return false; }
 }
-function wipeSave(){ localStorage.removeItem(SAVE_KEY); location.reload(); }
+function wipeSave(){ lsDel(SAVE_KEY); location.reload(); }
+
+/* ---- keeping a character alive across schema changes ---- */
+function archiveSave(raw, ver){
+  /* one archive slot per profile: the most recent orphan. Bounded on
+     purpose - an unbounded history of dead saves is how localStorage
+     quota errors start, and the export button is the real long-term
+     insurance anyway. */
+  lsSet(ARCH_KEY, JSON.stringify({raw, ver, at:Date.now()}));
+}
+function archiveInfo(){
+  const a = lsGet(ARCH_KEY); if(!a) return null;
+  try{
+    const o = JSON.parse(a), inner = JSON.parse(o.raw);
+    return {ver:o.ver, at:o.at, lvl:inner.s&&inner.s.lvl, cls:inner.s&&inner.s.cls,
+      zone:inner.s&&inner.s.zone, kills:inner.s&&inner.s.meta&&inner.s.meta.kills};
+  }catch(e){ return null; }
+}
+/* Restore forces the archived state up to the current schema version and
+   lets the forward-fill in loadGame supply anything that was added since.
+   It cannot repair a field whose SHAPE changed, which is why it warns. */
+function restoreArchive(){
+  const a = lsGet(ARCH_KEY); if(!a) return false;
+  try{
+    const o = JSON.parse(a), inner = JSON.parse(o.raw);
+    if(!inner || !inner.s) return false;
+    inner.s.ver = SAVE_VER;
+    lsSet(SAVE_KEY, JSON.stringify(inner));
+    lsDel(ARCH_KEY);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ---- export / import ----
+   localStorage is per-origin AND per-device, so a phone save and a desktop
+   save are two different characters however identical the URL. A file is
+   the only thing that crosses that gap, and it doubles as the backup that
+   survives clearing site data. */
+function saveBlob(){
+  return JSON.stringify({riftfall:1, ver:SAVE_VER, mode:MODE,
+    at:new Date().toISOString(), s:S, uid:uidSeq});
+}
+function exportSave(){
+  saveGame();
+  const name = 'riftfall-'+MODE+'-lv'+S.lvl+'-'+
+    new Date().toISOString().slice(0,10)+'.json';
+  const url = URL.createObjectURL(new Blob([saveBlob()], {type:'application/json'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  toast('Exported '+name);
+  return name;
+}
+/* Returns a reason string on failure rather than throwing, because every
+   caller here is a button that has to say what went wrong. */
+function importSave(text){
+  let o;
+  try{ o = JSON.parse(text); }catch(e){ return 'That file is not valid JSON'; }
+  if(!o || !o.s || !o.s.base) return 'That file is not a RIFTFALL save';
+  if(!o.s.cls) return 'That save has no class on it';
+  o.s.ver = SAVE_VER;
+  if(!lsSet(SAVE_KEY, JSON.stringify({s:o.s, uid:o.uid||1})))
+    return 'Could not write to storage (private mode?)';
+  return null;
+}
+/* Copies LIVE onto TEST so a new feature can be tried against the character
+   you actually play, without that character being anywhere near it. */
+function cloneLiveToTest(){
+  const raw = lsGet(slotKey('live'));
+  if(!raw) return 'There is no live save to copy';
+  if(!lsSet(slotKey('test'), raw)) return 'Could not write to storage';
+  return null;
+}
 
 /* ================================================================
    ITEM GENERATION
@@ -2583,6 +2732,9 @@ function computeStats(){
   if(S.charge>0){ d.allDmg += chargeDmg(); d.luck += chargeLuck(); }
   d.critC = clamp(d.critC,0,75);
   d.moveSpeed = 168*(1+d.movSpd/100);
+  /* test profile only: crossing a 4000-unit zone to check one fixture is
+     most of the time a feature check costs */
+  if(IS_TEST && DEV.fast) d.moveSpeed *= 2.6;
   d.uniq = uniq;
 
   /* damage per swing range, shown in UI */
@@ -4952,6 +5104,7 @@ function healPlayer(n, silent){
    sprint, so you can still run for the far bank - which is the whole play. */
 function hurtPlayer(raw, eLvl, src, tick){
   if(P.inv>0 || P.dead) return;
+  if(DEV.god) return;                 /* test profile only - see devSet */
   const dmg = mitigate(raw, eLvl||zoneLvl());
   if(tick){
     P.hp -= dmg;
@@ -12584,6 +12737,102 @@ function travelTo(id, sealed){
 /* ================================================================
    CAMP PANEL
    ================================================================ */
+/* ================================================================
+   DEV TOOLS — test profile only
+
+   Every one of these is gated on IS_TEST at the point of USE, not just
+   hidden in the UI. A cheat that is merely not rendered is one console
+   call away from the live character.
+   ================================================================ */
+const DEV = {god:false, fast:false};
+function devOk(){
+  if(!IS_TEST){ toast('Test profile only'); sfx('no'); return false; }
+  return true;
+}
+function devSetLevel(n){
+  if(!devOk()) return;
+  n = clamp(Math.round(n), 1, 99);
+  const d = n - S.lvl;
+  /* levelling DOWN does not claw points back: unspending is the respec's
+     job, and silently deleting allocated stats would be worse than the
+     small inconsistency of keeping them */
+  if(d > 0){ S.pts += TUNE.ptsPerLvl*d; S.sp = (S.sp||0)+d; }
+  S.lvl = n; S.xp = 0;
+  computeStats(); P.hp = D.maxHp; P.mp = D.maxMp;
+  toast('Level '+n); syncHud(); renderGear(); renderSkills(); saveGame();
+}
+function devRiches(){
+  if(!devOk()) return;
+  gainGold(25000);
+  for(const k of Object.keys(MATS)) addMat(k, 200);
+  toast('+25,000 gold · +200 of every material');
+  renderCraft(); renderMenu(); syncHud(); saveGame();
+}
+function devOpenAll(){
+  if(!devOk()) return;
+  for(const z of ZONES) S.open[z.id] = 1;
+  toast('Every rift opened'); renderZones(); saveGame();
+}
+function devKeystones(){
+  if(!devOk()) return;
+  S.way[S.zone] = WAY_NEED;
+  toast('Keystones filled — the gate is lit'); syncHud(); renderZones(); saveGame();
+}
+function devCharge(){
+  if(!devOk()) return;
+  S.charge = S.charge>=CHARGE_MAX ? 0 : S.charge+1;
+  S.chargeTier = ZONE_BY_ID[S.zone].tier;
+  computeStats(); toast('Rift Charge '+S.charge); syncHud(); saveGame();
+}
+function devSurge(){
+  if(!devOk()) return;
+  if(surge.lvl>=SURGE_MAX){ surge.lvl=0; surge.peak=0; toast('Danger reset'); }
+  else raiseSurge(1, 'dev');
+  syncHud();
+}
+/* Spawned without a pack on purpose: a dev foe must not be able to clear a
+   camp, trip an objective, or leave a phantom member behind when it dies.
+   Every pack read in the kill path is already guarded on f.pack. */
+function devSpawn(kind){
+  if(!devOk()) return;
+  const z = ZONE_BY_ID[S.zone];
+  const a = rnd(0,6.283), d = 190;
+  const x = clamp(P.x+Math.cos(a)*d, 60, WORLD.w-60);
+  const y = clamp(P.y+Math.sin(a)*d, 60, WORLD.h-60);
+  if(kind==='chest'){
+    chests.push({x, y, r:16, t:0, open:false, openT:0, respawn:0});
+    toast('Chest dropped'); return;
+  }
+  const def = kind==='alpha' ? z.boss : pick(kind==='elite' ? rElites() : rEnemies());
+  const f = makeFoe(def, kind==='alpha'?2:kind==='elite'?1:0, x, y);
+  f.warp = 0.5; foes.push(f);
+  toast('Spawned '+def.n);
+}
+function devKillAll(){
+  if(!devOk()) return;
+  for(const f of foes.slice()){ f.hp = 0; killFoe(f); }
+  toast('Board cleared');
+}
+function devLoot(rar){
+  if(!devOk()) return;
+  const z = ZONE_BY_ID[S.zone];
+  let n = 0;
+  for(let i=0;i<5;i++){
+    const it = rollItem({kind:['weapon','armor','offhand','trinket'][rint(0,3)],
+      ilvl:clamp(zoneLvl()+rint(0,3),1,99), rar});
+    if(bagAdd(it)){ n++; feedItem(it); }
+  }
+  toast(n+' '+RARITY[rar].name+' item'+(n===1?'':'s')+' added');
+  renderBag(); saveGame();
+}
+function devToggle(k){
+  if(!devOk()) return;
+  DEV[k] = !DEV[k];
+  if(k==='god' && DEV.god){ P.hp = D.maxHp; P.mp = D.maxMp; }
+  toast((k==='god'?'Invulnerable':'Fast') + ' ' + (DEV[k]?'ON':'OFF'));
+  renderMenu();
+}
+
 function renderMenu(){
   let h = '<div class="sectionLbl">Supplies</div>';
   for(const s of SHOP){
@@ -12626,10 +12875,78 @@ function renderMenu(){
     '<div class="kv"><span>Draught</span><b>🧪 — heal</b></div>'+
     '<div class="kv"><span>Desktop</span><b>WASD · Space · Q · E · R · F</b></div></div>';
 
+  /* ---- profile ---- */
+  h += '<div class="sectionLbl">Profile</div>'+
+    '<div class="modeRow">'+
+      '<div class="mb'+(IS_TEST?'':' cur')+'" data-mode="live"><b>LIVE</b>'+
+        '<span>your character</span></div>'+
+      '<div class="mb test'+(IS_TEST?' cur':'')+'" data-mode="test"><b>TEST</b>'+
+        '<span>try new features</span></div>'+
+    '</div>'+
+    '<div class="warn" style="margin-bottom:8px;">'+
+      (IS_TEST
+        ? 'You are in the <b>test</b> profile. Nothing here can touch your live character.'
+        : 'Separate saves. Switching reloads the game; neither profile can overwrite the other.')+
+      '</div>'+
+    '<button class="btn sm" id="btnClone" style="width:100%;margin-bottom:6px;">'+
+      'Copy Live → Test (overwrites test)</button>';
+
+  /* ---- dev tools, test only ---- */
+  if(IS_TEST){
+    h += '<div class="sectionLbl">Dev Tools</div><div class="devWrap">'+
+      '<div class="devLbl">Character</div><div class="devGrid three">'+
+        '<button class="devBtn" data-dev="lvl-" >Level −5</button>'+
+        '<button class="devBtn" data-dev="lvl+" >Level +5</button>'+
+        '<button class="devBtn" data-dev="lvlmax">Level 40</button>'+
+      '</div>'+
+      '<div class="devGrid" style="margin-top:6px;">'+
+        '<button class="devBtn'+(DEV.god?' on':'')+'" data-dev="god">Invulnerable</button>'+
+        '<button class="devBtn'+(DEV.fast?' on':'')+'" data-dev="fast">Fast Move</button>'+
+      '</div>'+
+      '<div class="devLbl">Progression</div><div class="devGrid">'+
+        '<button class="devBtn" data-dev="rich">+25k Gold &amp; Mats</button>'+
+        '<button class="devBtn" data-dev="zones">Open All Rifts</button>'+
+        '<button class="devBtn" data-dev="keys">Light the Gate</button>'+
+        '<button class="devBtn" data-dev="charge">Rift Charge +1</button>'+
+      '</div>'+
+      '<div class="devLbl">Spawn here</div><div class="devGrid three">'+
+        '<button class="devBtn" data-dev="s-normal">Enemy</button>'+
+        '<button class="devBtn" data-dev="s-elite">Elite</button>'+
+        '<button class="devBtn" data-dev="s-alpha">Alpha</button>'+
+        '<button class="devBtn" data-dev="s-chest">Chest</button>'+
+        '<button class="devBtn" data-dev="surge">Danger +1</button>'+
+        '<button class="devBtn" data-dev="killall">Clear Board</button>'+
+      '</div>'+
+      '<div class="devLbl">Loot</div><div class="devGrid three">'+
+        '<button class="devBtn" data-dev="loot2">5× Rare</button>'+
+        '<button class="devBtn" data-dev="loot3">5× Epic</button>'+
+        '<button class="devBtn" data-dev="loot4">5× Legendary</button>'+
+      '</div>'+
+    '</div>';
+  }
+
+  const arch = archiveInfo();
   h += '<div class="sectionLbl">Save</div>'+
-    '<div class="detBlock"><div class="kv"><span>Slot</span><b>'+SAVE_KEY+'</b></div>'+
+    '<div class="detBlock"><div class="kv"><span>Profile</span><b style="color:'+
+      (IS_TEST?'#ffb020':'#8fe3ff')+'">'+MODE.toUpperCase()+'</b></div>'+
+    '<div class="kv"><span>Slot</span><b>'+SAVE_KEY+'</b></div>'+
     '<div class="kv"><span>Class</span><b>'+({melee:'Vanguard',range:'Warden',magic:'Riftbinder'}[S.cls])+'</b></div>'+
     '<div class="kv"><span>Progress saves automatically</span><b>✓</b></div></div>'+
+    '<div class="devGrid" style="margin-top:8px;">'+
+      '<button class="btn sm" id="btnExport">Export to File</button>'+
+      '<button class="btn sm" id="btnImport">Import from File</button>'+
+    '</div>'+
+    '<div class="warn" style="margin-top:7px;">Saves live in this browser on this device only. '+
+      'Export before clearing site data, or to move a character between your phone and desktop.</div>'+
+    (arch ? '<div class="detBlock" style="margin-top:8px;border-color:rgba(255,176,32,.4);">'+
+      '<div class="kv"><span>Recovered save</span><b>Lv '+(arch.lvl||'?')+' · '+
+        (arch.zone||'?')+'</b></div>'+
+      '<div class="kv"><span>From schema</span><b>v'+arch.ver+' (now v'+SAVE_VER+')</b></div>'+
+      '<button class="btn sm" id="btnRestore" style="width:100%;margin-top:7px;">'+
+        'Restore this character</button>'+
+      '<div class="warn" style="margin-top:6px;">Kept when a game update changed the save '+
+        'format. Restoring fills in anything new, but a field that changed shape cannot be '+
+        'repaired &mdash; check your gear afterwards.</div></div>' : '')+
     '<button class="btn dan" id="btnWipe" style="width:100%;margin-top:8px;">Delete Save &amp; Restart</button>'+
     '<div class="empty" style="padding-top:18px;">RIFTFALL · independent of RunePortal<br>'+
     'Kills '+fmt(S.meta.kills)+' · Items '+fmt(S.meta.items)+' · Deaths '+S.meta.deaths+'</div>';
@@ -12643,12 +12960,79 @@ function renderMenu(){
     $('modalWrap').classList.add('open');
     $('wipeYes').addEventListener('click', wipeSave);
   });
+
+  $('btnClone').addEventListener('click', ()=>{
+    $('modalBody').innerHTML='<div class="pTitle">Copy Live → Test?</div>'+
+      '<div class="pSub" style="margin:8px 0 14px;">Your live character is copied onto '+
+      'the test profile so you can try new features with real gear. '+
+      '<b>The current test save is replaced.</b> Live is not touched.</div>'+
+      '<button class="btn pri" id="cloneYes" style="width:100%;margin-bottom:7px;">Copy it over</button>'+
+      '<button class="btn gho" data-act="close" style="width:100%;">Cancel</button>';
+    $('modalWrap').classList.add('open');
+    $('cloneYes').addEventListener('click', ()=>{
+      const err = cloneLiveToTest();
+      if(err){ closeModal(); toast(err); sfx('no'); return; }
+      /* land in the profile that was just written, or the copy is invisible */
+      if(IS_TEST) location.reload(); else switchMode('test');
+    });
+  });
+
+  $('btnExport').addEventListener('click', ()=>{ exportSave(); sfx('buy'); });
+  $('btnImport').addEventListener('click', ()=> $('fileIn').click());
+
+  const rb = $('btnRestore');
+  if(rb) rb.addEventListener('click', ()=>{
+    if(restoreArchive()){ toast('Restored — reloading'); setTimeout(()=>location.reload(), 500); }
+    else { toast('Could not restore that save'); sfx('no'); }
+  });
+}
+
+/* the mode buttons live on the same delegated listener as the rest of the
+   menu, below - this only handles the confirm */
+function askSwitchMode(to){
+  if(to === MODE){ toast('Already in the '+to+' profile'); return; }
+  const toTest = to==='test';
+  $('modalBody').innerHTML='<div class="pTitle">Switch to '+to.toUpperCase()+'?</div>'+
+    '<div class="pSub" style="margin:8px 0 14px;">'+
+    (toTest
+      ? 'The test profile has its own separate character and its own save. '+
+        'Your live character stays exactly where it is.'
+      : 'Back to your real character. Anything you did in test stays in test.')+
+    '<br><br>The game reloads.</div>'+
+    '<button class="btn pri" id="modeYes" style="width:100%;margin-bottom:7px;">'+
+      'Switch to '+to.toUpperCase()+'</button>'+
+    '<button class="btn gho" data-act="close" style="width:100%;">Cancel</button>';
+  $('modalWrap').classList.add('open');
+  $('modeYes').addEventListener('click', ()=>{ saveGame(); switchMode(to); });
 }
 function optBtn(k,label){
   return '<button class="chip'+(S.opts[k]?' sel':'')+'" data-opt="'+k+'">'+label+
     ' · '+(S.opts[k]?'ON':'OFF')+'</button>';
 }
 $('menuBody').addEventListener('click', e=>{
+  const md=e.target.closest('[data-mode]');
+  if(md){ askSwitchMode(md.dataset.mode); return; }
+  const dv=e.target.closest('[data-dev]');
+  if(dv){
+    const k=dv.dataset.dev;
+    if(k==='lvl-')        devSetLevel(S.lvl-5);
+    else if(k==='lvl+')   devSetLevel(S.lvl+5);
+    else if(k==='lvlmax') devSetLevel(40);
+    else if(k==='god')    devToggle('god');
+    else if(k==='fast'){  devToggle('fast'); computeStats(); }
+    else if(k==='rich')   devRiches();
+    else if(k==='zones')  devOpenAll();
+    else if(k==='keys')   devKeystones();
+    else if(k==='charge') devCharge();
+    else if(k==='surge')  devSurge();
+    else if(k==='killall')devKillAll();
+    else if(k==='loot2')  devLoot(2);
+    else if(k==='loot3')  devLoot(3);
+    else if(k==='loot4')  devLoot(4);
+    else if(k.startsWith('s-')){ devSpawn(k.slice(2)); showTab('arena'); }
+    sfx('buy');
+    return;
+  }
   const q=e.target.closest('[data-gfx]');
   if(q){ S.opts.gfx=q.dataset.gfx; _downgrades=0; applyGfx(S.opts.gfx);
          sfx('buy'); renderMenu(); saveGame(); return; }
@@ -12843,6 +13227,33 @@ if(window.visualViewport) window.visualViewport.addEventListener('resize', ()=>f
 
 
 
+/* The test profile paints a fixed warning strip over everything. Injected
+   rather than sitting in the markup, so the live profile carries no extra
+   node and no extra layout at all. */
+function installTestChrome(){
+  if(!IS_TEST) return;
+  document.body.classList.add('testmode');
+  const bar = document.createElement('div');
+  bar.id = 'testBar';
+  bar.innerHTML = '<span>Test Profile</span>';
+  document.body.appendChild(bar);
+  document.title = 'RIFTFALL · TEST';
+}
+$('fileIn').addEventListener('change', e=>{
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';                       /* so the same file can be re-picked */
+  if(!f) return;
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    const err = importSave(String(fr.result));
+    if(err){ toast(err); sfx('no'); return; }
+    toast('Save imported — reloading');
+    setTimeout(()=>location.reload(), 600);
+  };
+  fr.onerror = ()=>{ toast('Could not read that file'); sfx('no'); };
+  fr.readAsText(f);
+});
+
 function boot(){
   fitViewport();
   applyGfx(S.opts.gfx);
@@ -12867,6 +13278,7 @@ window.__scriptEnd = 1;
 /* the nav rail and action pad are static markup, so their art is painted once
    here rather than on every panel render */
 paintStaticIcons();
+installTestChrome();
 buildIntro();
 if(loadGame()){
   $('intro').classList.add('gone');
