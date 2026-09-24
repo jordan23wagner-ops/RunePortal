@@ -47,6 +47,10 @@
 
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  /* landscape puts the notch on a SIDE, so these are the ones that matter
+     once the phone is turned */
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -975,9 +979,16 @@ body.testmode #hud{padding-top:16px;}
        so row layout would otherwise put the rail on the right, directly under
        the thumb that works the action buttons */
     order:-1;
-    flex-direction:column;width:76px;flex:0 0 76px;
+    flex-direction:column;
+    /* box-sizing is border-box globally, so a 44px notch inset used to EAT
+       44 of the rail's 62-76px and squeeze the icons into what was left -
+       which is why half of each one was clipped. The inset is added to the
+       width instead, so the icons keep their full column and the notch gets
+       its own margin beside them. */
+    width:calc(76px + var(--safe-l));
+    flex:0 0 calc(76px + var(--safe-l));
     border-top:none;border-right:1px solid var(--line);
-    padding-bottom:0;padding-left:env(safe-area-inset-left,0px);
+    padding-bottom:0;padding-left:var(--safe-l);
     justify-content:center;gap:2px;
   }
   .tab{flex:0 0 auto;padding:11px 2px;gap:3px;}
@@ -1003,16 +1014,40 @@ body.testmode #hud{padding-top:16px;}
   #hud{padding-left:15px;padding-right:15px;}
   /* A health bar spanning 870px reads as a loading bar, not as health. Cap it
      and let the rest of the row have the space. */
-  #hudBars{max-width:min(52%, 460px);}
+  /* the cap now lives on the row, so the bars just fill it */
+  #hudBars{max-width:none;}
+  /* Capping the bars left the whole top right of a landscape screen empty and
+     unfinished. Rather than stretching a health bar back across 900px - which
+     is what made it read as a loading bar - the HUD becomes two columns and
+     the readouts that were stacked underneath move up into that gap,
+     right-aligned. Same information, no dead space, and the HUD gets shorter
+     so less of the playfield is covered. */
+  #hud{display:flex;align-items:flex-start;column-gap:18px;
+       padding-right:calc(15px + var(--safe-r));}
+  /* The bars row needs an explicit basis. As a flex item with `auto` it
+     shrank to its content, and #hudBars inside it is flex:1 with no basis of
+     its own, so the whole thing collapsed to 2px. */
+  #hud > .hudRow:first-child{flex:0 0 min(54%, 480px);min-width:0;}
+  #hudInfo{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;
+           align-items:flex-end;gap:2px;}
+  /* Everything on one right-aligned line was too tight: the zone name broke
+     mid-word and the objective's counter fell to its own line. Forcing the
+     objective onto a second line gives each a full line to sit on, and the
+     zone name stops wrapping entirely. */
+  #hudInfo .hudRow{margin-top:0;justify-content:flex-end;flex-wrap:wrap;}
+  #hudZone{white-space:nowrap;}
+  #hudKills{margin-left:0;flex:0 0 100%;text-align:right;}
+  #hudSurgeTxt{text-align:right;}
 
-  /* controls tuck into the corners of the wider field */
-  #actions{right:16px;bottom:16px;}
+  /* controls tuck into the corners of the wider field, clear of whatever
+     the phone reserves on the right in this rotation */
+  #actions{right:calc(16px + var(--safe-r));bottom:16px;}
   #prompt{bottom:84px;}
   /* the feed sat under the minimap in the top-right corner; down here it
      stacks upward beside the action pad and covers nothing */
   /* Anchored by its BOTTOM edge, so the stack grows upward and the newest
      row (appended last) stays lowest - next to where your eye already is. */
-  #lootFeed{top:auto;bottom:16px;right:172px;max-width:46%;}
+  #lootFeed{top:auto;bottom:16px;right:calc(172px + var(--safe-r));max-width:46%;}
 
   /* the modal becomes a centred card - a bottom sheet on a short screen
      covers the entire playfield */
@@ -1023,15 +1058,15 @@ body.testmode #hud{padding-top:16px;}
 }
 /* short AND wide: phones held sideways, where vertical room is the constraint */
 @media (min-aspect-ratio: 1/1) and (max-height:520px){
-  #tabbar{width:62px;flex:0 0 62px;}
+  #tabbar{width:calc(62px + var(--safe-l));flex:0 0 calc(62px + var(--safe-l));}
   .tab{padding:8px 2px;font-size:8px;}
   .tab .ic{font-size:18px;}
   #hud{padding-top:calc(3px + var(--safe-t));}
-  #hudBars{max-width:min(46%, 380px);}
+  #hud > .hudRow:first-child{flex:0 0 min(48%, 400px);}
   .actBtn{width:50px;height:50px;font-size:18px;}
   .actBtn.big{width:62px;height:62px;font-size:22px;}
   #actions{gap:8px;}
-  #lootFeed{bottom:14px;right:140px;max-width:52%;}
+  #lootFeed{bottom:14px;right:calc(140px + var(--safe-r));max-width:52%;}
 }
 </style>
 </head>
@@ -1057,12 +1092,14 @@ body.testmode #hud{padding-top:16px;}
           <div class="bar sm" id="xpBar"><i></i></div>
         </div>
       </div>
-      <div class="hudRow" style="margin-top:5px;">
-        <span id="hudZone">—</span>
-        <span id="hudGold">0g</span>
-        <span id="hudKills">0 kills</span>
+      <div id="hudInfo">
+        <div class="hudRow" style="margin-top:5px;">
+          <span id="hudZone">—</span>
+          <span id="hudGold">0g</span>
+          <span id="hudKills">0 kills</span>
+        </div>
+        <div class="hudRow" id="hudSurge" style="display:none;"><span id="hudSurgeTxt"></span></div>
       </div>
-      <div class="hudRow" id="hudSurge" style="display:none;"><span id="hudSurgeTxt"></span></div>
     </div>
 
     <div id="bossBar">
@@ -1290,7 +1327,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.09.23-5 landscape+update';
+const BUILD = '2026.09.24-6 notch+hud';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
