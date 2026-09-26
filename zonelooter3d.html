@@ -727,6 +727,17 @@ body.testmode #hud{padding-top:16px;}
 .modeRow .mb span{display:block;font-size:9px;color:var(--dim);margin-top:2px;}
 .modeRow .mb.cur{border-color:#8fe3ff;background:rgba(143,227,255,.10);}
 .modeRow .mb.cur.test{border-color:#ffb020;background:rgba(255,176,32,.12);}
+/* ring-swap preview: the numbers for each slot, so replacing one and changing
+   it back is no longer the only way to find out */
+.slotDelta{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:4px;}
+.slotDelta b{font-size:8.5px;font-weight:900;letter-spacing:1.4px;}
+.slotDelta b.vU{color:var(--xp);} .slotDelta b.vD{color:var(--hp);}
+.slotDelta b.vS{color:var(--dim);}
+.dChip{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:5px;
+  background:var(--panel);border:1px solid var(--line);color:var(--dim);
+  font-variant-numeric:tabular-nums;}
+.dChip.pos{color:var(--xp);border-color:rgba(74,222,128,.4);}
+.dChip.neg{color:var(--hp);border-color:rgba(224,69,90,.4);}
 /* ---- the seal card ---- */
 .sealHead{display:flex;gap:12px;align-items:center;margin-bottom:12px;
   padding-bottom:11px;border-bottom:1px solid var(--line);}
@@ -888,7 +899,14 @@ body.testmode #hud{padding-top:16px;}
 }
 @keyframes shine{from{transform:translateX(-60%);}to{transform:translateX(60%);}}
 @keyframes lootPop{from{opacity:0;transform:scale(.6) rotate(-6deg);}to{opacity:1;transform:none;}}
-.lootCard .lIc{font-size:44px;margin-bottom:8px;
+.lootCard .lIc{
+  /* .lIc .ico is width:80%, and with no size on the box that 80% resolved
+     against the CARD - 330px in portrait, 420px in landscape - so a 64px icon
+     rendered at about 270px and swallowed the screen. Sizing the box is the
+     fix, and it corrects both orientations at once. */
+  width:72px;height:72px;margin:0 auto 8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:44px;line-height:1;
   filter:drop-shadow(0 0 14px var(--rc));}
 .lootCard .lRar{font-size:9px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;
   color:var(--rc);}
@@ -1035,6 +1053,11 @@ body.testmode #hud{padding-top:16px;}
      objective onto a second line gives each a full line to sit on, and the
      zone name stops wrapping entirely. */
   #hudInfo .hudRow{margin-top:0;justify-content:flex-end;flex-wrap:wrap;}
+  /* the danger readout is nowrap, so in the right-hand column it ran back
+     across the whole playfield instead of staying in its corner. Let it wrap
+     inside the column it belongs to. */
+  #hudInfo #hudSurgeTxt{white-space:normal;overflow:visible;line-height:1.35;}
+  #hudSurge{max-width:100%;}
   #hudZone{white-space:nowrap;}
   #hudKills{margin-left:0;flex:0 0 100%;text-align:right;}
   #hudSurgeTxt{text-align:right;}
@@ -1327,7 +1350,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.09.24-6 notch+hud';
+const BUILD = '2026.09.26-7 playtest fixes';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -5408,12 +5431,14 @@ function askRingSlot(uid){
     return '<div class="slot '+(cur?'filled rar'+cur.rar:'empty')+'" data-ringslot="'+sl+'">'+
       '<div class="slotIc">'+(cur?icoHTML(cur):icoKeyHTML('ring',0,'dim'))+'</div>'+
       '<div class="slotTxt"><div class="slotLbl">'+SLOT_LABEL[sl]+'</div>'+
-      '<div class="slotName">'+(cur?cur.name:'empty')+'</div></div></div>';
+      '<div class="slotName">'+(cur?cur.name:'empty')+'</div>'+
+      slotDeltaHtml(it, sl)+'</div></div>';
   };
   $('modalBody').innerHTML =
     '<div class="detHead rar'+it.rar+'"><div class="detIc">'+icoHTML(it)+'</div><div>'+
     '<div class="detName">'+it.name+'</div>'+
-    '<div class="detSub">Choose a ring slot</div></div></div>'+
+    '<div class="detSub">Choose a ring slot &mdash; each shows what you gain'+
+    ' and lose</div></div></div>'+
     '<div class="slotGrid" id="ringPick" data-uid="'+uid+'">'+row('ring1')+row('ring2')+'</div>'+
     '<div class="modalBtns"><button class="btn wide" data-act="close">Cancel</button></div>';
   $('modalWrap').classList.add('open');
@@ -6826,16 +6851,27 @@ function heroPose(b, an, st){
       b.chest.rotation.x += -0.10*rise + 0.14*cast;
       b.head.rotation.x  += -0.14*rise + 0.10*cast;
     } else {
-      /* wind up behind the shoulder, sweep across, recover */
-      let sw; 
-      if(a<0.30)      sw = -1.0*(a/0.30);
-      else if(a<0.52) sw = lerp(-1.0, 1.9, (a-0.30)/0.22);
-      else            sw = lerp(1.9, 0, (a-0.52)/0.48);
-      b.armR.rotation.set(-1.30 + sw*1.30, -sw*0.35, -0.30 - sw*0.34);
-      b.foreR.rotation.x = 0.28 - Math.max(0,sw)*0.58;
-      b.handR.rotation.x = -0.75 + sw*0.55;       /* wrist leads the blade */
-      b.chest.rotation.y = -sw*0.50;
-      b.armL.rotation.x = -0.25 - sw*0.20;
+      /* A HORIZONTAL slash, not a downward drag.
+         The old curve pushed the whole swing through rotation.x and let sw run
+         to 1.9, so the arm rotated well past horizontal and the blade finished
+         pointing at the player's own feet - on screen it read as sweeping a
+         stick along the floor rather than cutting at anything.
+         The cut now happens in Y (across the body) with X held around shoulder
+         height, and the wrist stays cocked so the blade leads the hand instead
+         of hanging off it. */
+      let sw;
+      if(a<0.26)      sw = -1.0*(a/0.26);                  /* coil back */
+      else if(a<0.48) sw = lerp(-1.0, 1.0, (a-0.26)/0.22); /* the cut */
+      else            sw = lerp(1.0, 0, (a-0.48)/0.52);    /* recover to guard */
+      /* the arm lifts slightly through the middle of the cut, so the blade
+         travels an arc rather than a flat line */
+      const lift = (1 - Math.abs(sw)) * 0.22;
+      b.armR.rotation.set(-1.16 - lift, -sw*1.05, -0.26 - sw*0.16);
+      b.foreR.rotation.x = -0.26 - Math.max(0, sw)*0.20;
+      b.handR.rotation.x = -1.10;                 /* blade out, perpendicular */
+      b.handR.rotation.z = sw*0.26;
+      b.chest.rotation.y = -sw*0.52;
+      b.armL.rotation.x = -0.25 + sw*0.26;
       b.cape.rotation.x += Math.max(0,sw)*0.30;
     }
   }
@@ -11050,7 +11086,12 @@ function syncFx(){
     mesh.visible = true;
     const rr = e.rng*lerp(0.55,1.05,k);
     mesh.position.set(e.x, 5, e.y);
-    mesh.rotation.y = -e.ang + Math.PI/2 - (e.arc||1.6)/2;
+    /* The ring is built in XY then rotateX(-PI/2)'d, so a point at theta ends
+       up at world angle -(theta + rotation.y). Centring the sweep on the aim
+       therefore wants ry = -ang - arc/2; the extra +PI/2 that used to be here
+       threw the whole arc 90 degrees off, which is why the swing flashed to
+       the side of wherever you were actually swinging. */
+    mesh.rotation.y = -e.ang - (e.arc||1.6)/2;
     mesh.scale.set(rr, 1, rr);
     mesh.material.color.set(e.col||'#dfe7ff');
     mesh.material.opacity = (1-k)*0.55;
@@ -12089,6 +12130,27 @@ function effHp(d){
 /* Which slot would this item actually go into? For a ring that means the one
    you would really give up — the weaker of the two, established by removing
    each in turn and seeing which loss hurts less. */
+/* What actually changes if this item goes into THAT slot. Reuses statsIf, so
+   the numbers come from a real computeStats pass rather than a stat-weight
+   table that would drift from the game. */
+function slotSwapDelta(it, sl){
+  const cur = statsIf(()=>{});
+  const nxt = statsIf(eq=>{ eq[sl] = it; });
+  const pc = (a,b2)=> b2>0 ? ((a/b2)-1)*100 : (a>0?100:0);
+  return {dps:pc(nxt.dps, cur.dps), ehp:pc(effHp(nxt), effHp(cur)),
+          outgoing:S.equip[sl]||null};
+}
+function slotDeltaHtml(it, sl){
+  const d = slotSwapDelta(it, sl);
+  const chip = (v,lbl)=>{
+    const r = Math.round(v*10)/10;
+    const cls = r>0.4?'pos':r<-0.4?'neg':'';
+    return '<span class="dChip '+cls+'">'+(r>0?'+':'')+r+'% '+lbl+'</span>';
+  };
+  const verdict = (d.dps+d.ehp) > 1 ? 'UPGRADE' : (d.dps+d.ehp) < -1 ? 'DOWNGRADE' : 'SIDEGRADE';
+  return '<div class="slotDelta"><b class="v'+verdict[0]+'">'+verdict+'</b>'+
+    chip(d.dps,'dmg')+chip(d.ehp,'survive')+'</div>';
+}
 function slotForItem(it){
   if(it.kind==='weapon')  return 'weapon';
   if(it.kind==='offhand') return 'offhand';
@@ -13397,6 +13459,25 @@ $('fileIn').addEventListener('change', e=>{
   fr.readAsText(f);
 });
 
+/* musicStart only ran off the intro's Start button and off travelTo, so a
+   RETURNING save - which skips the intro entirely - sat in silence until the
+   first zone change. An autoplay policy still needs a real gesture, so this
+   arms on the first touch or key instead of firing blind. */
+function armMusicOnFirstGesture(){
+  if(MUS.on || S.opts.music===false) return;
+  const go = ()=>{
+    off();
+    audioResume();
+    if(S.opts.music!==false && !MUS.on) musicStart();
+  };
+  const off = ()=>{
+    for(const ev of ['pointerdown','touchstart','keydown'])
+      window.removeEventListener(ev, go, true);
+  };
+  for(const ev of ['pointerdown','touchstart','keydown'])
+    window.addEventListener(ev, go, {capture:true, once:false});
+}
+
 function boot(){
   fitViewport();
   applyGfx(S.opts.gfx);
@@ -13407,6 +13488,7 @@ function boot(){
   syncPotBtn(); syncHud();
   renderBag(); renderGear(); renderCraft(); renderZones(); renderMenu();
   running = true; paused = false;
+  armMusicOnFirstGesture();
   showTab('arena');
   setInterval(()=>{ if(S) saveGame(); }, 15000);
   window.addEventListener('beforeunload', ()=>{ if(S) saveGame(); });
