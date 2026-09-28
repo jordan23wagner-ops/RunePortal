@@ -1350,7 +1350,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.09.28-8 sword carry+chop';
+const BUILD = '2026.09.28-9 sword faces out';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -6806,15 +6806,23 @@ function heroPose(b, an, st){
   } else {                                        /* blade / axe / gun */
     b.armL.rotation.x = armSwing - 0.06; b.armL.rotation.z = 0;
     b.foreL.rotation.x = 0.36;
-    /* Blade UP, canted out ~17 degrees off vertical.
-       The blade runs along hand-local -Y, so with the arm at rest it points at
-       the floor unless the wrist carries it right over. Probed rather than
-       guessed: sweeping handR.x against the resulting world pitch gives -63deg
-       where it used to sit, and +73deg at 2.95 - which is the 15-20 off
-       vertical a sword is actually carried at. */
+    /* Blade projecting OUT from the body, ~15 degrees above horizontal - the
+       ready stance, crossguard by the hip and the point away from the hero.
+       2.95 got the blade upright but raked it BACK over the shoulder (forward
+       component -0.26), which read as carrying it against the chest. Swept
+       against the real hero skeleton:
+
+         handR.x   forward   up    pitch
+           2.95      -0.26   0.96   73deg   (upright but pointing backwards)
+           4.20       0.79   0.57   35deg
+           4.55       0.92   0.25   15deg   <- here
+           5.00       0.92  -0.15   -9deg   (past horizontal, tipping down)
+
+       The earlier probe disagreed because it grabbed the first skinned mesh
+       with a handR bone, and knight enemies have one too. */
     b.armR.rotation.set(-0.30 - armSwing*0.35, 0, -0.16);
     b.foreR.rotation.x = 0.16;
-    b.handR.rotation.set(2.95, 0, -0.30);
+    b.handR.rotation.set(4.55, 0, -0.30);
   }
 
   /* ---- 3. attack ---- */
@@ -6877,7 +6885,9 @@ function heroPose(b, an, st){
          the fist; the ARM does the chopping */
       b.armR.rotation.set(-0.50 - up*1.35 + cut*0.80, -sw*0.80, -0.22 - sw*0.34);
       b.foreR.rotation.x = -0.30 - up*0.70 + cut*0.34;
-      b.handR.rotation.set(2.95 - up*0.30 + cut*0.40, 0, -0.30 + sw*0.26);
+      /* rebased on the new carry angle: the wind-up rolls the point back up
+         toward vertical, the cut drives it forward and down through the arc */
+      b.handR.rotation.set(4.55 - up*0.75 + cut*0.45, 0, -0.30 + sw*0.26);
       b.chest.rotation.y = -sw*0.50;
       b.chest.rotation.x = -0.12*up + 0.20*cut;
       b.armL.rotation.x = -0.25 + sw*0.26;
