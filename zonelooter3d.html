@@ -1350,7 +1350,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.09.26-7 playtest fixes';
+const BUILD = '2026.09.28-8 sword carry+chop';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -6676,6 +6676,10 @@ const HERO_ARMOUR = {
    the bow arm points forward, and the staff extends UP out of the fist rather
    than down past it. */
 const HERO_WEAPON = {
+  /* The blade extends along hand-local -Y, which is the direction OUT of the
+     fist: +Y runs back up the arm, so building it that way buries the sword
+     inside the character. Pointing the blade upward is therefore the pose's
+     job, not the geometry's. */
   blade: [
     {b:'handR', shape:'cyl', w:0.06, h:0.20, y:-0.16, c:'#3a2a1c'},
     {b:'handR', shape:'box', w:0.30, h:0.05, d:0.09, y:-0.27, c:GOLD},
@@ -6802,14 +6806,15 @@ function heroPose(b, an, st){
   } else {                                        /* blade / axe / gun */
     b.armL.rotation.x = armSwing - 0.06; b.armL.rotation.z = 0;
     b.foreL.rotation.x = 0.36;
-    /* weapon hand rides lower and steadier, wrist cocked so the blade angles
-       forward instead of hanging straight down */
-    /* the chain accumulates: arm + forearm + wrist decide the blade angle.
-       Netting to about -0.8 rad puts the blade out at roughly 45 degrees
-       instead of hanging at the floor. */
+    /* Blade UP, canted out ~17 degrees off vertical.
+       The blade runs along hand-local -Y, so with the arm at rest it points at
+       the floor unless the wrist carries it right over. Probed rather than
+       guessed: sweeping handR.x against the resulting world pitch gives -63deg
+       where it used to sit, and +73deg at 2.95 - which is the 15-20 off
+       vertical a sword is actually carried at. */
     b.armR.rotation.set(-0.30 - armSwing*0.35, 0, -0.16);
     b.foreR.rotation.x = 0.16;
-    b.handR.rotation.x = -0.92;
+    b.handR.rotation.set(2.95, 0, -0.30);
   }
 
   /* ---- 3. attack ---- */
@@ -6860,19 +6865,23 @@ function heroPose(b, an, st){
          height, and the wrist stays cocked so the blade leads the hand instead
          of hanging off it. */
       let sw;
-      if(a<0.26)      sw = -1.0*(a/0.26);                  /* coil back */
-      else if(a<0.48) sw = lerp(-1.0, 1.0, (a-0.26)/0.22); /* the cut */
-      else            sw = lerp(1.0, 0, (a-0.48)/0.52);    /* recover to guard */
-      /* the arm lifts slightly through the middle of the cut, so the blade
-         travels an arc rather than a flat line */
-      const lift = (1 - Math.abs(sw)) * 0.22;
-      b.armR.rotation.set(-1.16 - lift, -sw*1.05, -0.26 - sw*0.16);
-      b.foreR.rotation.x = -0.26 - Math.max(0, sw)*0.20;
-      b.handR.rotation.x = -1.10;                 /* blade out, perpendicular */
-      b.handR.rotation.z = sw*0.26;
-      b.chest.rotation.y = -sw*0.52;
+      if(a<0.26)      sw = -1.0*(a/0.26);                  /* raise it */
+      else if(a<0.48) sw = lerp(-1.0, 1.0, (a-0.26)/0.22); /* the chop */
+      else            sw = lerp(1.0, 0, (a-0.48)/0.52);    /* back to guard */
+      const up  = Math.max(0, -sw);   /* 1 at the top of the wind-up */
+      const cut = Math.max(0,  sw);   /* 1 at full extension */
+      /* A DIAGONAL chop: the blade goes up over the shoulder, then comes down
+         and across. A flat horizontal sweep reads as a bat swing; the descent
+         is what makes it a hack. */
+      /* the wrist stays near the carry angle so the blade keeps leading out of
+         the fist; the ARM does the chopping */
+      b.armR.rotation.set(-0.50 - up*1.35 + cut*0.80, -sw*0.80, -0.22 - sw*0.34);
+      b.foreR.rotation.x = -0.30 - up*0.70 + cut*0.34;
+      b.handR.rotation.set(2.95 - up*0.30 + cut*0.40, 0, -0.30 + sw*0.26);
+      b.chest.rotation.y = -sw*0.50;
+      b.chest.rotation.x = -0.12*up + 0.20*cut;
       b.armL.rotation.x = -0.25 + sw*0.26;
-      b.cape.rotation.x += Math.max(0,sw)*0.30;
+      b.cape.rotation.x += cut*0.30;
     }
   }
 
