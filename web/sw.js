@@ -13,7 +13,7 @@
 
    Bump CACHE_V on release. Old caches are dropped on activate.
    ================================================================ */
-const CACHE_V = 'riftfall-v3';
+const CACHE_V = 'riftfall-v4';
 const SHELL = [
   '/3d.html',
   '/manifest.webmanifest',

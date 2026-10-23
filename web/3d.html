@@ -1350,7 +1350,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.09.28-9 sword faces out';
+const BUILD = '2026.10.23-1 perf downgrade timing';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -11958,17 +11958,29 @@ if(navigator.storage && navigator.storage.persist){
 /* ================================================================
    MAIN LOOP
    ================================================================ */
-let lastT=0, _fAcc=0, _fN=0, _downgrades=0;
+let lastT=0, _fAcc=0, _fN=0, _fT0=0, _downgrades=0;
 function loop(ts){
   requestAnimationFrame(loop);
   if(!running) return;
-  const dt = Math.min(0.05, (ts-lastT)/1000 || 0.016);
+  const raw = (ts-lastT)/1000 || 0.016;
+  /* The simulation step stays clamped: a long stall must not teleport the
+     world a second into the future. The PERF SAMPLE below uses raw instead. */
+  const dt = Math.min(0.05, raw);
   lastT = ts;
   if(!paused){
     update(dt);
-    _fAcc += dt; _fN++;
-    if(_fN >= 150){
-      const avg = _fAcc/_fN; _fAcc=0; _fN=0;
+    /* Sample raw frame time over a 2s WALL-CLOCK window, not a frame count.
+       Counting frames made relief slowest exactly when it was needed most -
+       at 2fps the old 150-frame threshold took over a minute to evaluate, so
+       the players who needed the downgrade were the ones who never got it.
+       And accumulating the clamped dt capped the measured average at 50ms,
+       so nothing worse than 20fps could register as worse than 20fps. */
+    if(!_fT0) _fT0 = ts;
+    /* per-sample cap: one synchronous stall (zone build, tab resume) should
+       not by itself trip a downgrade, but 100ms frames still count honestly */
+    _fAcc += Math.min(0.5, raw); _fN++;
+    if(ts - _fT0 >= 2000){
+      const avg = _fAcc/_fN; _fAcc=0; _fN=0; _fT0=ts;
       if(avg > 0.026 && _downgrades < 2){
         _downgrades++;
         applyGfx(gfxTier==='high' ? 'med' : 'low');
@@ -13251,7 +13263,7 @@ $('menuBody').addEventListener('click', e=>{
     return;
   }
   const q=e.target.closest('[data-gfx]');
-  if(q){ S.opts.gfx=q.dataset.gfx; _downgrades=0; applyGfx(S.opts.gfx);
+  if(q){ S.opts.gfx=q.dataset.gfx; _downgrades=0; _fAcc=0; _fN=0; _fT0=0; applyGfx(S.opts.gfx);
          sfx('buy'); renderMenu(); saveGame(); return; }
   const mv=e.target.closest('[data-mvol]');
   if(mv){ S.opts.musVol=+mv.dataset.mvol; musSetIntensity(MUS.want, true);
