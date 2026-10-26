@@ -13567,9 +13567,35 @@ const PORTAL = (()=>{
   const sdk = ()=> (window.CrazyGames && window.CrazyGames.SDK) || null;
   let ready = false, playing = false, adBusy = false;
 
+  /* masterGain is set once to 0.32 at audio init and never written again - the
+     music slider scales per-source - so it is a safe single master mute point.
+     Two things can mute: an ad in progress, and the player's own CrazyGames
+     audio setting. Track them separately or they clobber each other. */
+  let adMuted = false, setMuted = false, baseVol = null;
+  function applyAudio(){
+    try{
+      if(!masterGain) return;
+      if(baseVol === null && masterGain.gain.value > 0) baseVol = masterGain.gain.value;
+      masterGain.gain.value = (adMuted || setMuted) ? 0 : (baseVol === null ? 0.32 : baseVol);
+    }catch(e){}
+  }
+  function readSettings(){
+    try{
+      const s = sdk();
+      if(s && s.game && s.game.settings) setMuted = !!s.game.settings.muteAudio;
+    }catch(e){}
+    applyAudio();
+  }
+
   function init(){
     const real = (async ()=>{
-      try{ const s = sdk(); if(!s) return; await s.init(); ready = true; }
+      try{
+        const s = sdk(); if(!s) return;
+        await s.init(); ready = true;
+        /* the player can mute from the portal chrome at any time */
+        try{ s.game.addSettingsChangeListener(readSettings); }catch(e){}
+        readSettings();
+      }
       catch(e){ console.warn('CrazyGames init failed', e); }
     })();
     /* an ad blocker can make init hang; never let that block the game */
@@ -13590,27 +13616,60 @@ const PORTAL = (()=>{
     done = done || function(){};
     if(!ready || adBusy){ done(false); return; }
     adBusy = true;
-    const was = paused, vol = masterGain ? masterGain.gain.value : 0;
+    const was = paused;
     stop();
     const end = ok => {
       adBusy = false;
-      try{ if(masterGain) masterGain.gain.value = vol; }catch(e){}
+      adMuted = false; applyAudio();   /* restores to the SETTING, not to a snapshot */
       paused = was;
       done(ok);
     };
     try{
       sdk().ad.requestAd(kind, {
-        adStarted:  ()=>{ paused = true; try{ if(masterGain) masterGain.gain.value = 0; }catch(e){} },
+        adStarted:  ()=>{ paused = true; adMuted = true; applyAudio(); },
         adFinished: ()=>end(true),
         adError:    ()=>end(false),
       });
     }catch(e){ end(false); }
   }
 
-  /* data module follows the player's CrazyGames account across devices */
-  function saveRemote(str){ if(!ready) return; try{ sdk().data.setItem(SAVE_KEY, str); }catch(e){} }
+  /* data module follows the player's CrazyGames account across devices.
+     saveGame() fires on tab changes, death, purchases - far too often to mirror
+     every one. Coalesce to one write per WRITE_MS per key, which is what the
+     maintained SDK wrappers do. localStorage still takes every save, so nothing
+     is lost locally; only the cloud copy lags. getItem is SYNCHRONOUS and
+     returns string|null - confirmed against the SDK's typed interface. */
+  const WRITE_MS = 30000;
+  let lastWrite = -Infinity, pendTimer = null, pendVal = null;
+  const nowMs = ()=> (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  function flushRemote(){
+    if(pendVal === null) return;
+    if(!ready){ pendVal = null; return; }
+    try{ sdk().data.setItem(SAVE_KEY, pendVal); }catch(e){}
+    lastWrite = nowMs(); pendVal = null;
+  }
+  function saveRemote(str){
+    if(!ready) return;
+    pendVal = str;
+    if(pendTimer) return;                      /* already queued; it takes pendVal */
+    const wait = WRITE_MS - (nowMs() - lastWrite);
+    if(wait <= 0){ flushRemote(); return; }
+    pendTimer = setTimeout(()=>{ pendTimer = null; flushRemote(); }, wait);
+  }
   function loadRemote(){ if(!ready) return null; try{ return sdk().data.getItem(SAVE_KEY) || null; }catch(e){ return null; } }
-  function wipeRemote(){ if(!ready) return; try{ sdk().data.removeItem(SAVE_KEY); }catch(e){} }
+  function wipeRemote(){
+    /* a queued write would otherwise resurrect the save seconds after a wipe */
+    if(pendTimer){ clearTimeout(pendTimer); pendTimer = null; }
+    pendVal = null;
+    if(!ready) return;
+    try{ sdk().data.removeItem(SAVE_KEY); }catch(e){}
+  }
+  /* closing the tab must not cost the player up to WRITE_MS of cloud progress */
+  try{
+    addEventListener('pagehide', ()=>{ if(pendTimer){ clearTimeout(pendTimer); pendTimer = null; } flushRemote(); });
+    addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'hidden'){
+      if(pendTimer){ clearTimeout(pendTimer); pendTimer = null; } flushRemote(); } });
+  }catch(e){}
 
   function reviveInPlace(){
     $('deathWrap').classList.remove('open');
@@ -13637,7 +13696,10 @@ const PORTAL = (()=>{
     b.style.display = ready ? 'block' : 'none';
   }
   return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive,
-           get ready(){ return ready; } };
+           flushRemote, readSettings,
+           get ready(){ return ready; },
+           get muted(){ return adMuted || setMuted; },
+           get pending(){ return pendVal !== null; } };
 })();
 
 /* boot or intro */
