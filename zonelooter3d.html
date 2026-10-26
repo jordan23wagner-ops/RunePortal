@@ -1365,7 +1365,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.26-1 loot overlay scroll';
+const BUILD = '2026.10.26-2 bone texture dispose';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -10016,6 +10016,14 @@ function releaseActor(a){
   const t = init3D();
   t.scene.remove(a.mesh);
   a.mesh.geometry.dispose(); a.mat.dispose();
+  /* Every SkinnedMesh carries its OWN Skeleton - buildSkinned makes a fresh one
+     per actor - and the renderer lazily allocates a bone DataTexture for it the
+     first time it draws. Disposing only geometry and material left that texture
+     resident on the GPU forever: measured at ~45 per zone rebuild, 216 per
+     five-zone lap, climbing dead straight through 61 laps with nothing ever
+     reclaimed. It never showed up as a JS heap leak because it is not in the JS
+     heap, which is why a heap-watching soak called this clean. */
+  if(a.mesh.skeleton) a.mesh.skeleton.dispose();
 }
 function syncActor(ent, isPlayer){
   const t = init3D();
