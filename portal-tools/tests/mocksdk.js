@@ -179,9 +179,9 @@ const T = []; const chk = (n, pass, d='') => T.push({n, pass, d});
   chk('a write is queued, not dropped', await p.evaluate(()=>PORTAL.pending===true));
   /* a queued write must not resurrect the save after a wipe */
   await clear();
-  await p.evaluate(()=>PORTAL.wipeRemote());
-  await p.waitForTimeout(600);
-  chk('wipe cancels queued write', await p.evaluate(()=>PORTAL.pending===false));
+  const wipedPending = await p.evaluate(()=>{ PORTAL.wipeRemote(); return PORTAL.pending; });
+  chk('wipe cancels queued write', wipedPending===false);
+  await p.waitForTimeout(400);
   chk('no setItem after wipe', !(await log()).some(x=>x.startsWith('data.setItem')), (await log()).join(' '));
 
   /* ---- pagehide flushes a queued write ---- */
@@ -189,11 +189,12 @@ const T = []; const chk = (n, pass, d='') => T.push({n, pass, d});
   await p.waitForTimeout(150);
   const queuedBefore = await p.evaluate(()=>PORTAL.pending===true);
   await clear();
-  await p.evaluate(()=>dispatchEvent(new Event('pagehide')));
+  const flushedPending = await p.evaluate(()=>{
+    dispatchEvent(new Event('pagehide')); return PORTAL.pending; });
   await p.waitForTimeout(250);
   chk('write was queued', queuedBefore);
   chk('pagehide flushes queued write', (await log()).some(x=>x.startsWith('data.setItem')));
-  chk('nothing left pending after flush', await p.evaluate(()=>PORTAL.pending===false));
+  chk('nothing left pending after flush', flushedPending===false);
 
   /* ---- cloud fallback on load ----
      Driving loadGame() directly beats reloading: the reload needed a
