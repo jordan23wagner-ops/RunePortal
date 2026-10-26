@@ -114,6 +114,29 @@ const PORTAL = (()=>{
      Two things can mute: an ad in progress, and the player's own CrazyGames
      audio setting. Track them separately or they clobber each other. */
   let adMuted = false, setMuted = false, baseVol = null;
+
+  /* Ads are disabled entirely during Basic Launch, so requestAd fails straight
+     away. Without this the player dies, sees "Revive here - watch an ad",
+     clicks it, and nothing happens: the request errors and the button just
+     re-enables. Functionally safe but it reads as broken.
+     So: the first NON-TRANSIENT failure, before any ad has ever played, marks
+     ads unavailable for the session and the offer stops appearing. Transient
+     errors - rate limiting, a request already in flight - must not latch,
+     or one unlucky click would hide a feature that works fine. */
+  let adsBlocked = false, adEverShown = false;
+  const AD_TRANSIENT = /too soon|already in progress|in progress|not ready/i;
+  function adErrText(e){
+    try{ return String((e && (e.message || e.code || e.error)) || e || ''); }
+    catch(_){ return ''; }
+  }
+  function markAdFailure(err){
+    if(AD_TRANSIENT.test(adErrText(err))) return;   /* retryable, not a verdict */
+    if(adEverShown) return;                          /* ads demonstrably work here */
+    adsBlocked = true;
+    const b = document.getElementById('deathRevive');
+    if(b) b.style.display = 'none';                  /* pull it even if open right now */
+    try{ toast('Ads unavailable right now'); }catch(_){}
+  }
   function applyAudio(){
     try{
       if(!masterGain) return;
@@ -156,7 +179,7 @@ const PORTAL = (()=>{
   /* kind: 'midgame' | 'rewarded'. done(ok): ok=true when an ad actually finished. */
   function ad(kind, done){
     done = done || function(){};
-    if(!ready || adBusy){ done(false); return; }
+    if(!ready || adBusy || adsBlocked){ done(false); return; }
     adBusy = true;
     const was = paused;
     stop();
@@ -168,11 +191,12 @@ const PORTAL = (()=>{
     };
     try{
       sdk().ad.requestAd(kind, {
-        adStarted:  ()=>{ paused = true; adMuted = true; applyAudio(); },
+        adStarted:  ()=>{ adEverShown = true; adsBlocked = false;
+                          paused = true; adMuted = true; applyAudio(); },
         adFinished: ()=>end(true),
-        adError:    ()=>end(false),
+        adError:    (err)=>{ markAdFailure(err); end(false); },
       });
-    }catch(e){ end(false); }
+    }catch(e){ markAdFailure(e); end(false); }
   }
 
   /* data module follows the player's CrazyGames account across devices.
@@ -235,11 +259,12 @@ const PORTAL = (()=>{
         ad('rewarded', ok=>{ b.disabled = false; if(ok) reviveInPlace(); });
       });
     }
-    b.style.display = ready ? 'block' : 'none';
+    b.style.display = (ready && !adsBlocked) ? 'block' : 'none';
   }
   return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive,
            flushRemote, readSettings,
            get ready(){ return ready; },
+           get adsBlocked(){ return adsBlocked; },
            get muted(){ return adMuted || setMuted; },
            get pending(){ return pendVal !== null; } };
 })();
