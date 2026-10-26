@@ -879,9 +879,24 @@ body.testmode #hud{padding-top:16px;}
 #lootWrap{
   position:absolute;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
   background:rgba(4,5,10,.86);backdrop-filter:blur(4px);padding:20px;
+  /* A flex-centred overlay with the default overflow:visible put COLLECT below
+     the fold on any short viewport, with nothing able to scroll to it. Escape,
+     backdrop click, the nav rail and rotating the device all failed, and the
+     game stayed paused - every chest in phone landscape soft-locked the run,
+     recoverable only by reloading. #lootInner pins the button; this is the
+     floor for a viewport too short for even title + one card + button. */
+  overflow-y:auto;
 }
 #lootWrap.open{display:flex;}
-#lootInner{width:100%;max-width:330px;text-align:center;}
+/* Title fixed, cards scroll, Collect pinned - so the button is on screen at
+   every viewport and item count instead of being pushed past the fold. margin
+   :auto centres the card when it fits; min-height:0 is what lets a flex child
+   actually shrink below its content height. */
+#lootInner{
+  width:100%;max-width:330px;text-align:center;margin:auto;
+  max-height:100%;display:flex;flex-direction:column;min-height:0;
+}
+#lootCards{flex:1 1 auto;overflow-y:auto;min-height:0;}
 #lootTitle{font-size:12px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
   color:var(--gold);margin-bottom:14px;text-shadow:0 0 14px rgba(232,180,74,.5);}
 .lootCard{
@@ -1350,7 +1365,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.23-1 perf downgrade timing';
+const BUILD = '2026.10.26-1 loot overlay scroll';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
