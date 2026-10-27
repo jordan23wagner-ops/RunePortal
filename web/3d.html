@@ -1398,7 +1398,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.27-2 tutorial';
+const BUILD = '2026.10.27-3 hit weight';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -4302,6 +4302,25 @@ function buildBackdrop(){
    ================================================================ */
 let P=null, foes=[], shots=[], parts=[], drops=[], fx=[];
 let kills=0, shake=0, running=false, paused=true;
+/* HIT-STOP. The hit reaction already had flash, knockback, particles, sound
+   and a damage number - everything except the one thing that actually reads
+   as weight: a couple of frames where the world stops. Kept tiny (45-90ms)
+   because past about 100ms it stops feeling like impact and starts feeling
+   like the game dropped a frame. */
+let hitStop = 0, _hsAt = -1, _lastRaw = 0.016;
+function hitFreeze(sec){
+  /* On a device already under 20fps a freeze does not read as impact, it
+     reads as the game stuttering - and it costs a whole simulation step
+     rather than a couple of frames. Skip it rather than make a struggling
+     machine worse; the shake, flash and particles still land. */
+  if(_lastRaw > 0.05) return;
+  const now = performance.now()/1000;
+  /* a fast weapon lands several hits a second; without this floor they
+     compound into a stutter instead of punctuating anything */
+  if(now - _hsAt < 0.09) return;
+  _hsAt = now;
+  hitStop = Math.min(0.10, Math.max(hitStop, sec));
+}
 let bossRef=null;
 
 function zoneLvl(){
@@ -5231,7 +5250,8 @@ function damageFoe(f, dmg, crit, opts){
   if(f.state!=='aggro') aggroPack(f);
   if(!opts.silent){
     fct(f.x, f.y-f.r-6, Math.round(dmg).toString(), crit?'crit':'');
-    if(crit){ sfx('crit'); shake=Math.max(shake,5); } else sfx('hit');
+    if(crit){ sfx('crit'); shake=Math.max(shake,6); hitFreeze(0.045); }
+    else { sfx('hit'); shake=Math.max(shake,2); }   /* every hit moves the camera a little */
   }
   burst(f.x,f.y,crit?'#ffd85e':'#ffffff',crit?9:4,crit?190:120,0.3,crit?3:2);
 
@@ -5305,6 +5325,10 @@ function killFoe(f){
   burst(f.x,f.y,f.def.col,14,200,0.55,3);
   ring(f.x,f.y,f.def.col,f.r*0.5,f.r*2.4,0.3);
   sfx('kill');
+  /* scaled by rank, so a trash mob pops and an alpha lands properly */
+  const _rk = f.rank||0;
+  shake = Math.max(shake, 4 + _rk*4);
+  hitFreeze(0.05 + _rk*0.02);
 
   /* poison contagion */
   if(D.uniq && D.uniq.poison && f.pois>0){
@@ -12076,9 +12100,13 @@ function loop(ts){
   /* The simulation step stays clamped: a long stall must not teleport the
      world a second into the future. The PERF SAMPLE below uses raw instead. */
   const dt = Math.min(0.05, raw);
+  _lastRaw = raw;
   lastT = ts;
   if(!paused){
-    update(dt);
+    /* frozen: keep rendering so shake, particles and the UI stay alive, but
+       do not advance the simulation */
+    if(hitStop > 0) hitStop -= raw;
+    else update(dt);
     /* Sample raw frame time over a 2s WALL-CLOCK window, not a frame count.
        Counting frames made relief slowest exactly when it was needed most -
        at 2fps the old 150-frame threshold took over a minute to evaluate, so
