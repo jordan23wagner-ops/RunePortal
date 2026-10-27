@@ -1,11 +1,10 @@
 {
-  "platforms": {
-    "playgama": {
-      "advertisement": {
-        "interstitial": {
-          "minimumDelayBetweenInterstitial": 60
-        }
-      }
-    }
+  "game": {
+    "adaptToSafeArea": false
+  },
+  "advertisement": {
+    "minimumDelayBetweenInterstitial": 90,
+    "initialInterstitialDelay": 120,
+    "useBuiltInErrorPopup": false
   }
 }

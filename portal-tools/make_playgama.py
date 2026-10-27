@@ -345,20 +345,32 @@ sub(
 open(out_path, "w", encoding="utf-8").write(s)
 
 # Bridge loads its config from ./playgama-bridge-config.json next to the page.
-# PLACEHOLDER: regenerate the real one with the official editor at
-# https://playgama.github.io/bridge-config-editor/ before submitting - this
-# only carries the defaults needed for the game to run.
+# Written against the SDK's own ConfigFileOptions / AdvertisementOptions types
+# (@playgama/bridge 2.3.1, dist/types/lib/bridge-config/types.d.ts) rather than
+# guessed, so these keys are real. Placement IDs are deliberately absent: the
+# game calls showRewarded()/showInterstitial() with no placement, which uses
+# the platform fallback, and inventing placement names we have not registered
+# would be worse than omitting them.
 cfg = {
-    "platforms": {
-        "playgama": {
-            "advertisement": {
-                "interstitial": {"minimumDelayBetweenInterstitial": 60}
-            }
-        }
+    "game": {
+        # the game already pads for notches itself via env(safe-area-inset-*);
+        # letting the SDK also adapt would double the inset
+        "adaptToSafeArea": False
+    },
+    "advertisement": {
+        # our midgame ad fires on respawn, which can come fast after a death
+        # streak - 90s between them, against a default of 60
+        "minimumDelayBetweenInterstitial": 90,
+        # nothing interrupts the first two minutes. That window is what a
+        # reviewer and a new player judge the game on.
+        "initialInterstitialDelay": 120,
+        # the shim already handles ad failure: it hides the revive offer and
+        # tells the player once. A second popup on top would double up.
+        "useBuiltInErrorPopup": False
     }
 }
 cfg_path = os.path.join(out_dir, "playgama-bridge-config.json")
 open(cfg_path, "w", encoding="utf-8").write(json.dumps(cfg, indent=2) + "\n")
 
 print("wrote", out_path, len(s), "bytes")
-print("wrote", cfg_path, "(PLACEHOLDER - regenerate with the official config editor)")
+print("wrote", cfg_path)

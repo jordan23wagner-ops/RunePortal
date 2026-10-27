@@ -1396,7 +1396,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.27-3 hit weight';
+const BUILD = '2026.10.27-4 daily cache';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -2546,6 +2546,7 @@ function freshState(cls){
     sp:1, skills:{},
     meta:{kills:0,deaths:0,items:0,salvaged:0,best:0,chests:0},
     seen:{},
+    tut:0, daily:{d:'',streak:0},
   };
   const startW = cls==='melee'?'sword':cls==='range'?'shortbow':'firestaff';
   st.equip.weapon = rollItem({forceArch:startW,kind:'weapon',ilvl:1,rar:0});
@@ -2585,6 +2586,7 @@ function loadGame(){
     if(!S.seen) S.seen={};
     if(!S.way) S.way={};
     if(S.tut==null) S.tut=0;        /* older saves start the tutorial */
+    if(!S.daily) S.daily={d:'',streak:0};   /* daily cache */
     if(!S.pity) S.pity={};
     if(!S.open) S.open={verdant:1};
     if(S.charge==null) S.charge=0;
@@ -4307,8 +4309,13 @@ let kills=0, shake=0, running=false, paused=true;
    as weight: a couple of frames where the world stops. Kept tiny (45-90ms)
    because past about 100ms it stops feeling like impact and starts feeling
    like the game dropped a frame. */
-let hitStop = 0, _hsAt = -1;
+let hitStop = 0, _hsAt = -1, _lastRaw = 0.016;
 function hitFreeze(sec){
+  /* On a device already under 20fps a freeze does not read as impact, it
+     reads as the game stuttering - and it costs a whole simulation step
+     rather than a couple of frames. Skip it rather than make a struggling
+     machine worse; the shake, flash and particles still land. */
+  if(_lastRaw > 0.05) return;
   const now = performance.now()/1000;
   /* a fast weapon lands several hits a second; without this floor they
      compound into a stutter instead of punctuating anything */
@@ -12097,6 +12104,7 @@ function loop(ts){
   /* The simulation step stays clamped: a long stall must not teleport the
      world a second into the future. The PERF SAMPLE below uses raw instead. */
   const dt = Math.min(0.05, raw);
+  _lastRaw = raw;
   lastT = ts;
   if(!paused){
     /* frozen: keep rendering so shake, particles and the UI stay alive, but
@@ -13190,7 +13198,21 @@ function devToggle(k){
 }
 
 function renderMenu(){
-  let h = '<div class="sectionLbl">Supplies</div>';
+  const _dr = dailyReady(), _ds = (S.daily && S.daily.streak) || 0;
+  let h = '<div class="sectionLbl">Daily</div>'+
+    '<div class="card rar'+(_dr?3:0)+'" style="display:block;">'+
+      '<div style="display:flex;gap:10px;align-items:center;">'+
+        '<div class="cIcon">'+icoKeyHTML('chest', _dr?3:0)+'</div>'+
+        '<div class="cMid"><div class="cName" style="color:var(--txt)">Daily Cache</div>'+
+        '<div class="cMeta">'+(_dr
+            ? 'Ready to open'
+            : 'Opened today — come back tomorrow')+'</div>'+
+        '<div class="cStat">Streak: <b>'+_ds+'</b>'+(_ds>=7?' (max)':'')+'</div></div>'+
+      '</div>'+
+      '<button class="btn '+(_dr?'pri':'')+' sm" data-daily="1" style="width:100%;margin-top:8px;" '+
+        (_dr?'':'disabled')+'>'+(_dr?'Open Daily Cache':'Claimed')+'</button>'+
+    '</div>'+
+    '<div class="sectionLbl">Supplies</div>';
   for(const s of SHOP){
     const cost = Object.assign({gold:s.gold}, s.mats);
     const can = hasMats(cost);
@@ -13397,6 +13419,8 @@ $('menuBody').addEventListener('click', e=>{
     sfx('buy');
     return;
   }
+  const dl=e.target.closest('[data-daily]');
+  if(dl){ claimDaily(); return; }
   const q=e.target.closest('[data-gfx]');
   if(q){ S.opts.gfx=q.dataset.gfx; _downgrades=0; _fAcc=0; _fN=0; _fT0=0; applyGfx(S.opts.gfx);
          sfx('buy'); renderMenu(); saveGame(); return; }
@@ -13479,6 +13503,48 @@ $('deathOk').addEventListener('click', ()=>{
    ================================================================ */
 let curTab='arena';
 /* ================================================================
+   DAILY CACHE
+   The game had no reason to come back tomorrow: you played until you were
+   bored and that was the end of it. One cache a day, with a streak that
+   raises the floor, gives the loop a reason to resume - and it reuses the
+   chest presentation, so it costs almost nothing to show.
+   Deliberately NOT pay-to-win: it tops out at one Legendary a day on a
+   seven-day streak, which a good zone run already beats.
+   ================================================================ */
+function dayKey(d){
+  d = d || new Date();
+  /* local date, not UTC: a player's "tomorrow" is their own midnight */
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function yesterdayKey(){ const d=new Date(); d.setDate(d.getDate()-1); return dayKey(d); }
+function dailyReady(){ return !S.daily || S.daily.d !== dayKey(); }
+function dailySync(){
+  const b = document.querySelector('[data-tab="pMenu"]');
+  if(b) b.classList.toggle('alert', dailyReady());
+}
+function claimDaily(){
+  if(!S.daily) S.daily = {d:'',streak:0};   /* a save from before this existed */
+  if(!dailyReady()) return;
+  /* a missed day resets the streak rather than pausing it - otherwise the
+     streak stops meaning "came back" */
+  S.daily.streak = (S.daily.d === yesterdayKey()) ? (S.daily.streak||0)+1 : 1;
+  S.daily.d = dayKey();
+  const st = Math.min(7, S.daily.streak);
+  const z  = ZONE_BY_ID[S.zone] || ZONES[0];
+  const g  = Math.round(rnd(160,240) * (z.tier||1) * (1 + zoneLvl()*0.4) * (1 + st*0.15));
+  gainGold(g);
+  const it = rollItem({ilvl: clamp(Math.round(zoneLvl()+2),1,99),
+                       rar: Math.min(4, 1 + Math.floor(st/2))});
+  const got = [];
+  if(it && bagAdd(it)){ got.push(it); feedItem(it); }
+  const cm = rint(2, 4+st);
+  addMat(z.mats[0], cm); feedMat(z.mats[0], cm);
+  sfx('chest'); buzz(80); shake = Math.max(shake, 6);
+  showLoot(got, g, 'Daily Cache · Day '+S.daily.streak);
+  saveGame(); dailySync(); renderMenu();
+}
+
+/* ================================================================
    TUTORIAL
    Five hints, each cleared by DOING the thing rather than reading it, so it
    teaches the tabs by making you open them and states the goal out loud. A
@@ -13521,7 +13587,7 @@ function showTab(t){
   if(typeof PORTAL!=='undefined') PORTAL.tab(t);
   /* opening the tab a step points at IS the completion of that step */
   if(S.tut!=null && S.tut<TUT.length && TUT[S.tut].tab===t){ S.tut++; saveGame(); }
-  tutSync();
+  tutSync(); dailySync();
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('sel', b.dataset.tab===t));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('open', p.id===t));
   closeModal();
