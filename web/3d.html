@@ -304,6 +304,37 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   box-shadow:0 0 6px var(--r4);
 }
 .tab.alert .dot{display:block;}
+/* The tutorial pulses a tab with its OWN class. markAlert() uses .alert for
+   real loot badges, and sharing it meant the tutorial cleared legitimate
+   alerts when it moved on. */
+.tab.tutPulse{color:var(--gold);}
+.tab.tutPulse .ic{opacity:1;}
+.tab.tutPulse::after{
+  content:'';position:absolute;inset:3px;border-radius:10px;
+  border:1.5px solid var(--gold);pointer-events:none;
+  animation:tutP 1.2s ease-in-out infinite;
+}
+@keyframes tutP{0%,100%{opacity:.22;transform:scale(1);}50%{opacity:.9;transform:scale(1.04);}}
+#tutBar{
+  /* Centred at the top it sat across the minimap and crowded the objective
+     line. The strip under the HUD bars on the left is empty in every zone
+     and in both orientations, and the pulsing tab is what actually directs
+     the eye anyway. */
+  position:absolute;left:12px;top:92px;z-index:24;
+  display:none;align-items:flex-start;gap:9px;
+  max-width:min(62%,340px);padding:9px 11px;border-radius:12px;
+  background:rgba(10,12,20,.93);border:1px solid rgba(232,180,74,.45);
+  box-shadow:0 6px 26px rgba(0,0,0,.5);
+  font-size:12px;line-height:1.45;color:#e9eef7;
+}
+#tutBar.on{display:flex;}
+@media (max-height:560px){
+  #tutBar{top:62px;max-width:min(52%,320px);font-size:11.5px;padding:7px 9px;}
+}
+#tutMsg{flex:1 1 auto;min-width:0;}
+#tutMsg b{color:var(--gold);}
+#tutX{flex:0 0 auto;background:none;border:0;color:var(--dim2);
+  font-size:15px;line-height:1;cursor:pointer;padding:1px 2px;}
 
 /* ============================================================
    PANELS
@@ -1149,6 +1180,8 @@ body.testmode #hud{padding-top:16px;}
 
     <div id="prompt">OPEN CHEST</div>
 
+    <div id="tutBar"><div id="tutMsg"></div><button id="tutX" title="Dismiss">✕</button></div>
+
     <div id="actions">
       <button class="actBtn" id="btnPot"><span data-ico="potion"></span><span class="cd"></span><span class="qty" id="potQty">0</span></button>
       <button class="actBtn" id="btnDash"><span data-ico="ui:dash"></span><span class="cd"></span></button>
@@ -1365,7 +1398,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.27-1 arrival + early chest';
+const BUILD = '2026.10.27-2 tutorial';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -2551,6 +2584,7 @@ function loadGame(){
     if(!S.skills) S.skills={};
     if(!S.seen) S.seen={};
     if(!S.way) S.way={};
+    if(S.tut==null) S.tut=0;        /* older saves start the tutorial */
     if(!S.pity) S.pity={};
     if(!S.open) S.open={verdant:1};
     if(S.charge==null) S.charge=0;
@@ -12064,6 +12098,7 @@ function loop(ts){
       }
     }
   }
+  tutSync();
   render();
 }
 
@@ -13418,8 +13453,49 @@ $('deathOk').addEventListener('click', ()=>{
    TABS
    ================================================================ */
 let curTab='arena';
+/* ================================================================
+   TUTORIAL
+   Five hints, each cleared by DOING the thing rather than reading it, so it
+   teaches the tabs by making you open them and states the goal out loud. A
+   reviewer who never reads it loses nothing: it sits in one corner, only
+   shows on the arena tab, and the x kills it for good.
+   ================================================================ */
+const TUT = [
+  {tab:null,    msg:'Drag the left side to move, tap the sword to attack. <b>WASD + Space</b> on desktop.'},
+  {tab:'pBag',  msg:'Everything you kill drops gear. Open <b>BAG</b> to see what you picked up.'},
+  {tab:'pGear', msg:'Tap an item to equip it. <b>HERO</b> shows what you are wearing and your stats.'},
+  {tab:'pSkill',msg:'Every level gives a skill point. Spend them in <b>SKILLS</b>.'},
+  {tab:'pZone', msg:'Your goal: kill the zone <b>ALPHA</b> for a Keystone. Three Keystones open the rift to the next zone. <b>RIFTS</b> tracks them.'},
+];
+let _tutKey = '';
+function tutSync(){
+  const bar = $('tutBar'); if(!bar) return;
+  if(S.tut==null) S.tut = 0;
+  /* the first step is the only one not cleared by opening a tab */
+  if(S.tut===0 && (S.meta.kills||0)>0){ S.tut = 1; saveGame(); }
+  const done = S.tut >= TUT.length;
+  const key  = (done?'x':S.tut) + '|' + curTab;
+  if(key === _tutKey) return;            /* nothing to redraw */
+  _tutKey = key;
+  for(const b of document.querySelectorAll('.tab.tutPulse')) b.classList.remove('tutPulse');
+  if(done){ bar.classList.remove('on'); return; }
+  const st = TUT[S.tut];
+  $('tutMsg').innerHTML = st.msg;
+  bar.classList.toggle('on', curTab==='arena');
+  if(st.tab){
+    const b = document.querySelector('[data-tab="'+st.tab+'"]');
+    if(b) b.classList.add('tutPulse');
+  }
+}
+$('tutX').addEventListener('click', ()=>{
+  S.tut = TUT.length; saveGame(); sfx('tab'); tutSync();
+});
+
 function showTab(t){
   curTab = t;
+  /* opening the tab a step points at IS the completion of that step */
+  if(S.tut!=null && S.tut<TUT.length && TUT[S.tut].tab===t){ S.tut++; saveGame(); }
+  tutSync();
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('sel', b.dataset.tab===t));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('open', p.id===t));
   closeModal();
