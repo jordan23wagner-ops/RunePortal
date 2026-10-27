@@ -1363,7 +1363,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.26-3 desktop camera';
+const BUILD = '2026.10.27-1 arrival + early chest';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -4636,6 +4636,24 @@ function buildZoneWorld(){
     chests.push({x:c.x, y:c.y, r:16, t:rnd(0,3), open:false, openT:0, respawn:0});
   }
 
+  /* A brand-new player saw none of that. With a 65% chance of zero and the
+     rest placed 900+ units out, the chest -> loot overlay - the best thing
+     this game does - did not fire at all inside the first three minutes.
+     Measured on a fresh save: 36 kills, 5 drops, ZERO chests in 180 seconds.
+     One chest near the entrance, and only until the player has opened their
+     first ever, is an onboarding affordance rather than an economy change:
+     it stops existing the moment it has done its job. */
+  if(!(S.meta && S.meta.chests)){
+    for(let t=0;t<120;t++){
+      const a=rnd(0,6.283), d=rnd(380,560);
+      const cx=clamp(P.x+Math.cos(a)*d, 160, WORLD.w-160);
+      const cy=clamp(P.y+Math.sin(a)*d, 160, WORLD.h-160);
+      if(terrainBlocked(cx,cy,70)) continue;
+      chests.push({x:cx, y:cy, r:16, t:rnd(0,3), open:false, openT:0, respawn:0});
+      break;
+    }
+  }
+
   /* Roamers go in the GAPS. The generic `place` scores against every spot
      equally, which let a roamer settle 189px from a camp — close enough that
      fighting it drags the camp in, undoing the whole point. This scores
@@ -4657,6 +4675,23 @@ function buildZoneWorld(){
   };
   const nRoam = 8+z.tier*2;
   for(let i=0;i<nRoam;i++) packs.push(makePack('roam', placeRoamer()));
+
+  /* ARRIVAL. Camps are deliberately pushed away from the spawn point - that
+     is what the fromPlayer argument to place() is for, and it is right for
+     pacing across a long run. The side effect was that every zone opened on
+     an empty field: measured, ZERO enemies within 600 units of where you
+     land, so the first thing anyone did was walk. A few roamers close in
+     fixes the opening without touching camp spacing. Roamers specifically,
+     because a roam pack holds exactly one member and can never drag a camp
+     onto someone who has just arrived. */
+  for(let i=0;i<4;i++){
+    const a=rnd(0,6.283), d=rnd(250,430);
+    const ax=clamp(P.x+Math.cos(a)*d, 160, WORLD.w-160);
+    const ay=clamp(P.y+Math.sin(a)*d, 160, WORLD.h-160);
+    if(terrainBlocked(ax,ay,60)) continue;
+    const pk=makePack('roam', {x:ax, y:ay});
+    pk.arch='open'; packs.push(pk);
+  }
 
   for(const pk of packs) spawnPack(pk);
   objective = rollObjective();
