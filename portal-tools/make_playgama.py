@@ -198,6 +198,7 @@ const PORTAL = (()=>{
         const b = B(); if(!b) return;
         await b.initialize();
         ready = true;
+        flushSave();
         msg('game_ready');
         /* Storage is ASYNC here. loadGame() is synchronous and reads
            localStorage, so pull the cloud copy down and seed it BEFORE boot
@@ -205,10 +206,16 @@ const PORTAL = (()=>{
            there is no local save, so a device-local run is never clobbered. */
         try{
           if(!localStorage.getItem(SAVE_KEY)){
-            const v = await b.storage.get(SAVE_KEY);
-            if(typeof v === 'string' && v) localStorage.setItem(SAVE_KEY, v);
+            const res = await b.storage.get([SAVE_KEY]);
+            /* tolerate either shape: the docs say an array comes back, but a
+               platform that answers the scalar must not lose the save either */
+            const v = Array.isArray(res) ? res[0] : res;
+            if(typeof v === 'string' && v){ localStorage.setItem(SAVE_KEY, v); seeded = true; }
           }
         }catch(e){}
+        cloudRead = true;
+        flushSave();
+        if(seeded && lateHook){ try{ lateHook(); }catch(e){} }
         try{
           b.platform.on('audio_state_changed', readSettings);
           b.platform.on('pause_state_changed', st => { if(st) stop(); });
@@ -218,9 +225,10 @@ const PORTAL = (()=>{
         readSettings();
       }
       catch(e){ console.warn('Playgama init failed', e); }
+      finally{ cloudRead = true; flushSave(); }
     })();
     /* an ad blocker can make init hang; never let that block the game */
-    return Promise.race([real, new Promise(r=>setTimeout(r, 3500))]);
+    return Promise.race([real, new Promise(r=>setTimeout(r, 6000))]);
   }
 
   function start(){
@@ -251,14 +259,36 @@ const PORTAL = (()=>{
 
   /* cloud saves: promises, and deliberately unawaited - a save must never
      block a frame, and localStorage already holds the authoritative copy */
+  /* A save must never reach the cloud before the initial read has settled.
+     init() races a 3.5s timeout so an ad blocker cannot hang boot, and when
+     that timeout wins, loadGame() starts a FRESH save - writing that out
+     would overwrite the player's real cloud save with an empty one. Hold the
+     newest save until the read is done, then flush it. */
+  let cloudRead = false, queuedSave = null, lateHook = null, seeded = false;
+  /* boot registers here so a cloud save that arrives after the init budget
+     still gets the player into their game instead of class-select */
+  function lateSave(fn){ lateHook = fn; }
+  function putRemote(str){
+    try{ const p = B().storage.set([SAVE_KEY], [str]); if(p && p.catch) p.catch(()=>{}); }catch(e){}
+  }
+  function flushSave(){
+    if(!ready || !cloudRead || !queuedSave) return;
+    const q = queuedSave; queuedSave = null; putRemote(q);
+  }
   function saveRemote(str){
-    if(!ready) return;
-    try{ const p = B().storage.set(SAVE_KEY, str); if(p && p.catch) p.catch(()=>{}); }catch(e){}
+    /* Two reasons to hold a save rather than drop it. Before `ready` the
+       Bridge cannot take it, and the player can be several minutes in by then
+       on a slow platform. Before `cloudRead` the save may be a FRESH one from
+       a boot that gave up waiting, and writing that out would overwrite the
+       player's real cloud save with an empty one. Keep the newest either way
+       and flush when both are true. */
+    if(!ready || !cloudRead){ queuedSave = str; return; }
+    putRemote(str);
   }
   function loadRemote(){ return null; }   /* seeded into localStorage at init */
   function wipeRemote(){
     if(!ready) return;
-    try{ const p = B().storage.delete(SAVE_KEY); if(p && p.catch) p.catch(()=>{}); }catch(e){}
+    try{ const p = B().storage.delete([SAVE_KEY]); if(p && p.catch) p.catch(()=>{}); }catch(e){}
   }
 
   /* one rewarded revive per zone. Offering it on every death makes the ad
@@ -291,7 +321,7 @@ const PORTAL = (()=>{
     }
     b.style.display = (ready && !adsBlocked && reviveZone !== curZone()) ? 'block' : 'none';
   }
-  return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive,
+  return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive, lateSave,
            readSettings,
            get ready(){ return ready; },
            get adsBlocked(){ return adsBlocked; },
@@ -338,12 +368,23 @@ sub(
 # 9. Boot waits (briefly) for the SDK so the cloud save can be read
 sub(
     "buildIntro();\nif(loadGame()){",
-    "buildIntro();\nPORTAL.init().then(()=>{\nif(loadGame()){",
+    "buildIntro();\n"
+    "let _booted = false;\n"
+    "const _bootGame = ()=>{\n"
+    "if(_booted) return;\n"
+    "if(loadGame()){ _booted = true;",
     "boot wait open",
 )
 sub(
     "} else {\n  running = false;\n}\nrequestAnimationFrame(loop);",
-    "} else {\n  running = false;\n}\nPORTAL.tab('arena');\n});\nrequestAnimationFrame(loop);",
+    "} else {\n  running = false;\n}\n"
+    "PORTAL.tab('arena');\n"
+    "};\n"
+    "PORTAL.init().then(_bootGame);\n"
+    "/* a cloud save can land after the init budget; honour it, unless the\n"
+    "   player already started a new game in the meantime */\n"
+    "PORTAL.lateSave(()=>{ if(!running) _bootGame(); });\n"
+    "requestAnimationFrame(loop);",
     "boot wait close",
 )
 
