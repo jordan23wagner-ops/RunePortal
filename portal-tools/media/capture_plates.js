@@ -24,7 +24,7 @@ const SIZES=[[960,540,'land'],[400,600,'port'],[400,400,'sq']];
     });
     await p.waitForTimeout(2400);
     await p.evaluate(()=>{
-      for(const id of ['hud','actions','tabbar','prompt','hud2d','bossBar']){
+      for(const id of ['hud','actions','tabbar','prompt','hud2d','bossBar','tutBar','muteBtn']){
         const e=document.getElementById(id); if(e) e.style.visibility='hidden'; }
       for(const el of document.querySelectorAll('.panel,.modal,#lootWrap,#lvlWrap,#deathWrap'))
         el.style.visibility='hidden';
