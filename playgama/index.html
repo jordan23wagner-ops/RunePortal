@@ -327,7 +327,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
      line. The strip under the HUD bars on the left is empty in every zone
      and in both orientations, and the pulsing tab is what actually directs
      the eye anyway. */
-  position:absolute;left:12px;top:92px;z-index:24;
+  position:absolute;left:12px;top:92px;z-index:38;
   display:none;align-items:flex-start;gap:9px;
   max-width:min(62%,340px);padding:9px 11px;border-radius:12px;
   background:rgba(10,12,20,.93);border:1px solid rgba(232,180,74,.45);
@@ -337,6 +337,16 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 #tutBar.on{display:flex;}
 @media (max-height:560px){
   #tutBar{top:62px;max-width:min(52%,320px);font-size:11.5px;padding:7px 9px;}
+}
+/* In portrait a panel fills the screen, so the step has to go over it. Under
+   the panel header is the only place that costs nothing permanent: the header
+   and its close button stay clickable, the footer buttons stay clickable, and
+   the content it covers scrolls out from under it. In landscape panels are a
+   side sheet and the arena is still there, so the bar stays where it is. */
+@media (max-aspect-ratio: 1/1){
+  #tutBar.onPanel{
+    top:calc(58px + var(--safe-t));left:10px;right:10px;max-width:none;
+  }
 }
 #tutMsg{flex:1 1 auto;min-width:0;}
 #tutMsg b{color:var(--gold);}
@@ -1405,7 +1415,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.28-2 cloud save';
+const BUILD = '2026.10.28-3 tutorial over panels';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -13653,7 +13663,8 @@ function tutSync(){
   if(done){ bar.classList.remove('on'); return; }
   const st = TUT[S.tut];
   $('tutMsg').innerHTML = st.msg;
-  bar.classList.toggle('on', curTab==='arena');
+  bar.classList.add('on');
+  bar.classList.toggle('onPanel', curTab!=='arena');
   if(st.tab){
     const b = document.querySelector('[data-tab="'+st.tab+'"]');
     if(b) b.classList.add('tutPulse');

@@ -16,6 +16,7 @@ const OUT='/tmp/claude-0/-home-user-RunePortal/256dfdb7-80ba-5509-944c-0cc7b791d
   const state = ()=>p.evaluate(()=>({
     step:S.tut,
     barOn:document.getElementById('tutBar').classList.contains('on'),
+    barOnPanel:document.getElementById('tutBar').classList.contains('onPanel'),
     msg:(document.getElementById('tutMsg').innerText||'').slice(0,46),
     pulsing:[...document.querySelectorAll('.tab.tutPulse')].map(e=>e.dataset.tab),
   }));
@@ -41,7 +42,11 @@ const OUT='/tmp/claude-0/-home-user-RunePortal/256dfdb7-80ba-5509-944c-0cc7b791d
     await p.waitForTimeout(350);
     const st=await state();
     chk(`opening ${open} -> step ${wantStep}`, st.step===wantStep, JSON.stringify(st));
-    chk(`bar hidden while on ${open}`, st.barOn===false);
+    const lastStep = wantPulse === null;
+    chk(`bar ${lastStep?'gone after the last step':'still readable'} on ${open}`,
+        st.barOn === !lastStep, `barOn=${st.barOn} step=${st.step}`);
+    if(!lastStep) chk(`bar is docked clear of the panel on ${open}`, st.barOnPanel===true,
+        `onPanel=${st.barOnPanel}`);
     if(wantPulse) chk(`${wantPulse} pulses next`, st.pulsing.includes(wantPulse), st.pulsing.join());
   }
 
