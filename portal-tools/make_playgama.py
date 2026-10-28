@@ -209,7 +209,9 @@ const PORTAL = (()=>{
     catch(e){ return -1; }       /* unparseable: always lose to anything valid */
   }
   function init(){
-    introLock(true);
+    introLock(true); paintIntro();
+    const tick = setInterval(paintIntro, 400);
+    setTimeout(()=>clearInterval(tick), 20000);
     const real = (async ()=>{
       try{
         const b = B(); if(!b) return;
@@ -227,6 +229,7 @@ const PORTAL = (()=>{
              platform that answers the scalar must not lose the save either */
           const v = Array.isArray(res) ? res[0] : res;
           hadCloud = (typeof v === 'string' && !!v);
+          cloudRaw = (typeof v === 'string') ? v.length : 0;
           if(typeof v === 'string' && v){
             /* Always read the cloud, and let the NEWER save win. Consulting it
                only when localStorage was empty meant any local copy shadowed
@@ -237,7 +240,7 @@ const PORTAL = (()=>{
               localStorage.setItem(SAVE_KEY, v); seeded = true;
             }
           }
-        }catch(e){}
+        }catch(e){ readErr = (e && e.message) || 'threw'; }
         cloudRead = true;
         flushSave();
         if(seeded && lateHook){ try{ lateHook(); }catch(e){} }
@@ -251,11 +254,11 @@ const PORTAL = (()=>{
       }
       catch(e){ readErr = (e && e.message) || 'threw';
                 console.warn('Playgama init failed', e); }
-      finally{ cloudRead = true; flushSave(); introLock(false); }
+      finally{ cloudRead = true; flushSave(); introLock(false); paintIntro(); }
     })();
     /* an ad blocker can make init hang; never let that block the game */
     return Promise.race([real, new Promise(r=>setTimeout(r, 6000))])
-      .then(()=>{ introLock(false); });
+      .then(()=>{ introLock(false); paintIntro(); });
   }
 
   function start(){
@@ -293,6 +296,7 @@ const PORTAL = (()=>{
      newest save until the read is done, then flush it. */
   let cloudRead = false, queuedSave = null, lateHook = null, seeded = false;
   let lastWrite = 0, writeErr = '', readErr = '', hadCloud = false;
+  let cloudRaw = -1;   /* chars the cloud answered with; 0 = nothing there */
   /* boot registers here so a cloud save that arrives after the init budget
      still gets the player into their game instead of class-select */
   function lateSave(fn){ lateHook = fn; }
@@ -356,8 +360,42 @@ const PORTAL = (()=>{
   }
   /* Surfaced in CAMP so a failed sync can be read off the screen during QA
      instead of inferred from a lost character. */
+  function who(){
+    try{
+      const p = B().player; if(!p) return '';
+      return ' \u00b7 ' + (p.isAuthorized ? 'signed in' : (p.isGuest ? 'guest' : 'anon'))
+           + (p.isAuthorizationSupported ? '' : ' (no login here)');
+    }catch(e){ return ''; }
+  }
+  /* When a restore fails you land on class-select, where CAMP is not
+     reachable - so the one fact that matters has to be on THIS screen:
+     did the platform have the save and we failed to use it, or was it
+     never stored? */
+  function introStatus(){
+    if(!B()) return 'No Playgama bridge';
+    if(readErr)  return 'Cloud read failed: ' + readErr;
+    if(writeErr) return 'Cloud write failed: ' + writeErr;
+    if(!ready)   return 'Connecting to Playgama\u2026';
+    if(!cloudRead) return 'Checking for a cloud save\u2026';
+    if(cloudRaw > 0) return 'Cloud save found (' + cloudRaw + ' chars)' + who();
+    return 'No cloud save stored' + who();
+  }
+  function paintIntro(){
+    try{
+      const host = document.getElementById('intro'); if(!host) return;
+      let el = document.getElementById('pgCloud');
+      if(!el){
+        el = document.createElement('div'); el.id = 'pgCloud';
+        el.style.cssText = 'margin-top:10px;font-size:11px;opacity:.75;'+
+          'text-align:center;color:#9fb0cc;letter-spacing:.3px;';
+        host.appendChild(el);
+      }
+      el.textContent = introStatus();
+    }catch(e){}
+  }
   function diag(){
     if(!B()) return 'no bridge';
+    if(cloudRead && cloudRaw >= 0 && !readErr && !writeErr) return introStatus();
     if(readErr) return 'read failed: ' + readErr;
     if(writeErr) return 'write failed: ' + writeErr;
     if(!ready) return 'connecting';
