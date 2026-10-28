@@ -137,13 +137,11 @@ const PORTAL = (()=>{
   /* masterGain is written once at audio init and never again, so it is a safe
      single mute point. Two things can mute: an ad, and the platform's own
      audio switch. Track them apart or they clobber each other. */
-  let adMuted = false, setMuted = false, baseVol = null;
+  let adMuted = false, setMuted = false;
   function applyAudio(){
-    try{
-      if(!masterGain) return;
-      if(baseVol === null && masterGain.gain.value > 0) baseVol = masterGain.gain.value;
-      masterGain.gain.value = (adMuted || setMuted) ? 0 : (baseVol === null ? 0.32 : baseVol);
-    }catch(e){}
+    /* report the reason; the game owns masterGain and folds this in with the
+       player's own switch and the backgrounded tab */
+    try{ if(typeof setExtMute === 'function') setExtMute(adMuted || setMuted); }catch(e){}
   }
   function readSettings(){
     try{

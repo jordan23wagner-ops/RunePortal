@@ -1417,7 +1417,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.28-6 parsed save';
+const BUILD = '2026.10.28-7 one mute owner';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -2991,11 +2991,12 @@ function upgradeCost(it){
      also loses its top end and drops a few cents in pitch.
    ================================================================ */
 let AC=null, masterGain=null, sfxBus=null, musBus=null, musComp=null;
-let _baseVol = 0.32, _bgMuted = false;
+let _baseVol = 0.32, _bgMuted = false, _extMuted = false;
 /* the player's switch and the backgrounded tab mute independently */
 function applyMute(){
   try{
-    if(masterGain) masterGain.gain.value = ((S && S.mute) || _bgMuted) ? 0 : _baseVol;
+    if(masterGain) masterGain.gain.value =
+      ((S && S.mute) || _bgMuted || _extMuted) ? 0 : _baseVol;
     const b = document.getElementById('muteBtn');
     if(b){ const m = !!(S && S.mute);
       b.textContent = m ? '\u2715' : '\u266a';
@@ -3005,6 +3006,13 @@ function applyMute(){
   }catch(e){}
 }
 function toggleMute(){ if(!S) return; S.mute = S.mute ? 0 : 1; applyMute(); try{ saveGame(); }catch(e){} }
+/* A portal shim has its own reasons to silence the game - an ad is playing,
+   or the platform sent a mute signal - but it must not WRITE masterGain.
+   Two writers and one gain node means whichever ran last wins, so a tab
+   away and back used to undo a platform mute, and a platform audio event
+   used to undo the player's own switch. Shims report their reason here
+   and applyMute stays the only writer. */
+function setExtMute(on){ _extMuted = !!on; applyMute(); }
 /* a backgrounded tab must go silent - a checklist requirement on every
    portal, and the right behaviour everywhere else too */
 document.addEventListener('visibilitychange', ()=>{ _bgMuted = document.hidden; applyMute(); });
