@@ -227,7 +227,16 @@ const PORTAL = (()=>{
           const res = await b.storage.get([SAVE_KEY]);
           /* tolerate either shape: the docs say an array comes back, but a
              platform that answers the scalar must not lose the save either */
-          const v = Array.isArray(res) ? res[0] : res;
+          let v = Array.isArray(res) ? res[0] : res;
+          /* Bridge runs tryParseJson over what storage.get returns, so a save
+             written as a JSON string comes BACK as a parsed object. Testing
+             typeof === 'string' threw the whole save away and reported "no
+             cloud save" while the console's storage panel plainly showed it.
+             Take either shape and hand loadGame() the string it expects. */
+          cloudShape = (v === null || v === undefined) ? 'empty' : typeof v;
+          if(v && typeof v === 'object'){
+            try{ v = JSON.stringify(v); }catch(e){ v = ''; }
+          }
           hadCloud = (typeof v === 'string' && !!v);
           cloudRaw = (typeof v === 'string') ? v.length : 0;
           if(typeof v === 'string' && v){
@@ -297,6 +306,7 @@ const PORTAL = (()=>{
   let cloudRead = false, queuedSave = null, lateHook = null, seeded = false;
   let lastWrite = 0, writeErr = '', readErr = '', hadCloud = false;
   let cloudRaw = -1;   /* chars the cloud answered with; 0 = nothing there */
+  let cloudShape = '';  /* what the platform actually handed back */
   /* boot registers here so a cloud save that arrives after the init budget
      still gets the player into their game instead of class-select */
   function lateSave(fn){ lateHook = fn; }
@@ -377,8 +387,9 @@ const PORTAL = (()=>{
     if(writeErr) return 'Cloud write failed: ' + writeErr;
     if(!ready)   return 'Connecting to Playgama\u2026';
     if(!cloudRead) return 'Checking for a cloud save\u2026';
-    if(cloudRaw > 0) return 'Cloud save found (' + cloudRaw + ' chars)' + who();
-    return 'No cloud save stored' + who();
+    if(cloudRaw > 0) return 'Cloud save found (' + cloudRaw + ' chars, '
+                          + cloudShape + ')' + who();
+    return 'No cloud save stored [' + (cloudShape || '?') + ']' + who();
   }
   function paintIntro(){
     try{

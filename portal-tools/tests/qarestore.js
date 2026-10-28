@@ -10,6 +10,7 @@
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 
 const SCENARIO = process.argv[2] || 'plain';
+const GAME_URL = process.env.GAME_URL || 'file:///home/user/RunePortal/playgama/index.html';
 const DELAY = Number(process.env.DELAY || 1500);
 const CLOUD = new Map();
 const T = []; const chk = (n, p, d = '') => T.push({ n, pass: p, d });
@@ -21,7 +22,8 @@ async function makeCtx(b, keepStorage) {
   await p.exposeFunction('__cloudGet', k => CLOUD.has(k) ? CLOUD.get(k) : null);
   await p.exposeFunction('__cloudSet', (k, v) => { CLOUD.set(k, v); return true; });
   await p.exposeFunction('__cloudDel', k => { CLOUD.delete(k); return true; });
-  await p.addInitScript(d => {
+  await p.addInitScript(([d, parse]) => {
+    window.__pgParse = parse;
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const strict = (v, who) => { if (!Array.isArray(v))
       throw new TypeError('bridge.storage.' + who + ' expects an array, got ' + typeof v); };
@@ -30,7 +32,14 @@ async function makeCtx(b, keepStorage) {
       game: { on() {} },
       storage: { isSupported: () => true,
         get: async keys => { strict(keys, 'get'); await wait(d);
-          const o = []; for (const k of keys) o.push(await window.__cloudGet(k)); return o; },
+          const o = [];
+          for (const k of keys) {
+            const raw = await window.__cloudGet(k);
+            if (raw != null && window.__pgParse) {
+              try { o.push(JSON.parse(raw)); } catch (e) { o.push(raw); }
+            } else o.push(raw);
+          }
+          return o; },
         set: async (keys, vals) => { strict(keys, 'set'); strict(vals, 'set'); await wait(40);
           for (let i = 0; i < keys.length; i++) await window.__cloudSet(keys[i], vals[i]); return true; },
         delete: async keys => { strict(keys, 'delete');
@@ -38,7 +47,7 @@ async function makeCtx(b, keepStorage) {
       advertisement: { on() {}, showInterstitial() {}, showRewarded() {} },
       player: { isAuthorizationSupported: true, isAuthorized: false, isGuest: true },
       initialize: async () => { await wait(d); }, on() {} };
-  }, DELAY);
+  }, [DELAY, process.env.PARSE !== '0']);
   return p;
 }
 
@@ -47,7 +56,7 @@ async function makeCtx(b, keepStorage) {
 
   // ---- session 1: play to "level 2"
   let p = await makeCtx(b);
-  await p.goto('file:///home/user/RunePortal/playgama/index.html', { waitUntil: 'load' });
+  await p.goto(GAME_URL, { waitUntil: 'load' });
   await p.waitForSelector('[data-cls="melee"]', { timeout: 25000 });
   await p.waitForFunction(() => { const b = document.querySelector('[data-cls="melee"]'); return b && !b.disabled; }, { timeout: 25000 });
   await p.click('[data-cls="melee"]');
@@ -68,7 +77,7 @@ async function makeCtx(b, keepStorage) {
   // ---- session 2: the QA Tool reload. Fresh browser storage, same cloud.
   p = await makeCtx(b);
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto('file:///home/user/RunePortal/playgama/index.html', { waitUntil: 'load' });
+  await p.goto(GAME_URL, { waitUntil: 'load' });
 
   if (SCENARIO === 'impatient') {
     // a player who taps a class the instant the intro appears
