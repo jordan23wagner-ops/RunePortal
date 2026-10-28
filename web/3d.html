@@ -140,6 +140,15 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   background:linear-gradient(180deg,#2a3250,#1b2032);border:1px solid var(--line2);
   font-size:11px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;
 }
+#muteBtn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;margin-left:5px;padding:0;border-radius:5px;
+  background:linear-gradient(180deg,#2a3250,#1b2032);border:1px solid var(--line2);
+  font-size:11px;font-weight:800;color:var(--gold);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;flex:0 0 auto;
+  position:relative;z-index:13;pointer-events:auto;
+}
+#muteBtn.off{color:#6b7391;}
 #hudBars{display:flex;flex-direction:column;gap:3px;margin-top:5px;flex:1;}
 
 /* boss banner */
@@ -1154,7 +1163,7 @@ body.testmode #hud{padding-top:16px;}
 
     <div id="hud">
       <div class="hudRow">
-        <span id="lvlPill">1</span>
+        <span id="lvlPill">1</span><button id="muteBtn" data-mute="1" aria-label="Mute sound" title="Mute sound">♪</button>
         <div id="hudBars">
           <div class="bar" id="hpBar"><i></i><span class="barTxt" id="hpTxt"></span></div>
           <div class="bar sm" id="mpBar"><i></i></div>
@@ -1398,7 +1407,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.27-6 soundtrack';
+const BUILD = '2026.10.28-1 mute+checklist';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -2548,7 +2557,7 @@ function freshState(cls){
     sp:1, skills:{},
     meta:{kills:0,deaths:0,items:0,salvaged:0,best:0,chests:0},
     seen:{},
-    tut:0, daily:{d:'',streak:0},
+    tut:0, daily:{d:'',streak:0}, mute:0,
   };
   const startW = cls==='melee'?'sword':cls==='range'?'shortbow':'firestaff';
   st.equip.weapon = rollItem({forceArch:startW,kind:'weapon',ilvl:1,rar:0});
@@ -2587,6 +2596,7 @@ function loadGame(){
     if(!S.way) S.way={};
     if(S.tut==null) S.tut=0;        /* older saves start the tutorial */
     if(!S.daily) S.daily={d:'',streak:0};   /* daily cache */
+    if(S.mute===undefined) S.mute=0;        /* mute predates nothing; default on */
     if(!S.pity) S.pity={};
     if(!S.open) S.open={verdant:1};
     if(S.charge==null) S.charge=0;
@@ -2971,11 +2981,29 @@ function upgradeCost(it){
      also loses its top end and drops a few cents in pitch.
    ================================================================ */
 let AC=null, masterGain=null, sfxBus=null, musBus=null, musComp=null;
+let _baseVol = 0.32, _bgMuted = false;
+/* the player's switch and the backgrounded tab mute independently */
+function applyMute(){
+  try{
+    if(masterGain) masterGain.gain.value = ((S && S.mute) || _bgMuted) ? 0 : _baseVol;
+    const b = document.getElementById('muteBtn');
+    if(b){ const m = !!(S && S.mute);
+      b.textContent = m ? '\u2715' : '\u266a';
+      b.classList.toggle('off', m);
+      b.setAttribute('aria-label', m ? 'Unmute sound' : 'Mute sound');
+      b.title = b.getAttribute('aria-label'); }
+  }catch(e){}
+}
+function toggleMute(){ if(!S) return; S.mute = S.mute ? 0 : 1; applyMute(); try{ saveGame(); }catch(e){} }
+/* a backgrounded tab must go silent - a checklist requirement on every
+   portal, and the right behaviour everywhere else too */
+document.addEventListener('visibilitychange', ()=>{ _bgMuted = document.hidden; applyMute(); });
 function audioInit(){
   if(AC) return;
   try{
     AC = new (window.AudioContext||window.webkitAudioContext)();
     masterGain = AC.createGain(); masterGain.gain.value = 0.32;
+    _baseVol = 0.32; applyMute();
     masterGain.connect(AC.destination);
     /* Two buses. Music runs through its own compressor so a wall of
        guitar cannot swallow the hit you just landed, and so the mix can
@@ -12313,6 +12341,7 @@ function salvageUid(uid){
 let modalUid=null;
 function closeModal(){ $('modalWrap').classList.remove('open'); modalUid=null; }
 $('modalWrap').addEventListener('click', e=>{ if(e.target.id==='modalWrap') closeModal(); });
+$('muteBtn').addEventListener('click', e=>{ e.stopPropagation(); audioResume(); toggleMute(); });
 
 /* ================================================================
    IS IT BETTER? — answered by SIMULATION, not by a weighting table

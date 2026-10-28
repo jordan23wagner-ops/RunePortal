@@ -261,7 +261,13 @@ const PORTAL = (()=>{
     try{ const p = B().storage.delete(SAVE_KEY); if(p && p.catch) p.catch(()=>{}); }catch(e){}
   }
 
+  /* one rewarded revive per zone. Offering it on every death makes the ad
+     a condition for continuing rather than a bonus, which the checklist
+     calls out by name. */
+  let reviveZone = null;
+  function curZone(){ try{ return (S && S.zone) || null; }catch(e){ return null; } }
   function reviveInPlace(){
+    reviveZone = curZone();
     $('deathWrap').classList.remove('open');
     computeStats();
     P.dead = false; P.hp = D.maxHp; P.mp = D.maxMp; P.inv = 3.0;
@@ -283,7 +289,7 @@ const PORTAL = (()=>{
         ad('rewarded', ok=>{ b.disabled = false; if(ok) reviveInPlace(); });
       });
     }
-    b.style.display = (ready && !adsBlocked) ? 'block' : 'none';
+    b.style.display = (ready && !adsBlocked && reviveZone !== curZone()) ? 'block' : 'none';
   }
   return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive,
            readSettings,
