@@ -9,10 +9,10 @@ Do not hand-edit `playgama/index.html`; regenerate it with
 | | |
 |---|---|
 | Application | `cmvrdtqfu03uwll0hu3iaga25` |
-| Archive | `cmvrdtxkb03kel60h99sy8z2c` — `riftfall-2026.10.28-1` |
+| Archive | `cmvrir8fj05o9l60hxb1y7191` — `riftfall-2026.10.28-6` |
 | Sandbox | https://playgama.ai/play/e6wrbi3laenw2l |
-| QA Tool | https://developer.playgama.com/qa-tool/cmvrdtxkb03kel60h99sy8z2c |
-| Build string | `2026.10.28-1 mute+checklist` |
+| QA Tool | https://developer.playgama.com/qa-tool/cmvrir8fj05o9l60hxb1y7191 |
+| Build string | `2026.10.28-6 parsed save` |
 | Developer | Wagner Games |
 
 ## Launch path
@@ -87,3 +87,64 @@ Made with AI. Brought to you by #PlaygamaMCP. Fine-tuned by me. Riftfall → htt
 
 Prefilled links: X, Threads and Reddit carry the text; Facebook and
 LinkedIn take the link only.
+
+
+---
+
+# Cloud saves: what it actually was
+
+Six builds. Worth writing down, because every wrong turn had the same
+shape.
+
+**The bug.** Bridge runs `tryParseJson` over whatever `storage.get`
+returns - the SDK changelog lists it under Playgama, "Fixed tryParseJson
+logic for the storage.get method". The save is written as a JSON string
+and comes BACK as a parsed object. The read tested
+`typeof v === 'string'`, rejected the object, and reported an empty
+cloud. One type check.
+
+**How it hid.** Every mock written for it returned the raw string,
+because each was written to match our code rather than the platform. All
+of them agreed with the bug, so every suite was green before and after
+each "fix". A test that passes on both sides of a change proves nothing,
+and three were shipped on exactly that basis.
+
+**What broke it open.** Not a mock. The console's own Game Storage panel
+showing `riftfall_save` with the full payload, next to the game saying
+"No cloud save stored" on the same screen. That contradiction could not
+be argued with. It only existed because an earlier build printed the
+cloud state on the intro screen, where the failure happens, instead of
+in a menu you cannot reach from class-select.
+
+**The rule for next time.** A fix is not verified until the new test
+FAILS on the old build. `qarestore.js` does: on the pre-fix build it
+reports "level restored: got null, wanted 2". That is the only evidence
+that mattered.
+
+Real bugs found on the way, all kept, none of them the cause:
+- `storage.get` takes an ARRAY of keys and answers an ARRAY of values;
+  a bare string was being passed.
+- The cloud was consulted only when localStorage was empty, so a fresh
+  level 1 written while the read was in flight shadowed the real save
+  and was flushed over it.
+- Saves made before the Bridge finished initializing were dropped rather
+  than queued.
+- Class select was live during the read, which is what let that fresh
+  save exist.
+
+One detour worth keeping: the QA Tool withholds platform storage from
+guests on purpose (changelog v1.27.0, "Internal storage is now available
+only to authorized players"). Tick **Player is authorized** in Platform
+Settings before testing saves there. On playgama.ai itself guests do get
+cloud saves - v2.2.0, "Playgama cloud saves now work for guests".
+
+# What is left
+
+1. **Certification** - `form` is BLOCKED on NO_CERTIFICATION. Run Guided
+   Certification through to the end now that restore passes.
+2. **Traffic** - a FREE boost is available: 3 days, ~50 expected
+   gameplays, 3 runs remaining. It needs public post URLs
+   (`start_sandbox_traffic` with `postUrls`); there is no referral bonus
+   on this account.
+3. **Moderation** opens once the sandbox reaches 100 plays at a 5 minute
+   average, counted daily. A human submits it from the console.
