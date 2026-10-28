@@ -192,7 +192,24 @@ const PORTAL = (()=>{
     };
   }
 
+  /* The intro is live the instant it is drawn, so a player can pick a class
+     while the cloud read is still in flight. That writes a brand new level-1
+     save to localStorage, which then shadows the cloud copy and gets flushed
+     over it. Hold the class buttons until the read settles. */
+  function introLock(on){
+    try{
+      document.querySelectorAll('[data-cls]').forEach(b=>{
+        b.disabled = on; b.style.opacity = on ? '.5' : '';
+        b.style.pointerEvents = on ? 'none' : '';
+      });
+    }catch(e){}
+  }
+  function stamp(raw){
+    try{ const o = JSON.parse(raw); return (o && typeof o.t === 'number') ? o.t : 0; }
+    catch(e){ return -1; }       /* unparseable: always lose to anything valid */
+  }
   function init(){
+    introLock(true);
     const real = (async ()=>{
       try{
         const b = B(); if(!b) return;
@@ -205,12 +222,20 @@ const PORTAL = (()=>{
            reads it - that keeps loadGame's contract untouched. Only when
            there is no local save, so a device-local run is never clobbered. */
         try{
-          if(!localStorage.getItem(SAVE_KEY)){
-            const res = await b.storage.get([SAVE_KEY]);
-            /* tolerate either shape: the docs say an array comes back, but a
-               platform that answers the scalar must not lose the save either */
-            const v = Array.isArray(res) ? res[0] : res;
-            if(typeof v === 'string' && v){ localStorage.setItem(SAVE_KEY, v); seeded = true; }
+          const res = await b.storage.get([SAVE_KEY]);
+          /* tolerate either shape: the docs say an array comes back, but a
+             platform that answers the scalar must not lose the save either */
+          const v = Array.isArray(res) ? res[0] : res;
+          hadCloud = (typeof v === 'string' && !!v);
+          if(typeof v === 'string' && v){
+            /* Always read the cloud, and let the NEWER save win. Consulting it
+               only when localStorage was empty meant any local copy shadowed
+               it - including a fresh one written moments earlier on this very
+               load - which is how a cloud save got replaced by a level 1. */
+            const local = localStorage.getItem(SAVE_KEY);
+            if(!local || stamp(v) > stamp(local)){
+              localStorage.setItem(SAVE_KEY, v); seeded = true;
+            }
           }
         }catch(e){}
         cloudRead = true;
@@ -224,11 +249,13 @@ const PORTAL = (()=>{
         }catch(e){}
         readSettings();
       }
-      catch(e){ console.warn('Playgama init failed', e); }
-      finally{ cloudRead = true; flushSave(); }
+      catch(e){ readErr = (e && e.message) || 'threw';
+                console.warn('Playgama init failed', e); }
+      finally{ cloudRead = true; flushSave(); introLock(false); }
     })();
     /* an ad blocker can make init hang; never let that block the game */
-    return Promise.race([real, new Promise(r=>setTimeout(r, 6000))]);
+    return Promise.race([real, new Promise(r=>setTimeout(r, 6000))])
+      .then(()=>{ introLock(false); });
   }
 
   function start(){
@@ -265,11 +292,17 @@ const PORTAL = (()=>{
      would overwrite the player's real cloud save with an empty one. Hold the
      newest save until the read is done, then flush it. */
   let cloudRead = false, queuedSave = null, lateHook = null, seeded = false;
+  let lastWrite = 0, writeErr = '', readErr = '', hadCloud = false;
   /* boot registers here so a cloud save that arrives after the init budget
      still gets the player into their game instead of class-select */
   function lateSave(fn){ lateHook = fn; }
   function putRemote(str){
-    try{ const p = B().storage.set([SAVE_KEY], [str]); if(p && p.catch) p.catch(()=>{}); }catch(e){}
+    try{
+      const p = B().storage.set([SAVE_KEY], [str]);
+      if(p && p.then) p.then(()=>{ lastWrite = Date.now(); writeErr = ''; },
+                             e=>{ writeErr = (e && e.message) || 'rejected'; });
+      else lastWrite = Date.now();
+    }catch(e){ writeErr = (e && e.message) || 'threw'; }
   }
   function flushSave(){
     if(!ready || !cloudRead || !queuedSave) return;
@@ -321,7 +354,19 @@ const PORTAL = (()=>{
     }
     b.style.display = (ready && !adsBlocked && reviveZone !== curZone()) ? 'block' : 'none';
   }
-  return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive, lateSave,
+  /* Surfaced in CAMP so a failed sync can be read off the screen during QA
+     instead of inferred from a lost character. */
+  function diag(){
+    if(!B()) return 'no bridge';
+    if(readErr) return 'read failed: ' + readErr;
+    if(writeErr) return 'write failed: ' + writeErr;
+    if(!ready) return 'connecting';
+    if(!cloudRead) return 'reading';
+    const w = lastWrite ? Math.round((Date.now()-lastWrite)/1000)+'s ago' : 'not yet';
+    return (seeded ? 'restored from cloud' : (hadCloud ? 'cloud in sync' : 'new player'))
+         + ' \u00b7 saved ' + w;
+  }
+  return { init, start, stop, tab, ad, saveRemote, loadRemote, wipeRemote, offerRevive, lateSave, diag,
            readSettings,
            get ready(){ return ready; },
            get adsBlocked(){ return adsBlocked; },
@@ -330,6 +375,13 @@ const PORTAL = (()=>{
 
 """
 sub("/* boot or intro */", SHIM + "/* boot or intro */", "shim")
+# Cloud status row in CAMP, Playgama build only.
+sub(
+    "'<div class=\"kv\"><span>Progress saves automatically</span><b>\u2713</b></div>'+",
+    "'<div class=\"kv\"><span>Progress saves automatically</span><b>\u2713</b></div>'+\n"
+    "    '<div class=\"kv\"><span>Cloud</span><b>'+(typeof PORTAL!==\"undefined\"?PORTAL.diag():\"-\")+'</b></div>'+",
+    "cloud status row",
+)
 # 5. Gameplay start/stop follows the active tab
 sub(
     "function showTab(t){\n  curTab = t;",
@@ -352,7 +404,7 @@ sub(
 # 7. Save mirrors to the SDK data module; load falls back to it
 sub(
     "    localStorage.setItem(SAVE_KEY, JSON.stringify({s:S,uid:uidSeq}));",
-    "    const _sv = JSON.stringify({s:S,uid:uidSeq});\n    localStorage.setItem(SAVE_KEY, _sv);\n    PORTAL.saveRemote(_sv);",
+    "    const _sv = JSON.stringify({s:S,uid:uidSeq,t:Date.now()});\n    localStorage.setItem(SAVE_KEY, _sv);\n    PORTAL.saveRemote(_sv);",
     "save mirror",
 )
 # (no sync load fallback: Bridge storage is asynchronous, so the cloud copy is
