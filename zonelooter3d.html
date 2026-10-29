@@ -1417,7 +1417,7 @@ setTimeout(function(){
 /* Neither of us could tell which build was actually running on the phone,
    which is how a stale cache went unnoticed for two deploys. Now it is on
    screen in Camp and in the console. Bump it with anything worth shipping. */
-const BUILD = '2026.10.28-8 lighting pass';
+const BUILD = '2026.10.29-1 rim + ground';
 const SAVE_BASE = 'riftfall_save';
 const MODE_KEY  = 'riftfall_mode';
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -4374,15 +4374,15 @@ function buildBackdrop(){
      detail that approaches tile size advertises it. Halved the radius, cut
      the alpha, and kept them in the ground's own hue so they read as terrain
      rather than light leaking onto it. */
-  for(let i=0;i<40;i++)
-    blob(Math.random()*TILE, Math.random()*TILE, rnd(14,34),
-         shade(z.ground, i%3===0 ? -0.26 : 0.12),
-         rnd(0.05,0.11), rnd(0.40,0.85), rnd(0,3.14));
+  for(let i=0;i<46;i++)
+    blob(Math.random()*TILE, Math.random()*TILE, rnd(10,26),
+         shade(z.ground, -0.44 - (i%4)*0.07),
+         rnd(0.06,0.13), rnd(0.40,0.85), rnd(0,3.14));
   /* mid-scale dirt and moss: the density that actually reads as ground */
   for(let i=0;i<72;i++)
     blob(Math.random()*TILE, Math.random()*TILE, rnd(9,30),
-         i%2 ? shade(z.ground,0.18) : shade(z.ground,-0.24),
-         rnd(0.09,0.20), rnd(0.45,0.9), rnd(0,3.14));
+         shade(z.ground, i%2 ? -0.40 : -0.52),
+         rnd(0.07,0.16), rnd(0.45,0.9), rnd(0,3.14));
   /* pebbles — cheap, and the eye reads them as resolution */
   for(let i=0;i<120;i++)
     blob(Math.random()*TILE, Math.random()*TILE, rnd(1.2,3.4),
@@ -6653,7 +6653,17 @@ function init3D(){
   sun.shadow.bias = -0.0016; sun.shadow.normalBias = 1.2;
   scene.add(sun); scene.add(sun.target);
 
-  const hemi = new THREE.HemisphereLight('#bcd9ff','#26331c', 0.95);
+  /* RIM. The key comes from up-left-behind, so everything was lit from one
+     direction against a ground lit the same way, and subjects sank into it.
+     A cool light from the opposite side, low and shadowless, puts an edge on
+     every silhouette - which is what separates a character from the floor it
+     stands on. Costs one more light in the shader and no extra draw call. */
+  const rim = new THREE.DirectionalLight('#86b4ff', 0.95);
+  scene.add(rim); scene.add(rim.target);
+
+  /* the fill came down to make room for it: at 0.95 the hemisphere was
+     washing out exactly the shading the key and rim are there to create */
+  const hemi = new THREE.HemisphereLight('#bcd9ff','#26331c', 0.68);
   scene.add(hemi);
 
   const groundMat = new THREE.MeshStandardMaterial({roughness:0.98, metalness:0.0});
@@ -6662,7 +6672,7 @@ function init3D(){
   ground.receiveShadow = true;
   scene.add(ground);
 
-  T3 = {renderer, scene, cam, sun, hemi, ground, groundMat, groundTex:null,
+  T3 = {renderer, scene, cam, sun, rim, hemi, ground, groundMat, groundTex:null,
         props:[], actors:new Map(), shots:null, drops:null, chests:[], rings:[]};
   return T3;
 }
@@ -11427,6 +11437,11 @@ function render(){
   t.sun.position.set(P.x-488, 915, P.y-344);
   t.sun.target.position.set(P.x, 0, P.y);
   t.sun.target.updateMatrixWorld();
+
+  /* rim rides along on the far side, low enough to catch edges rather than tops */
+  t.rim.position.set(P.x+545, 205, P.y-470);
+  t.rim.target.position.set(P.x, 0, P.y);
+  t.rim.target.updateMatrixWorld();
 
   /* ---- actors ---- */
   const seen = new Set();
